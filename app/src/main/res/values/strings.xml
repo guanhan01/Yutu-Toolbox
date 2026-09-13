@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Yutu Toolbox</string>
+
+    <!-- 抽屉 / 底栏导航 -->
+    <string name="app_nav_home">Home</string>
+    <string name="app_nav_apps">Apps</string>
+    <string name="app_nav_files">Files</string>
+    <string name="app_nav_web">Web</string>
+    <string name="app_nav_network">Network</string>
+    <string name="app_nav_database">Database</string>
+    <string name="app_nav_capture">Capture</string>
+    <string name="app_nav_decompile">Decompile</string>
+    <string name="app_nav_mcp">MCP Server</string>
+    <string name="app_nav_artifacts">MCP Artifacts</string>
+    <string name="app_nav_network_http">HTTP Builder</string>
+    <string name="app_nav_network_ping">Ping / Traceroute</string>
+    <string name="app_nav_network_dns">DNS Lookup</string>
+    <string name="app_nav_network_port_scan">Port Scan</string>
+    <string name="app_nav_network_whois">Whois</string>
+    <string name="app_nav_network_env">Network Env</string>
+    <string name="app_nav_settings">Settings</string>
+    <string name="app_nav_about">About</string>
+    <string name="app_nav_theme">Theme</string>
+
+    <string name="app_drawer_subtitle">Developer toolbox · MCP client</string>
+    <string name="app_action_open_drawer">Open menu</string>
+    <string name="app_action_more">More</string>
+
+    <!-- 语言 -->
+    <string name="app_language">Language</string>
+    <string name="app_language_system">Follow system</string>
+    <string name="app_language_zh">Simplified Chinese</string>
+    <string name="app_language_en">English</string>
+    <string name="app_language_recreate_hint">The interface updates immediately after switching.</string>
+
+    <!-- 页面标题 -->
+    <string name="app_screen_theme">Theme &amp; color</string>
+    <string name="app_screen_settings">Settings</string>
+    <string name="app_screen_about">About</string>
+    <string name="app_placeholder_title">%1$s is not implemented yet</string>
+    <string name="app_placeholder_desc">Planned for stage %1$s: screen, ViewModel, use cases and a degraded path.</string>
+
+    <!-- 设置页 -->
+    <string name="app_settings_section_appearance">Appearance</string>
+    <string name="app_settings_theme_subtitle">Palette wheel, radius, contrast, motion</string>
+    <string name="app_settings_theme_value">Ready</string>
+    <string name="app_settings_section_capabilities">Capabilities and permissions</string>
+    <string name="app_settings_root_title">Permissions</string>
+    <string name="app_settings_root_subtitle">Added in stage P1; core features still work without it</string>
+    <string name="app_settings_mcp_title">MCP server management</string>
+    <string name="app_settings_mcp_subtitle">Added in stage P7: server list, tool calls and output folder</string>
+    <string name="app_settings_language_subtitle">Follow system / Simplified Chinese / English</string>
+    <string name="app_settings_about_card">About this project</string>
+    <string name="app_settings_p0_text">Stage P0 delivered the skeleton, design system, theme engine, component gallery and theme settings screen; it already builds with ./gradlew assembleDebug.</string>
+
+    <!-- 关于页 -->
+    <string name="app_about_version">Version 0.1.0-p0 · Developer toolbox + MCP client</string>
+    <string name="app_about_desc">A local toolbox for developers: app management, file browsing, web, network diagnostics, database, packet capture, decompilation, plus an MCP client and a built-in MCP server.</string>
+    <string name="app_about_theme">Theme base: Material3 role system with HCT dynamic color; components: a self-drawn implementation of the Miuix visual spec.</string>
+    <string name="app_about_section_compliance">Compliance</string>
+    <string name="app_about_compliance1_title">Capture and decompilation are for authorized debugging</string>
+    <string name="app_about_compliance1_subtitle">Use them only on apps you own or are authorized to test; never to crack someone else\'s app</string>
+    <string name="app_about_compliance2_title">Data stays on this device</string>
+    <string name="app_about_compliance2_subtitle">Nothing is uploaded by default; network requests only run when you trigger them</string>
+    <string name="app_about_compliance3_title">HTTPS decryption requires a user CA</string>
+    <string name="app_about_compliance3_subtitle">Apps on Android 7+ do not trust user CAs by default; assess the risk before installing one</string>
+
+    <!-- 首启合规弹窗 -->
+    <string name="app_compliance_title">Before you start</string>
+    <string name="app_compliance_confirm">I understand</string>
+    <string name="app_compliance_message">The packet capture (including HTTPS decryption) and decompilation features are only for learning and debugging apps you own or are explicitly authorized to test. Do not use them to crack or tamper with other people\'s apps. All data stays on this device; nothing is uploaded by default.</string>
+    <string name="app_compliance_footer">Continuing means you accept the scope above.</string>
+    <string name="app_action_close">Close</string></resources>

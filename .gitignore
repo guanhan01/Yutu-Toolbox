@@ -1,0 +1,21 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+
+# Kotlin / 构建会话
+.kotlin/
+# 签名与安装包
+*.apk
+*.aab
+*.ap_
+*.jks
+*.keystore
+# 日志与性能快照
+*.log
+*.hprof

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="share" path="share/" />
+    <cache-path name="fileview" path="fileview/" />
+    <cache-path name="root" path="." />
+    <files-path name="files" path="." />
+    <external-cache-path name="external_cache" path="." />
+    <!-- 可直接读的 /sdcard 文件分享时走原路径，必须在这里登记，否则 getUriForFile 抛异常 -->
+    <external-path name="external" path="." />
+    <!-- 其他绝对路径（/data/local/tmp 等）经 root 授权后也要能分享 -->
+    <root-path name="root_all" path="/" />
+</paths>

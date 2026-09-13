@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Yutu Toolbox</string>
+
+    <!-- 抽屉 / 底栏导航 -->
+    <string name="app_nav_home">首页</string>
+    <string name="app_nav_apps">应用</string>
+    <string name="app_nav_files">文件</string>
+    <string name="app_nav_web">网页</string>
+    <string name="app_nav_network">网络</string>
+    <string name="app_nav_database">数据库</string>
+    <string name="app_nav_capture">抓包</string>
+    <string name="app_nav_decompile">反编译</string>
+    <string name="app_nav_mcp">MCP 服务</string>
+    <string name="app_nav_artifacts">MCP 产物</string>
+    <string name="app_nav_network_http">HTTP 构造器</string>
+    <string name="app_nav_network_ping">Ping / Traceroute</string>
+    <string name="app_nav_network_dns">DNS 查询</string>
+    <string name="app_nav_network_port_scan">端口扫描</string>
+    <string name="app_nav_network_whois">Whois</string>
+    <string name="app_nav_network_env">网络环境</string>
+    <string name="app_nav_settings">设置</string>
+    <string name="app_nav_about">关于</string>
+    <string name="app_nav_theme">主题</string>
+
+    <string name="app_drawer_subtitle">开发者工具箱 · MCP 客户端</string>
+    <string name="app_action_open_drawer">打开菜单</string>
+    <string name="app_action_more">更多</string>
+
+    <!-- 语言 -->
+    <string name="app_language">语言</string>
+    <string name="app_language_system">跟随系统</string>
+    <string name="app_language_zh">简体中文</string>
+    <string name="app_language_en">English</string>
+    <string name="app_language_recreate_hint">切换后界面立即更新。</string>
+
+    <!-- 页面标题 -->
+    <string name="app_screen_theme">主题与色彩</string>
+    <string name="app_screen_settings">设置</string>
+    <string name="app_screen_about">关于</string>
+    <string name="app_placeholder_title">%1$s 尚未进入实现阶段</string>
+    <string name="app_placeholder_desc">计划在 %1$s 阶段交付：包含界面、ViewModel、用例层与降级路径。</string>
+
+    <!-- 设置页 -->
+    <string name="app_settings_section_appearance">外观</string>
+    <string name="app_settings_theme_subtitle">取色盘、圆角、对比度、动效</string>
+    <string name="app_settings_theme_value">已实现</string>
+    <string name="app_settings_section_capabilities">能力与权限</string>
+    <string name="app_settings_root_title">权限管理</string>
+    <string name="app_settings_root_subtitle">P1 阶段接入：无权限时核心功能仍可用</string>
+    <string name="app_settings_mcp_title">MCP 服务器管理</string>
+    <string name="app_settings_mcp_subtitle">P7 阶段接入：Server 列表、工具调用与输出文件夹</string>
+    <string name="app_settings_language_subtitle">跟随系统 / 简体中文 / English</string>
+    <string name="app_settings_about_card">关于本工程</string>
+    <string name="app_settings_p0_text">当前为 P0 阶段：脚手架 + 设计系统 + 主题引擎 + 组件总览 + 主题设置页，已可通过 ./gradlew assembleDebug 构建。</string>
+
+    <!-- 关于页 -->
+    <string name="app_about_version">版本 0.1.0-p0 · 开发者工具箱 + MCP 客户端</string>
+    <string name="app_about_desc">面向开发者的本地工具箱：应用管理、文件浏览、网页、网络诊断、数据库、抓包、反编译，以及 MCP 客户端与内置 MCP Server。</string>
+    <string name="app_about_theme">主题底座：Material3 角色体系 + HCT 动态取色；组件层：Miuix 视觉规范自绘实现。</string>
+    <string name="app_about_section_compliance">合规声明</string>
+    <string name="app_about_compliance1_title">抓包与反编译仅供授权调试</string>
+    <string name="app_about_compliance1_subtitle">仅用于你自有或已获授权的应用，禁止用于他人应用破解</string>
+    <string name="app_about_compliance2_title">数据仅存本地</string>
+    <string name="app_about_compliance2_subtitle">默认不上传任何用户数据，联网仅在你主动触发时发起</string>
+    <string name="app_about_compliance3_title">HTTPS 解密需安装用户 CA</string>
+    <string name="app_about_compliance3_subtitle">Android 7+ 应用默认不信任用户 CA，需自行评估风险</string>
+
+    <!-- 首启合规弹窗 -->
+    <string name="app_compliance_title">使用须知</string>
+    <string name="app_compliance_confirm">我已了解</string>
+    <string name="app_compliance_message">本应用提供的抓包（含 HTTPS 解密）与反编译能力，仅限用于你自有或已获得明确授权的应用的学习与调试；禁止用于破解、篡改他人应用。所有数据仅保存在本机，应用默认不上传任何用户数据。</string>
+    <string name="app_compliance_footer">继续即表示你同意上述使用范围。</string>
+    <string name="app_action_close">关闭</string></resources>

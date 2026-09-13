@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MCP Server 大量使用明文 HTTP（本机 127.0.0.1 与局域网自建服务），
+  因此放开 cleartext；应用内对明文地址给出显式提示，不静默降级。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
