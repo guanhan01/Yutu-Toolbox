@@ -55,7 +55,20 @@
     <string name="app_settings_p0_text">Stage P0 delivered the skeleton, design system, theme engine, component gallery and theme settings screen; it already builds with ./gradlew assembleDebug.</string>
 
     <!-- 关于页 -->
-    <string name="app_about_version">Version 0.1.0-p0 · Developer toolbox + MCP client</string>
+    <string name="app_about_version">Version %1$s · Developer toolbox + MCP client</string>
+    <string name="app_about_section_project">Open source</string>
+    <string name="app_about_project_title">Project home</string>
+    <string name="app_about_project_subtitle">Source code, issues and updates</string>
+    <string name="app_about_license_title">License</string>
+    <string name="app_about_license_subtitle">Apache License 2.0</string>
+    <string name="app_about_section_update">Updates</string>
+    <string name="app_about_update_check">Check for updates</string>
+    <string name="app_about_update_checking">Checking for updates…</string>
+    <string name="app_about_update_uptodate">Up to date</string>
+    <string name="app_about_update_available">Version %1$s is available</string>
+    <string name="app_about_update_failed">Check failed, try again later</string>
+    <string name="app_about_update_retry">Check again</string>
+    <string name="app_about_update_go">Download</string>
     <string name="app_about_desc">A local toolbox for developers: app management, file browsing, web, network diagnostics, database, packet capture, decompilation, plus an MCP client and a built-in MCP server.</string>
     <string name="app_about_theme">Theme base: Material3 role system with HCT dynamic color; components: a self-drawn implementation of the Miuix visual spec.</string>
     <string name="app_about_section_compliance">Compliance</string>

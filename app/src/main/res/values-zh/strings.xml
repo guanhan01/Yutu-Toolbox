@@ -55,7 +55,20 @@
     <string name="app_settings_p0_text">当前为 P0 阶段：脚手架 + 设计系统 + 主题引擎 + 组件总览 + 主题设置页，已可通过 ./gradlew assembleDebug 构建。</string>
 
     <!-- 关于页 -->
-    <string name="app_about_version">版本 0.1.0-p0 · 开发者工具箱 + MCP 客户端</string>
+    <string name="app_about_version">版本 %1$s · 开发者工具箱 + MCP 客户端</string>
+    <string name="app_about_section_project">开源项目</string>
+    <string name="app_about_project_title">项目主页</string>
+    <string name="app_about_project_subtitle">查看源码、反馈问题与获取更新</string>
+    <string name="app_about_license_title">开源许可</string>
+    <string name="app_about_license_subtitle">Apache License 2.0</string>
+    <string name="app_about_section_update">版本更新</string>
+    <string name="app_about_update_check">检查更新</string>
+    <string name="app_about_update_checking">正在检查更新…</string>
+    <string name="app_about_update_uptodate">已是最新版本</string>
+    <string name="app_about_update_available">发现新版本 %1$s</string>
+    <string name="app_about_update_failed">检查失败，可稍后重试</string>
+    <string name="app_about_update_retry">重新检查</string>
+    <string name="app_about_update_go">前往下载</string>
     <string name="app_about_desc">面向开发者的本地工具箱：应用管理、文件浏览、网页、网络诊断、数据库、抓包、反编译，以及 MCP 客户端与内置 MCP Server。</string>
     <string name="app_about_theme">主题底座：Material3 角色体系 + HCT 动态取色；组件层：Miuix 视觉规范自绘实现。</string>
     <string name="app_about_section_compliance">合规声明</string>

@@ -12,8 +12,8 @@ android {
         applicationId = "com.mcp.toolbox"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     buildTypes {
@@ -33,6 +33,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 关于页需要读取 BuildConfig.VERSION_NAME 显示当前版本
+        buildConfig = true
     }
 }
 

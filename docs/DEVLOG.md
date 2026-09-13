@@ -126,3 +126,16 @@ feature/capture/        抓包（P5，暂停）
 - 动效：`spring(StiffnessMediumLow, 0.9)`；页面进入淡入上移 12dp；时长倍率 0.5×–1.5× 可调
 - 配色：`material-color-utilities` 的 HCT + DynamicScheme；动态取色走 Android 12+ 系统壁纸
 - 代码区：底色比内容区更暗（深色 #121212），语法高亮固定三色（关键字紫粉/字符串青绿/类型浅蓝）
+
+## 关于页：自动检查更新 + 开源项目入口（v0.1.1）
+
+- 新增 `app/src/main/kotlin/com/mcp/toolbox/ui/UpdateChecker.kt`：
+  用 `HttpURLConnection` 请求 `GET /repos/guanhan01/Yutu-Toolbox/releases/latest`，
+  比较 `tag_name` 与 `BuildConfig.VERSION_NAME`。版本比较按 `.`、`-`、`+` 分段取开头数字，
+  缺失段记 0，故 `1.2` 与 `1.2.0` 相同，预发布版本（如 `1.0.0-beta1`）不判定为新。
+  任何失败降级为 `UpdateState.Failed`，不阻塞页面其余内容。
+- `AboutScreen` 在 `LaunchedEffect` 里进页自动检查一次，点该行可手动重查；
+  有新版本时出现「前往下载」按钮，跳转对应 Release 页面。
+- 新增「开源项目」卡片：项目主页与 Apache-2.0 许可，点击经 `Intent.ACTION_VIEW` 打开。
+- 开启 `buildConfig = true`，版本号改为读 `BuildConfig.VERSION_NAME`
+  （原先在 `strings.xml` 硬编码为 `0.1.0-p0`，与实际版本不符）。

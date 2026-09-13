@@ -35,6 +35,19 @@ import com.mcp.toolbox.core.design.component.MiuixTag
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.navigation.Destination
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.mcp.toolbox.BuildConfig
+import com.mcp.toolbox.core.design.component.MiuixButton
+import kotlinx.coroutines.launch
 
 /** 未实现模块的统一占位页：明确写出所属阶段与降级说明，避免“看不懂的空页面”。 */
 @Composable
@@ -116,11 +129,43 @@ fun SettingsOverview(
     LanguageDialog(visible = languageDialog, onDismiss = { languageDialog = false })
 }
 
-/** 关于页：版本、开源组件与合规声明。 */
+/** 关于页：版本与更新检查、开源项目、合规声明。 */
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentVersion = remember { BuildConfig.VERSION_NAME }
+    var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+
+    fun openUrl(url: String) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    }
+
+    fun checkUpdate() {
+        scope.launch {
+            updateState = UpdateState.Checking
+            updateState = UpdateChecker.check(currentVersion)
+        }
+    }
+
+    // 进入本页时自动检查一次更新
+    LaunchedEffect(Unit) { checkUpdate() }
+
+    val state = updateState
+    val statusText = when (state) {
+        UpdateState.Idle, UpdateState.Checking ->
+            stringResource(R.string.app_about_update_checking)
+        is UpdateState.UpToDate ->
+            stringResource(R.string.app_about_update_uptodate)
+        is UpdateState.Available ->
+            stringResource(R.string.app_about_update_available, state.latest)
+        is UpdateState.Failed ->
+            stringResource(R.string.app_about_update_failed)
+    }
+    val available = state as? UpdateState.Available
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -131,7 +176,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(spacing.sm))
         MiuixSectionCard(
             title = stringResource(R.string.app_name),
-            subtitle = stringResource(R.string.app_about_version),
+            subtitle = stringResource(R.string.app_about_version, currentVersion),
         ) {
             Column(Modifier.padding(spacing.lg)) {
                 MiuixText(
@@ -147,6 +192,55 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             }
         }
         Spacer(Modifier.height(spacing.groupGap))
+
+        // 版本更新：进页自动检查，点该行可手动重查；有新版本时给出下载入口
+        MiuixSectionCard(title = stringResource(R.string.app_about_section_update)) {
+            Column {
+                MiuixListItem(
+                    title = stringResource(R.string.app_about_update_check),
+                    subtitle = statusText,
+                    leadingIcon = Icons.Outlined.SystemUpdate,
+                    onClick = { checkUpdate() },
+                    showDivider = available != null,
+                )
+                if (available != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = spacing.lg, vertical = spacing.md),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        MiuixButton(
+                            text = stringResource(R.string.app_about_update_go),
+                            onClick = { openUrl(available.releaseUrl) },
+                            leadingIcon = Icons.Outlined.Download,
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(spacing.groupGap))
+
+        // 开源项目
+        MiuixSectionCard(title = stringResource(R.string.app_about_section_project)) {
+            Column {
+                MiuixListItem(
+                    title = stringResource(R.string.app_about_project_title),
+                    subtitle = UpdateChecker.PROJECT_URL.removePrefix("https://"),
+                    leadingIcon = Icons.Outlined.Language,
+                    onClick = { openUrl(UpdateChecker.PROJECT_URL) },
+                    showDivider = true,
+                )
+                MiuixListItem(
+                    title = stringResource(R.string.app_about_license_title),
+                    subtitle = stringResource(R.string.app_about_license_subtitle),
+                    leadingIcon = Icons.Outlined.Verified,
+                    onClick = { openUrl(UpdateChecker.PROJECT_URL + "/blob/main/LICENSE") },
+                )
+            }
+        }
+        Spacer(Modifier.height(spacing.groupGap))
+
         MiuixSectionCard(title = stringResource(R.string.app_about_section_compliance)) {
             Column {
                 MiuixListItem(
