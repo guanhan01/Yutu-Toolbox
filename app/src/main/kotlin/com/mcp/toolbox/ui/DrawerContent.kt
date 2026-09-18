@@ -42,6 +42,8 @@ import com.mcp.toolbox.R
 import com.mcp.toolbox.feature.capture.CaptureStore
 import com.mcp.toolbox.core.design.component.MiuixBadge
 import com.mcp.toolbox.core.design.component.MiuixDivider
+import androidx.compose.material.icons.outlined.Close
+import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.component.miuixClickable
@@ -61,6 +63,7 @@ import com.mcp.toolbox.navigation.Routes
 fun DrawerContent(
     currentRoute: String,
     onNavigate: (String) -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MiuixTheme.colors
@@ -72,26 +75,28 @@ fun DrawerContent(
             .fillMaxSize()
             .background(colors.surfaceContainerLow),
     ) {
+        // 顶部只有一个关闭按钮，不放标题，避免上方留白
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = spacing.md, end = spacing.md, top = spacing.sm),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            MiuixIconButton(
+                onClick = onClose,
+                icon = Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.app_drawer_close),
+            )
+        }
+
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = spacing.sm),
+                .padding(vertical = spacing.xs),
         ) {
-            DrawerPrimary.forEachIndexed { index, destination ->
-                // 「应用工具」分组：首页单独一项，其余工具归入该组
-                if (index == 1) {
-                    MiuixText(
-                        text = stringResource(R.string.app_drawer_group_tools),
-                        style = MiuixTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(
-                            start = spacing.lg,
-                            top = spacing.md,
-                            bottom = spacing.xs,
-                        ),
-                    )
-                }
+            // 主列表只保留「首页」，工具统一收进底栏的「应用工具」子页面
+            DrawerPrimary.forEach { destination ->
                 DrawerItem(
                     destination = destination,
                     selected = currentRoute == destination.route,

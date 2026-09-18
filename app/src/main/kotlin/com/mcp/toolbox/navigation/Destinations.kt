@@ -28,6 +28,7 @@ data class Destination(
 
 object Routes {
     const val HOME = "home"
+    const val TOOLS = "tools"
     const val APPS = "apps"
     const val WEB = "web"
     const val NETWORK = "network"
@@ -48,9 +49,13 @@ object Routes {
     const val ABOUT = "about"
 }
 
-/** 抽屉一级入口。 */
+/** 抽屉一级入口：只保留首页，工具统一收进「应用工具」子页面。 */
 val DrawerPrimary: List<Destination> = listOf(
     Destination(Routes.HOME, R.string.app_nav_home, Icons.Outlined.Public),
+)
+
+/** 「应用工具」子页面里的工具入口。 */
+val ToolEntries: List<Destination> = listOf(
     Destination(Routes.APPS, R.string.app_nav_apps, Icons.Outlined.Smartphone, implStage = "P2"),
     Destination(Routes.WEB, R.string.app_nav_web, Icons.Outlined.Language, implStage = "P3"),
     Destination(Routes.NETWORK, R.string.app_nav_network, Icons.Outlined.Wifi, implStage = "P3"),
@@ -73,6 +78,7 @@ val DrawerNetworkChildren: List<Destination> = listOf(
 
 /** 抽屉底部固定项。 */
 val DrawerFooter: List<Destination> = listOf(
+    Destination(Routes.TOOLS, R.string.app_drawer_group_tools, Icons.Outlined.GridView),
     Destination(Routes.SETTINGS, R.string.app_nav_settings, Icons.Outlined.Settings),
     Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
 )

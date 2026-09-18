@@ -24,6 +24,7 @@
     <string name="app_nav_theme">主题</string>
 
     <string name="app_drawer_group_tools">应用工具</string>
+    <string name="app_drawer_close">关闭菜单</string>
     <string name="app_drawer_subtitle">开发者工具箱 · MCP 客户端</string>
     <string name="app_action_open_drawer">打开菜单</string>
     <string name="app_action_more">更多</string>

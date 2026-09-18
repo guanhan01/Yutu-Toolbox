@@ -168,6 +168,7 @@ fun AppShell(
                 DrawerContent(
                     currentRoute = currentRoute,
                     onNavigate = { navigate(it) },
+                    onClose = { drawerOpen = false },
                     modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 )
             }
@@ -263,6 +264,14 @@ private fun ToolboxNavHost(
                         title = stringResource(R.string.app_screen_about),
                         onOpenDrawer = onOpenDrawer)
                     AboutScreen()
+                }
+            }
+            composable(Routes.TOOLS) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.app_drawer_group_tools),
+                        onOpenDrawer = onOpenDrawer)
+                    ToolsScreen(onOpenTool = onNavigate)
                 }
             }
             composable(Routes.APPS) {
@@ -379,7 +388,7 @@ private fun MiuixTopBarPlaceholder(title: String, onOpenDrawer: () -> Unit) {
 @Composable
 private fun MiuixNavRail(currentRoute: String, onNavigate: (String) -> Unit) {
     val colors = MiuixTheme.colors
-    val entries = DrawerPrimary + DrawerFooter.filter { it.route == Routes.SETTINGS }
+    val entries = DrawerPrimary + DrawerFooter
     Column(
         modifier =
             Modifier.width(88.dp)

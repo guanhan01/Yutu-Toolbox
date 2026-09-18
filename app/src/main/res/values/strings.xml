@@ -24,6 +24,7 @@
     <string name="app_nav_theme">Theme</string>
 
     <string name="app_drawer_group_tools">App tools</string>
+    <string name="app_drawer_close">Close menu</string>
     <string name="app_drawer_subtitle">Developer toolbox · MCP client</string>
     <string name="app_action_open_drawer">Open menu</string>
     <string name="app_action_more">More</string>
