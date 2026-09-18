@@ -75,6 +75,9 @@ import androidx.compose.ui.window.Dialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
+import com.mcp.toolbox.core.design.component.MiuixMenuDivider
+import com.mcp.toolbox.core.design.component.MiuixMenuItem
+import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixTopAppBar
@@ -339,19 +342,43 @@ fun HomeScreen(
         )
     }
 
-    if (showOverflow) {
-        OverflowMenu(
-            onPickImage = {
+    // 复用项目统一的锚定式溢出菜单
+    MiuixOverflowMenu(expanded = showOverflow, onDismiss = { showOverflow = false }) {
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_pick_model),
+            icon = Icons.Outlined.SwapHoriz,
+            onClick = { showOverflow = false; picker = PickerKind.MODEL },
+        )
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_pick_reasoning),
+            icon = Icons.Outlined.Psychology,
+            onClick = { showOverflow = false; picker = PickerKind.REASONING },
+        )
+        MiuixMenuDivider()
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_attach_image),
+            icon = Icons.Outlined.Image,
+            onClick = {
+                showOverflow = false
                 pickImage.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                 )
             },
-            onPickFile = { pickFile.launch(arrayOf("*/*")) },
-            onPickFolder = { pickFolder.launch(null) },
-            onPickPath = { showPathDialog = true },
-            onPickModel = { picker = PickerKind.MODEL },
-            onPickReasoning = { picker = PickerKind.REASONING },
-            onDismiss = { showOverflow = false },
+        )
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_attach_file),
+            icon = Icons.Outlined.Description,
+            onClick = { showOverflow = false; pickFile.launch(arrayOf("*/*")) },
+        )
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_attach_folder),
+            icon = Icons.Outlined.FolderOpen,
+            onClick = { showOverflow = false; pickFolder.launch(null) },
+        )
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_attach_path),
+            icon = Icons.Outlined.Edit,
+            onClick = { showOverflow = false; showPathDialog = true },
         )
     }
 
@@ -418,89 +445,8 @@ private fun AttachmentChip(label: String, onRemove: () -> Unit) {
     }
 }
 
-/** 附件类型选择弹层。 */
-@Composable
-private fun OverflowMenu(
-    onPickImage: () -> Unit,
-    onPickFile: () -> Unit,
-    onPickFolder: () -> Unit,
-    onPickPath: () -> Unit,
-    onPickModel: () -> Unit,
-    onPickReasoning: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        // 贴底弹出的圆角面板
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Bottom,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp)
-                    .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
-                    .background(colors.surface)
-                    .padding(vertical = 12.dp),
-            ) {
-                MenuRow(Icons.Outlined.SwapHoriz, stringResource(R.string.chat_pick_model)) {
-                onDismiss(); onPickModel()
-            }
-                MenuRow(Icons.Outlined.Psychology, stringResource(R.string.chat_pick_reasoning)) {
-                onDismiss(); onPickReasoning()
-            }
-                MenuDivider()
-                MenuRow(Icons.Outlined.Image, stringResource(R.string.chat_attach_image)) {
-                onDismiss(); onPickImage()
-            }
-                MenuRow(Icons.Outlined.Description, stringResource(R.string.chat_attach_file)) {
-                onDismiss(); onPickFile()
-            }
-                MenuRow(Icons.Outlined.FolderOpen, stringResource(R.string.chat_attach_folder)) {
-                onDismiss(); onPickFolder()
-            }
-                MenuRow(Icons.Outlined.Edit, stringResource(R.string.chat_attach_path)) {
-                    onDismiss(); onPickPath()
-                }
-            }
-        }
-    }
-}
 
-@Composable
-private fun MenuDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-            .height(1.dp)
-            .background(MiuixTheme.colors.outlineVariant),
-    )
-}
 
-@Composable
-private fun MenuRow(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        MiuixIcon(icon, null, tint = colors.onSurfaceVariant, size = 20.dp)
-        MiuixText(text = label, style = MiuixTheme.typography.bodyMedium)
-    }
-}
 
 /** 手动输入文件路径。 */
 @Composable
