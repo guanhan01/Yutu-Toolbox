@@ -4,6 +4,8 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="ai_not_configured">No model configured. Set a provider and API key in AI settings first.</string>
+    <string name="chat_err_network">Request failed: %1$s</string>
     <string name="chat_sug_db">Query database</string>
     <string name="chat_sug_network">Network check</string>
     <string name="chat_sug_screen">Device info</string>

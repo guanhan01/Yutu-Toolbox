@@ -19,13 +19,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
@@ -39,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -46,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixText
-import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixTopAppBar
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
@@ -54,13 +56,14 @@ import kotlinx.coroutines.launch
 /**
  * 首页：AI Agent 对话界面。
  *
- * 消息全部保存在本地会话中（[ChatStore]），侧边栏的「对话」可展开查看历史会话。
- * 目前尚未接入具体模型：发送的内容会入档，并以一条系统消息提示需要配置模型。
+ * 会话与消息由 [ChatStore] 本地保管；真正的模型调用通过 [onSend] 注入，
+ * 由宿主（app 模块）决定用哪个服务商与密钥，本模块不依赖具体实现。
  */
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenDrawer: () -> Unit = {},
+    onSend: suspend (List<ChatMessage>) -> Result<String> = { Result.failure(IllegalStateException("no sender")) },
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -71,6 +74,7 @@ fun HomeScreen(
     val currentId by ChatStore.currentId.collectAsState()
     val session = sessions.firstOrNull { it.id == currentId }
     var input by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { ChatStore.load(context) }
@@ -80,22 +84,31 @@ fun HomeScreen(
         if (messageCount > 0) listState.animateScrollToItem(messageCount - 1)
     }
 
-    val promptNoModel = stringResource(R.string.chat_no_model)
     val newChatTitle = stringResource(R.string.chat_title)
+    val errNetwork = stringResource(R.string.chat_err_network)
 
     fun submit(text: String) {
         val content = text.trim()
-        if (content.isEmpty()) return
+        if (content.isEmpty() || sending) return
+        input = ""
+        sending = true
         scope.launch {
-            val target = session ?: ChatStore.newSession(context, content.take(24))
-            ChatStore.append(
-                context, target.id,
-                ChatMessage(role = ChatMessage.Role.USER, content = content),
-            )
-            ChatStore.append(
-                context, target.id,
-                ChatMessage(role = ChatMessage.Role.SYSTEM, content = promptNoModel),
-            )
+            try {
+                val target = session ?: ChatStore.newSession(context, content.take(24))
+                val userMessage = ChatMessage(role = ChatMessage.Role.USER, content = content)
+                ChatStore.append(context, target.id, userMessage)
+
+                val history = (target.messages + userMessage)
+                    .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
+                val result = onSend(history)
+                val reply = result.getOrElse { errNetwork.format(it.message ?: "") }
+                ChatStore.append(
+                    context, target.id,
+                    ChatMessage(role = ChatMessage.Role.ASSISTANT, content = reply),
+                )
+            } finally {
+                sending = false
+            }
         }
     }
 
@@ -113,7 +126,7 @@ fun HomeScreen(
                     icon = Icons.Outlined.Add,
                     contentDescription = stringResource(R.string.chat_new),
                     onClick = {
-                        scope.launch { ChatStore.newSession(context, newChatTitle) }
+                        if (!sending) scope.launch { ChatStore.newSession(context, newChatTitle) }
                     },
                 )
             },
@@ -137,40 +150,85 @@ fun HomeScreen(
                     items(session!!.messages, key = { it.id }) { message ->
                         MessageBubble(message)
                     }
+                    if (sending) {
+                        item(key = "pending") { PendingBubble() }
+                    }
                 }
             }
         }
 
+        InputBar(
+            value = input,
+            onValueChange = { input = it },
+            sending = sending,
+            onSend = { submit(input) },
+            onStop = { /* 目前为非流式请求，暂不支持中断 */ },
+        )
+    }
+}
+
+/** 输入栏：发送按钮内嵌在气泡里；有内容时气泡变白。 */
+@Composable
+private fun InputBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    sending: Boolean,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    val spacing = MiuixTheme.dimens.spacing
+    val active = value.isNotBlank()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(
+                start = spacing.pageHorizontal,
+                end = spacing.pageHorizontal,
+                top = spacing.sm,
+                bottom = spacing.sm,
+            ),
+        verticalAlignment = Alignment.Bottom,
+    ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.surface)
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(
-                    start = spacing.pageHorizontal,
-                    end = spacing.pageHorizontal,
-                    top = spacing.sm,
-                    bottom = spacing.sm,
-                ),
+                .weight(1f)
+                .clip(RoundedCornerShape(MiuixTheme.radius.lg))
+                .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
+                .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
         ) {
-            Box(Modifier.weight(1f)) {
-                MiuixTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = stringResource(R.string.chat_input_hint),
-                    singleLine = false,
-                    minLines = 1,
+            Box(
+                modifier = Modifier.weight(1f).padding(bottom = 6.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (value.isEmpty()) {
+                    MiuixText(
+                        text = stringResource(R.string.chat_input_hint),
+                        style = MiuixTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                    cursorBrush = SolidColor(colors.primary),
+                    maxLines = 6,
                 )
             }
             MiuixIconButton(
-                icon = Icons.Outlined.Send,
+                icon = if (sending) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
                 contentDescription = stringResource(R.string.chat_send),
-                onClick = { submit(input); input = "" },
-                filled = true,
-                enabled = input.isNotBlank(),
+                onClick = { if (sending) onStop() else onSend() },
+                filled = active || sending,
+                enabled = active || sending,
+                buttonSize = 36.dp,
+                iconSize = 18.dp,
             )
         }
     }
@@ -250,6 +308,26 @@ private fun SuggestionCard(
             style = MiuixTheme.typography.bodyMedium,
             maxLines = 2,
         )
+    }
+}
+
+/** 等待回复时的占位气泡。 */
+@Composable
+private fun PendingBubble() {
+    val colors = MiuixTheme.colors
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(MiuixTheme.radius.md))
+                .background(colors.surfaceContainer)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            MiuixText(
+                text = stringResource(R.string.chat_thinking),
+                style = MiuixTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+            )
+        }
     }
 }
 

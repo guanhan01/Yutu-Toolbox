@@ -66,6 +66,7 @@ import com.mcp.toolbox.ui.ai.AiProviderListScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
+import com.mcp.toolbox.ui.ai.AiChatClient
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
 import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
 import com.mcp.toolbox.feature.mcp.McpConnectionState
@@ -197,6 +198,8 @@ private fun ToolboxNavHost(
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
+    val notConfigured = stringResource(R.string.ai_not_configured)
+
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
     val shellContext = LocalContext.current
     var privilege by remember { mutableStateOf<PrivilegeStatus?>(null) }
@@ -219,6 +222,14 @@ private fun ToolboxNavHost(
                 }
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
+                    onSend = { history ->
+                        val cfg = AiConfigStore.config.value
+                        if (!cfg.ready) {
+                            Result.failure(IllegalStateException(notConfigured))
+                        } else {
+                            AiChatClient.complete(cfg, history)
+                        }
+                    },
                 )
             }
             composable(Routes.SETTINGS_THEME) {

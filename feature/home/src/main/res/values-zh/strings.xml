@@ -12,4 +12,6 @@
     <string name="chat_sug_screen">查看设备信息</string>
     <string name="chat_sug_network">网络诊断</string>
     <string name="chat_sug_db">查询数据库</string>
+    <string name="chat_err_network">请求失败：%1$s</string>
+    <string name="chat_thinking">正在生成…</string>
 </resources>
