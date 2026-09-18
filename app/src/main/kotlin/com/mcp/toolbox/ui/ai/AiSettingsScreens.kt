@@ -194,31 +194,27 @@ fun AiProviderListScreen(
         MiuixSectionCard(title = stringResource(R.string.ai_provider_pick)) {
             Column {
                 AiProvider.entries.forEachIndexed { index, provider ->
-                    val active = provider == config.provider
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 圆圈以外：进入该服务商的配置界面
-                        MiuixListItem(
-                            title = provider.title,
-                            subtitle = provider.baseUrl.ifBlank {
-                                stringResource(R.string.ai_custom_hint)
-                            },
-                            leading = { ProviderBadge(provider) },
-                            modifier = Modifier.weight(1f),
-                            showDivider = index != AiProvider.entries.lastIndex,
-                            onClick = {
-                                AiConfigStore.selectProvider(context, provider)
-                                onOpenProvider(provider)
-                            },
-                        )
-                        // 圆圈本身：只切换选中，不跳转
-                        SelectionCircle(
-                            selected = active,
-                            onClick = { AiConfigStore.selectProvider(context, provider) },
-                        )
-                    }
+                    MiuixListItem(
+                        title = provider.title,
+                        subtitle = provider.baseUrl.ifBlank {
+                            stringResource(R.string.ai_custom_hint)
+                        },
+                        leading = { ProviderBadge(provider) },
+                        // 整行点击进入配置；圆圈在 trailing 里自行消费点击，只做勾选
+                        trailing = {
+                            SelectionCircle(
+                                selected = provider == config.provider,
+                                onClick = {
+                                    AiConfigStore.selectProvider(context, provider)
+                                },
+                            )
+                        },
+                        showDivider = index != AiProvider.entries.lastIndex,
+                        onClick = {
+                            AiConfigStore.selectProvider(context, provider)
+                            onOpenProvider(provider)
+                        },
+                    )
                 }
             }
         }
