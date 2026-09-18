@@ -153,18 +153,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
     }
 
     val state = updateState
-    val statusText = when {
-        !UpdateChecker.ENABLED ->
-            stringResource(R.string.app_about_update_disabled)
-        state is UpdateState.Idle || state is UpdateState.Checking ->
-            stringResource(R.string.app_about_update_checking)
-        state is UpdateState.UpToDate ->
-            stringResource(R.string.app_about_update_uptodate)
-        state is UpdateState.Available ->
-            stringResource(R.string.app_about_update_available, state.latest)
-        else ->
-            stringResource(R.string.app_about_update_failed)
-    }
+    // 有新版本时给出下载入口；版本状态本身不在列表里展示
     val available = state as? UpdateState.Available
 
     Column(
@@ -199,7 +188,6 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             Column {
                 MiuixListItem(
                     title = stringResource(R.string.app_about_update_check),
-                    subtitle = statusText,
                     leadingIcon = Icons.Outlined.SystemUpdate,
                     onClick = if (UpdateChecker.ENABLED) ({ checkUpdate() }) else null,
                     showDivider = available != null,
