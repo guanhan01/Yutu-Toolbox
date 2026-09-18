@@ -17,4 +17,12 @@
     <string name="chat_pick_model">Choose model</string>
     <string name="chat_pick_reasoning">Reasoning</string>
     <string name="chat_pick_empty">Nothing available yet — pull models in AI settings</string>
+    <string name="chat_attach">Add attachment</string>
+    <string name="chat_attach_image">Image</string>
+    <string name="chat_attach_file">File</string>
+    <string name="chat_attach_folder">Folder</string>
+    <string name="chat_attach_path">Enter path</string>
+    <string name="chat_attach_path_hint">e.g. /sdcard/Download/a.txt</string>
+    <string name="chat_attach_path_confirm">Read</string>
+    <string name="chat_attach_context">Attached content:</string>
 </resources>

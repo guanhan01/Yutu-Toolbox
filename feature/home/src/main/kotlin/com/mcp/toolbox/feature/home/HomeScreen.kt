@@ -1,6 +1,9 @@
 package com.mcp.toolbox.feature.home
 
 import androidx.compose.foundation.background
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +30,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Smartphone
@@ -39,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -53,8 +62,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
+import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixText
+import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixTopAppBar
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
@@ -88,6 +99,41 @@ fun HomeScreen(
     var input by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerKind?>(null) }
+    var showAttachMenu by remember { mutableStateOf(false) }
+    var showPathDialog by remember { mutableStateOf(false) }
+    var pathInput by remember { mutableStateOf("") }
+    val attachments = remember { mutableStateListOf<ChatAttachment>() }
+
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        uri?.let {
+            attachments += ChatAttachment.Image(
+                uri = it.toString(),
+                label = ChatAttachment.displayName(context, it),
+            )
+        }
+    }
+    val pickFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let {
+            attachments += ChatAttachment.File(
+                uri = it.toString(),
+                label = ChatAttachment.displayName(context, it),
+            )
+        }
+    }
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        uri?.let {
+            attachments += ChatAttachment.Folder(
+                uri = it.toString(),
+                label = it.lastPathSegment?.substringAfterLast(':') ?: "文件夹",
+            )
+        }
+    }
     val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) { ChatStore.load(context) }
@@ -100,18 +146,40 @@ fun HomeScreen(
     val newChatTitle = stringResource(R.string.chat_title)
     val errNetwork = stringResource(R.string.chat_err_network)
 
+    val attachContext = stringResource(R.string.chat_attach_context)
+
     fun submit(text: String) {
         val content = text.trim()
-        if (content.isEmpty() || sending) return
+        if ((content.isEmpty() && attachments.isEmpty()) || sending) return
+        val attached = attachments.toList()
         input = ""
+        attachments.clear()
         sending = true
         scope.launch {
             try {
-                val target = session ?: ChatStore.newSession(context, content.take(24))
-                val userMessage = ChatMessage(role = ChatMessage.Role.USER, content = content)
+                val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
+                val target = session ?: ChatStore.newSession(context, title.take(24))
+                val userMessage = ChatMessage(
+                    role = ChatMessage.Role.USER,
+                    content = content,
+                )
                 ChatStore.append(context, target.id, userMessage)
 
-                val history = (target.messages + userMessage)
+                // 附件以文本上下文随本次请求一起发出
+                val withAttachments = if (attached.isEmpty()) {
+                    listOf(userMessage)
+                } else {
+                    listOf(
+                        userMessage,
+                        ChatMessage(
+                            role = ChatMessage.Role.USER,
+                            content = attachContext + "\n" +
+                                attached.joinToString("\n\n") { it.toContext(context) },
+                        ),
+                    )
+                }
+
+                val history = (target.messages + withAttachments)
                     .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
                 val result = onSend(history)
                 val reply = result.getOrElse { errNetwork.format(it.message ?: "") }
@@ -170,6 +238,23 @@ fun HomeScreen(
             }
         }
 
+        // 待发送的附件
+        if (attachments.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = spacing.pageHorizontal, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                attachments.forEachIndexed { index, item ->
+                    AttachmentChip(
+                        label = item.label,
+                        onRemove = { attachments.removeAt(index) },
+                    )
+                }
+            }
+        }
+
         // 输入栏上方的模型与思考档位入口
         Row(
             modifier = Modifier
@@ -197,6 +282,34 @@ fun HomeScreen(
             sending = sending,
             onSend = { submit(input) },
             onStop = { /* 目前为非流式请求，暂不支持中断 */ },
+            onAttach = { showAttachMenu = true },
+        )
+    }
+
+    if (showAttachMenu) {
+        AttachMenu(
+            onPickImage = {
+                pickImage.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                )
+            },
+            onPickFile = { pickFile.launch(arrayOf("*/*")) },
+            onPickFolder = { pickFolder.launch(null) },
+            onPickPath = { showPathDialog = true },
+            onDismiss = { showAttachMenu = false },
+        )
+    }
+
+    if (showPathDialog) {
+        PathDialog(
+            value = pathInput,
+            onValueChange = { pathInput = it },
+            onConfirm = {
+                attachments += ChatAttachment.Path(pathInput.trim())
+                pathInput = ""
+                showPathDialog = false
+            },
+            onDismiss = { showPathDialog = false },
         )
     }
 
@@ -211,6 +324,131 @@ fun HomeScreen(
             },
             onDismiss = { picker = null },
         )
+    }
+}
+
+/** 已选附件的预览小块，点 × 移除。 */
+@Composable
+private fun AttachmentChip(label: String, onRemove: () -> Unit) {
+    val colors = MiuixTheme.colors
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(colors.surfaceContainerLow)
+            .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        MiuixText(
+            text = label,
+            style = MiuixTheme.typography.labelMedium,
+            color = colors.onSurface,
+            maxLines = 1,
+        )
+        MiuixIconButton(
+            icon = Icons.Outlined.Close,
+            contentDescription = stringResource(R.string.chat_attach),
+            onClick = onRemove,
+            buttonSize = 26.dp,
+            iconSize = 14.dp,
+        )
+    }
+}
+
+/** 附件类型选择弹层。 */
+@Composable
+private fun AttachMenu(
+    onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
+    onPickFolder: () -> Unit,
+    onPickPath: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
+                .background(colors.surface)
+                .padding(vertical = 12.dp),
+        ) {
+            MenuRow(Icons.Outlined.Image, stringResource(R.string.chat_attach_image)) {
+                onDismiss(); onPickImage()
+            }
+            MenuRow(Icons.Outlined.Description, stringResource(R.string.chat_attach_file)) {
+                onDismiss(); onPickFile()
+            }
+            MenuRow(Icons.Outlined.FolderOpen, stringResource(R.string.chat_attach_folder)) {
+                onDismiss(); onPickFolder()
+            }
+            MenuRow(Icons.Outlined.Edit, stringResource(R.string.chat_attach_path)) {
+                onDismiss(); onPickPath()
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        MiuixIcon(icon, null, tint = colors.onSurfaceVariant, size = 20.dp)
+        MiuixText(text = label, style = MiuixTheme.typography.bodyMedium)
+    }
+}
+
+/** 手动输入文件路径。 */
+@Composable
+private fun PathDialog(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    val spacing = MiuixTheme.dimens.spacing
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
+                .background(colors.surface)
+                .padding(spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(spacing.md),
+        ) {
+            MiuixText(
+                text = stringResource(R.string.chat_attach_path),
+                style = MiuixTheme.typography.titleMedium,
+            )
+            MiuixTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = stringResource(R.string.chat_attach_path_hint),
+                singleLine = true,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                MiuixButton(
+                    text = stringResource(R.string.chat_attach_path_confirm),
+                    onClick = onConfirm,
+                    enabled = value.isNotBlank(),
+                )
+            }
+        }
     }
 }
 
@@ -322,6 +560,7 @@ private fun InputBar(
     sending: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onAttach: () -> Unit,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -345,9 +584,16 @@ private fun InputBar(
                 .weight(1f)
                 .clip(RoundedCornerShape(MiuixTheme.radius.lg))
                 .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
-                .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
+            MiuixIconButton(
+                icon = Icons.Outlined.Add,
+                contentDescription = stringResource(R.string.chat_attach),
+                onClick = onAttach,
+                buttonSize = 36.dp,
+                iconSize = 18.dp,
+            )
             Box(
                 modifier = Modifier.weight(1f).padding(bottom = 6.dp),
                 contentAlignment = Alignment.CenterStart,

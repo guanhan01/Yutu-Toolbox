@@ -17,4 +17,12 @@
     <string name="chat_pick_model">选择模型</string>
     <string name="chat_pick_reasoning">思考能力</string>
     <string name="chat_pick_empty">暂无可用项，请先到 AI 设置拉取</string>
+    <string name="chat_attach">添加附件</string>
+    <string name="chat_attach_image">图片</string>
+    <string name="chat_attach_file">文件</string>
+    <string name="chat_attach_folder">文件夹</string>
+    <string name="chat_attach_path">输入路径</string>
+    <string name="chat_attach_path_hint">例如 /sdcard/Download/a.txt</string>
+    <string name="chat_attach_path_confirm">读取</string>
+    <string name="chat_attach_context">以下是附件内容：</string>
 </resources>
