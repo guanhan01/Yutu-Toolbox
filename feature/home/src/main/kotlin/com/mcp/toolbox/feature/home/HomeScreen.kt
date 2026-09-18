@@ -80,7 +80,9 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenDrawer: () -> Unit = {},
-    onSend: suspend (List<ChatMessage>) -> Result<String> = { Result.failure(IllegalStateException("no sender")) },
+    onSend: suspend (List<ChatMessage>, (String) -> Unit) -> Result<String> = { _, _ ->
+        Result.failure(IllegalStateException("no sender"))
+    },
     currentModel: String = "",
     currentReasoning: String = "",
     availableModels: List<String> = emptyList(),
@@ -99,6 +101,8 @@ fun HomeScreen(
     var input by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerKind?>(null) }
+    var streamingText by remember { mutableStateOf<String?>(null) }
+    var sendJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var showAttachMenu by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
@@ -155,7 +159,8 @@ fun HomeScreen(
         input = ""
         attachments.clear()
         sending = true
-        scope.launch {
+        streamingText = ""
+        sendJob = scope.launch {
             try {
                 val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
                 val target = session ?: ChatStore.newSession(context, title.take(24))
@@ -190,7 +195,9 @@ fun HomeScreen(
 
                 val history = (target.messages + withAttachments)
                     .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-                val result = onSend(history)
+                val result = onSend(history) { delta ->
+                    streamingText = (streamingText ?: "") + delta
+                }
                 val reply = result.getOrElse { errNetwork.format(it.message ?: "") }
                 ChatStore.append(
                     context, target.id,
@@ -198,6 +205,8 @@ fun HomeScreen(
                 )
             } finally {
                 sending = false
+                streamingText = null
+                sendJob = null
             }
         }
     }
@@ -241,7 +250,19 @@ fun HomeScreen(
                         MessageBubble(message)
                     }
                     if (sending) {
-                        item(key = "pending") { PendingBubble() }
+                        item(key = "pending") {
+                            val partial = streamingText
+                            if (partial.isNullOrEmpty()) {
+                                PendingBubble()
+                            } else {
+                                MessageBubble(
+                                    ChatMessage(
+                                        role = ChatMessage.Role.ASSISTANT,
+                                        content = partial,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -290,7 +311,7 @@ fun HomeScreen(
             onValueChange = { input = it },
             sending = sending,
             onSend = { submit(input) },
-            onStop = { /* 目前为非流式请求，暂不支持中断 */ },
+            onStop = { sendJob?.cancel() },
             onAttach = { showAttachMenu = true },
         )
     }

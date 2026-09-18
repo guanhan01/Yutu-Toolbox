@@ -1,59 +1,72 @@
 package com.mcp.toolbox.ui.ai
 
+import android.content.Context
 import com.mcp.toolbox.feature.home.ChatMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
  * OpenAI 兼容协议的对话客户端。
  *
- * 请求 `POST {baseUrl}/chat/completions`，非流式返回首条回复文本。
- * 各家差异（Anthropic 原生协议、Gemini 原生协议）后续按需在此扩展。
+ * 请求 `POST {baseUrl}/chat/completions`；[complete] 一次性返回，
+ * [completeStream] 走 SSE 逐段回调。各家差异（Anthropic / Gemini 原生协议）后续按需扩展。
  */
 object AiChatClient {
 
     private const val TIMEOUT_MS = 60_000
 
+    /** 一次性返回完整回复。 */
     suspend fun complete(
-        context: android.content.Context,
+        context: Context,
         config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String? = null,
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            require(config.baseUrl.isNotBlank()) { "未配置接口地址" }
-            require(config.model.isNotBlank()) { "未配置模型" }
-            require(config.apiKey.isNotBlank()) { "未配置 API Key" }
+            validate(config)
+            val payload = buildPayload(context, config, history, systemPrompt, stream = false)
+            val body = post(context, config, payload)
+            parseContent(body)
+        }
+    }
 
-            val url = URL(config.baseUrl.trimEnd('/') + "/chat/completions")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Authorization", "Bearer ${config.apiKey}")
-                setRequestProperty("Accept", "application/json")
-            }
+    /**
+     * 流式返回：每收到一段增量就回调 [onDelta]。
+     *
+     * 返回值为拼接后的完整文本；调用方取消协程即可中断请求。
+     */
+    suspend fun completeStream(
+        context: Context,
+        config: AiConfig,
+        history: List<ChatMessage>,
+        systemPrompt: String? = null,
+        onDelta: (String) -> Unit,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            validate(config)
+            val payload = buildPayload(context, config, history, systemPrompt, stream = true)
+            val conn = open(config, payload)
 
             try {
-                val payload = buildPayload(context, config, history, systemPrompt)
-                conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-
                 val code = conn.responseCode
-                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                    ?.bufferedReader()
-                    ?.use { it.readText() }
-                    .orEmpty()
-
                 if (code !in 200..299) {
-                    error("HTTP $code：${extractError(body).take(200)}")
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    error("HTTP $code：${extractError(err).take(200)}")
                 }
-                parseContent(body)
+                val reader = conn.inputStream.bufferedReader()
+                val full = StringBuilder()
+                readSse(reader) { delta ->
+                    if (delta.isNotEmpty()) {
+                        full.append(delta)
+                        onDelta(delta)
+                    }
+                }
+                full.toString().ifBlank { error("回复内容为空") }
             } finally {
                 conn.disconnect()
             }
@@ -64,8 +77,7 @@ object AiChatClient {
     suspend fun listModels(config: AiConfig): Result<List<String>> = withContext(Dispatchers.IO) {
         runCatching {
             require(config.baseUrl.isNotBlank()) { "未配置接口地址" }
-            val url = URL(config.baseUrl.trimEnd('/') + "/models")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            val conn = (URL(config.baseUrl.trimEnd('/') + "/models").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
@@ -77,12 +89,8 @@ object AiChatClient {
             try {
                 val code = conn.responseCode
                 val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                    ?.bufferedReader()
-                    ?.use { it.readText() }
-                    .orEmpty()
-                if (code !in 200..299) {
-                    error("HTTP $code：${extractError(body).take(200)}")
-                }
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
                 val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
                 (0 until data.length()).mapNotNull { i ->
                     data.optJSONObject(i)?.optString("id")?.takeIf { it.isNotBlank() }
@@ -93,13 +101,67 @@ object AiChatClient {
         }
     }
 
-    // ---------- 内部 ----------
+    // ---------- 请求 ----------
+
+    private fun validate(config: AiConfig) {
+        require(config.baseUrl.isNotBlank()) { "未配置接口地址" }
+        require(config.model.isNotBlank()) { "未配置模型" }
+        require(config.apiKey.isNotBlank()) { "未配置 API Key" }
+    }
+
+    private fun open(config: AiConfig, payload: String): HttpURLConnection =
+        (URL(config.baseUrl.trimEnd('/') + "/chat/completions").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = TIMEOUT_MS
+            readTimeout = TIMEOUT_MS
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer ${config.apiKey}")
+            setRequestProperty("Accept", "text/event-stream")
+            outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+        }
+
+    private fun post(context: Context, config: AiConfig, payload: String): String {
+        val conn = open(config, payload)
+        return try {
+            val code = conn.responseCode
+            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            body
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /** 逐行读 SSE，取出 `choices[0].delta.content`。 */
+    private fun readSse(reader: BufferedReader, onDelta: (String) -> Unit) {
+        reader.useLines { lines ->
+            lines.forEach { raw ->
+                val line = raw.trim()
+                if (!line.startsWith("data:")) return@forEach
+                val data = line.removePrefix("data:").trim()
+                if (data.isEmpty() || data == "[DONE]") return@forEach
+                val delta = runCatching {
+                    val root = JSONObject(data)
+                    val choices = root.optJSONArray("choices") ?: return@runCatching ""
+                    val first = choices.optJSONObject(0) ?: return@runCatching ""
+                    val d = first.optJSONObject("delta")
+                    d?.optString("content").orEmpty()
+                }.getOrDefault("")
+                onDelta(delta)
+            }
+        }
+    }
+
+    // ---------- 载荷 ----------
 
     private fun buildPayload(
-        context: android.content.Context,
+        context: Context,
         config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String?,
+        stream: Boolean,
     ): String {
         val messages = JSONArray()
         systemPrompt?.takeIf { it.isNotBlank() }?.let {
@@ -115,7 +177,6 @@ object AiChatClient {
             if (images.isEmpty()) {
                 messages.put(JSONObject().put("role", role).put("content", m.content))
             } else {
-                // 多模态：content 变成数组，文本 + 若干 image_url（data URI）
                 val parts = JSONArray()
                 if (m.content.isNotBlank()) {
                     parts.put(JSONObject().put("type", "text").put("text", m.content))
@@ -130,37 +191,36 @@ object AiChatClient {
                 messages.put(JSONObject().put("role", role).put("content", parts))
             }
         }
-        return JSONObject()
+
+        val root = JSONObject()
             .put("model", config.model)
             .put("messages", messages)
             .put("temperature", config.temperature.toDouble())
-            .put("stream", false)
-            .toString()
+            .put("stream", stream)
+        // Default 不下发该字段；其余按 OpenAI 兼容的 reasoning_effort 传递
+        config.reasoning.apiValue?.let { root.put("reasoning_effort", it) }
+        return root.toString()
     }
 
     private fun parseContent(body: String): String {
         val root = JSONObject(body)
-        val choices = root.optJSONArray("choices")
-            ?: error("响应缺少 choices：${body.take(200)}")
+        val choices = root.optJSONArray("choices") ?: error("响应缺少 choices：${body.take(200)}")
         val first = choices.optJSONObject(0) ?: error("choices 为空")
         val message = first.optJSONObject("message")
-        val content = message?.optString("content")?.takeIf { it.isNotBlank() }
+        return message?.optString("content")?.takeIf { it.isNotBlank() }
             ?: first.optString("text").takeIf { it.isNotBlank() }
             ?: error("回复内容为空")
-        return content
     }
 
     /**
      * 把图片读成 data URI。
      *
-     * 超过 [MAX_IMAGE_BYTES] 时先按最长边 1568px 缩放再压成 JPEG（质量 85），
-     * 仍超限则放弃该图，避免请求体过大被服务商拒绝。
+     * 超过 [MAX_IMAGE_BYTES] 时按最长边 1568px 缩放再压成 JPEG（质量 85），仍超限则放弃该图。
      */
-    private fun encodeImage(context: android.content.Context, uri: String): String? = runCatching {
+    private fun encodeImage(context: Context, uri: String): String? = runCatching {
         val parsed = android.net.Uri.parse(uri)
         val raw = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
             ?: return null
-
         val mime = context.contentResolver.getType(parsed) ?: "image/jpeg"
         val bytes = if (raw.size <= MAX_IMAGE_BYTES) {
             raw
@@ -179,10 +239,7 @@ object AiChatClient {
         "data:$mime;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }.getOrNull()
 
-    private fun scaleDown(
-        bitmap: android.graphics.Bitmap,
-        maxEdge: Int,
-    ): android.graphics.Bitmap {
+    private fun scaleDown(bitmap: android.graphics.Bitmap, maxEdge: Int): android.graphics.Bitmap {
         val longest = maxOf(bitmap.width, bitmap.height)
         if (longest <= maxEdge) return bitmap
         val ratio = maxEdge.toFloat() / longest
@@ -198,8 +255,7 @@ object AiChatClient {
     private const val MAX_IMAGE_EDGE = 1568
 
     private fun extractError(body: String): String = runCatching {
-        val root = JSONObject(body)
-        val err = root.opt("error")
+        val err = JSONObject(body).opt("error")
         when (err) {
             is JSONObject -> err.optString("message").ifBlank { body }
             is String -> err

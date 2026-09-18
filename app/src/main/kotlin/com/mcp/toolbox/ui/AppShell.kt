@@ -224,12 +224,12 @@ private fun ToolboxNavHost(
                 }
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
-                    onSend = { history ->
+                    onSend = { history, onDelta ->
                         val cfg = AiConfigStore.config.value
                         if (!cfg.ready) {
                             Result.failure(IllegalStateException(notConfigured))
                         } else {
-                            AiChatClient.complete(shellContext, cfg, history)
+                            AiChatClient.completeStream(shellContext, cfg, history, null, onDelta)
                         }
                     },
                     currentModel = aiConfig.model,

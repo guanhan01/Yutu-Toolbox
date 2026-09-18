@@ -69,6 +69,7 @@ object AiConfigStore {
     private const val KEY_PROVIDER = "provider"
     private const val KEY_BASE_URL = "baseUrl"
     private const val KEY_API_KEY = "apiKey"
+    private const val KEY_API_KEY_ENC = "apiKeyEnc"
     private const val KEY_MODEL = "model"
     private const val KEY_TEMP = "temperature"
     private const val KEY_REASONING = "reasoning"
@@ -88,7 +89,10 @@ object AiConfigStore {
         _config.value = AiConfig(
             provider = provider,
             baseUrl = p.getString(KEY_BASE_URL, null) ?: provider.baseUrl,
-            apiKey = p.getString(KEY_API_KEY, null).orEmpty(),
+            apiKey = p.getString(KEY_API_KEY_ENC, null)
+                ?.let { SecureStore.decrypt(context, it) }
+                // 兼容早期写入的明文，读取后会在下次保存时转为密文
+                ?: p.getString(KEY_API_KEY, null).orEmpty(),
             model = p.getString(KEY_MODEL, null) ?: provider.defaultModel,
             temperature = p.getFloat(KEY_TEMP, 0.7f),
             reasoning = runCatching {
@@ -137,7 +141,8 @@ object AiConfigStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_PROVIDER, config.provider.name)
             .putString(KEY_BASE_URL, config.baseUrl)
-            .putString(KEY_API_KEY, config.apiKey)
+            .remove(KEY_API_KEY)
+            .putString(KEY_API_KEY_ENC, SecureStore.encrypt(context, config.apiKey))
             .putString(KEY_MODEL, config.model)
             .putFloat(KEY_TEMP, config.temperature)
             .putString(KEY_REASONING, config.reasoning.name)
