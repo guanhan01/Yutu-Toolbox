@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -53,8 +54,8 @@ import com.mcp.toolbox.navigation.DrawerPrimary
 import com.mcp.toolbox.navigation.Routes
 
 /**
- * 汉堡抽屉内容：渐变头图 + 可折叠「网络」二级菜单 + 条目 badge + 语言入口 + 底部固定项。
- * 对齐设计稿图 2 的深浅双区结构。
+ * 汉堡抽屉内容：「应用工具」分组 + 可折叠「网络」二级菜单 + 条目 badge。
+ * 底部为横向纯图标入口（设置 / 关于）。
  */
 @Composable
 fun DrawerContent(
@@ -71,52 +72,26 @@ fun DrawerContent(
             .fillMaxSize()
             .background(colors.surfaceContainerLow),
     ) {
-        // 渐变头图区
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
-                .background(
-                    Brush.linearGradient(listOf(colors.primary, colors.tertiary, colors.primaryContainer)),
-                ),
-            contentAlignment = Alignment.BottomStart,
-        ) {
-            Row(
-                modifier = Modifier.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(colors.surface.copy(alpha = 0.9f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    MiuixIcon(Icons.Outlined.Person, null, tint = colors.primary, size = 26.dp)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    MiuixText(
-                        text = stringResource(R.string.app_name),
-                        style = MiuixTheme.typography.titleLarge,
-                        color = colors.onPrimary,
-                    )
-                    MiuixText(
-                        text = stringResource(R.string.app_drawer_subtitle),
-                        style = MiuixTheme.typography.labelMedium,
-                        color = colors.onPrimary.copy(alpha = 0.85f),
-                    )
-                }
-            }
-        }
-
         Column(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = spacing.sm),
         ) {
-            DrawerPrimary.forEach { destination ->
+            DrawerPrimary.forEachIndexed { index, destination ->
+                // 「应用工具」分组：首页单独一项，其余工具归入该组
+                if (index == 1) {
+                    MiuixText(
+                        text = stringResource(R.string.app_drawer_group_tools),
+                        style = MiuixTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(
+                            start = spacing.lg,
+                            top = spacing.md,
+                            bottom = spacing.xs,
+                        ),
+                    )
+                }
                 DrawerItem(
                     destination = destination,
                     selected = currentRoute == destination.route,
@@ -151,9 +126,16 @@ fun DrawerContent(
         }
 
         MiuixDivider()
-        Column(modifier = Modifier.padding(vertical = spacing.sm)) {
+        // 底栏：横向排布，只留图标
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = spacing.md, vertical = spacing.sm),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             DrawerFooter.forEach { destination ->
-                DrawerItem(
+                DrawerFooterIcon(
                     destination = destination,
                     selected = currentRoute == destination.route,
                     onClick = { onNavigate(destination.route) },
@@ -220,5 +202,31 @@ private fun DrawerItem(
                 size = 18.dp,
             )
         }
+    }
+}
+
+/** 抽屉底栏入口：纯图标，无文字。 */
+@Composable
+private fun DrawerFooterIcon(
+    destination: Destination,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    val press = rememberMiuixPressState()
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
+            .miuixClickable(press, true, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiuixIcon(
+            destination.icon,
+            stringResource(destination.labelRes),
+            tint = if (selected) colors.primary else colors.onSurfaceVariant,
+            size = 24.dp,
+        )
     }
 }
