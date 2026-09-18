@@ -123,23 +123,6 @@ fun ThemeSettingsScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(spacing.groupGap),
     ) {
-    item {
-            MiuixSectionCard(title = stringResource(R.string.settings_theme_title), subtitle = stringResource(R.string.settings_theme_subtitle)) {
-                Column(Modifier.padding(spacing.lg), verticalArrangement = Arrangement.spacedBy(spacing.md)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-                    ) {
-                        MiuixTag(text = if (config.amoled) "AMOLED" else stringResource(R.string.settings_tag_standard), color = colors.success)
-                        MiuixTag(
-                            text = if (isZh) config.paletteStyle.labelZh else config.paletteStyle.labelEn,
-                            color = colors.primary,
-                            filled = true,
-                        )
-                    }
-                }
-            }
-    }
 
     item {
             MiuixSectionCard(title = stringResource(R.string.settings_palette_title), subtitle = stringResource(R.string.settings_palette_desc)) {

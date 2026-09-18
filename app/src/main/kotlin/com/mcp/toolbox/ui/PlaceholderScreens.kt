@@ -97,7 +97,6 @@ fun SettingsOverview(
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_screen_theme),
                     leadingIcon = Icons.Outlined.Palette,
-                    valueText = stringResource(R.string.app_settings_theme_value),
                     onClick = onOpenTheme,
                 )
                 MiuixSuperArrow(
