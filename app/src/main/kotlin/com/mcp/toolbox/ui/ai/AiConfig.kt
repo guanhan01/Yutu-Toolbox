@@ -8,31 +8,44 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * 支持的 AI 服务商。
  *
- * `baseUrl` 均为各家的 OpenAI 兼容端点（Anthropic / Gemini 另有原生协议，
- * 这里先按兼容层给出，接入时再按需扩展），`custom` 允许用户自行填写地址与模型。
+ * `baseUrl` 均为各家的 OpenAI 兼容端点；`badge` 用于列表里的字母徽标，`tint` 为其品牌色。
  */
 enum class AiProvider(
     val title: String,
+    val badge: String,
+    val tintArgb: Long,
     val baseUrl: String,
     val defaultModel: String,
     val docsHint: String,
 ) {
-    OPENAI("OpenAI", "https://api.openai.com/v1", "gpt-4o", "platform.openai.com"),
-    ANTHROPIC("Anthropic Claude", "https://api.anthropic.com/v1", "claude-sonnet-4-20250514", "console.anthropic.com"),
-    GEMINI("Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash", "aistudio.google.com"),
-    DEEPSEEK("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", "platform.deepseek.com"),
-    MOONSHOT("月之暗面 Kimi", "https://api.moonshot.cn/v1", "moonshot-v1-8k", "platform.moonshot.cn"),
-    ZHIPU("智谱 GLM", "https://open.bigmodel.cn/api/paas/v4", "glm-4-plus", "open.bigmodel.cn"),
-    DASHSCOPE("通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "bailian.console.aliyun.com"),
-    BAIDU("百度文心", "https://qianfan.baidubce.com/v2", "ernie-4.0-8k", "console.bce.baidu.com"),
-    HUNYUAN("腾讯混元", "https://api.hunyuan.cloud.tencent.com/v1", "hunyuan-turbo", "console.cloud.tencent.com"),
-    SPARK("讯飞星火", "https://spark-api-open.xf-yun.com/v1", "generalv3.5", "console.xfyun.cn"),
-    XAI("xAI Grok", "https://api.x.ai/v1", "grok-2-latest", "console.x.ai"),
-    MISTRAL("Mistral", "https://api.mistral.ai/v1", "mistral-large-latest", "console.mistral.ai"),
-    CUSTOM("自定义（OpenAI 兼容）", "", "", ""),
+    OPENAI("OpenAI", "AI", 0xFF10A37F, "https://api.openai.com/v1", "gpt-4o", "platform.openai.com"),
+    ANTHROPIC("Anthropic Claude", "C", 0xFFD97757, "https://api.anthropic.com/v1", "claude-sonnet-4-20250514", "console.anthropic.com"),
+    GEMINI("Google Gemini", "G", 0xFF4285F4, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash", "aistudio.google.com"),
+    DEEPSEEK("DeepSeek", "D", 0xFF4D6BFE, "https://api.deepseek.com/v1", "deepseek-chat", "platform.deepseek.com"),
+    MOONSHOT("月之暗面 Kimi", "K", 0xFF1F1F1F, "https://api.moonshot.cn/v1", "moonshot-v1-8k", "platform.moonshot.cn"),
+    ZHIPU("智谱 GLM", "Z", 0xFF3859FF, "https://open.bigmodel.cn/api/paas/v4", "glm-4-plus", "open.bigmodel.cn"),
+    DASHSCOPE("通义千问", "Q", 0xFF615CED, "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "bailian.console.aliyun.com"),
+    BAIDU("百度文心", "W", 0xFF2932E1, "https://qianfan.baidubce.com/v2", "ernie-4.0-8k", "console.bce.baidu.com"),
+    HUNYUAN("腾讯混元", "H", 0xFF0052D9, "https://api.hunyuan.cloud.tencent.com/v1", "hunyuan-turbo", "console.cloud.tencent.com"),
+    SPARK("讯飞星火", "S", 0xFF1E63FF, "https://spark-api-open.xf-yun.com/v1", "generalv3.5", "console.xfyun.cn"),
+    XAI("xAI Grok", "X", 0xFF1D1D1F, "https://api.x.ai/v1", "grok-2-latest", "console.x.ai"),
+    MISTRAL("Mistral", "M", 0xFFFF7000, "https://api.mistral.ai/v1", "mistral-large-latest", "console.mistral.ai"),
+    CUSTOM("自定义（OpenAI 兼容）", "+", 0xFF6B7280, "", "", ""),
     ;
 
     val isCustom: Boolean get() = this == CUSTOM
+}
+
+/** 思考（推理）档位。不支持的档位由服务商忽略该字段。 */
+enum class ReasoningEffort(val label: String, val apiValue: String?) {
+    OFF("Off", "none"),
+    DEFAULT("Default", null),
+    MINIMAL("Minimal", "minimal"),
+    LOW("Low", "low"),
+    MEDIUM("Medium", "medium"),
+    HIGH("High", "high"),
+    XHIGH("XHigh", "xhigh"),
+    MAX("Max", "max"),
 }
 
 /** AI 接入配置。密钥只存在本机 SharedPreferences 中，不上传。 */
@@ -42,6 +55,9 @@ data class AiConfig(
     val apiKey: String = "",
     val model: String = AiProvider.OPENAI.defaultModel,
     val temperature: Float = 0.7f,
+    val reasoning: ReasoningEffort = ReasoningEffort.DEFAULT,
+    /** 从服务商拉取到的模型列表缓存，仅本机保存。 */
+    val cachedModels: List<String> = emptyList(),
 ) {
     /** 是否已具备发起请求的最小条件。 */
     val ready: Boolean get() = baseUrl.isNotBlank() && model.isNotBlank() && apiKey.isNotBlank()
@@ -55,6 +71,8 @@ object AiConfigStore {
     private const val KEY_API_KEY = "apiKey"
     private const val KEY_MODEL = "model"
     private const val KEY_TEMP = "temperature"
+    private const val KEY_REASONING = "reasoning"
+    private const val KEY_MODELS = "cachedModels"
 
     private val _config = MutableStateFlow(AiConfig())
     val config: StateFlow<AiConfig> = _config.asStateFlow()
@@ -73,6 +91,16 @@ object AiConfigStore {
             apiKey = p.getString(KEY_API_KEY, null).orEmpty(),
             model = p.getString(KEY_MODEL, null) ?: provider.defaultModel,
             temperature = p.getFloat(KEY_TEMP, 0.7f),
+            reasoning = runCatching {
+                ReasoningEffort.valueOf(
+                    p.getString(KEY_REASONING, null) ?: ReasoningEffort.DEFAULT.name,
+                )
+            }.getOrDefault(ReasoningEffort.DEFAULT),
+            cachedModels = p.getString(KEY_MODELS, null)
+                ?.split('\n')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                .orEmpty(),
         )
         loaded = true
     }
@@ -90,6 +118,20 @@ object AiConfigStore {
         )
     }
 
+    /** 聊天页快速切换模型。 */
+    fun selectModel(context: Context, model: String) {
+        save(context, _config.value.copy(model = model))
+    }
+
+    /** 聊天页快速切换思考档位。 */
+    fun selectReasoning(context: Context, effort: ReasoningEffort) {
+        save(context, _config.value.copy(reasoning = effort))
+    }
+
+    fun setCachedModels(context: Context, models: List<String>) {
+        save(context, _config.value.copy(cachedModels = models))
+    }
+
     fun save(context: Context, config: AiConfig) {
         _config.value = config
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -98,6 +140,8 @@ object AiConfigStore {
             .putString(KEY_API_KEY, config.apiKey)
             .putString(KEY_MODEL, config.model)
             .putFloat(KEY_TEMP, config.temperature)
+            .putString(KEY_REASONING, config.reasoning.name)
+            .putString(KEY_MODELS, config.cachedModels.joinToString("\n"))
             .apply()
     }
 }

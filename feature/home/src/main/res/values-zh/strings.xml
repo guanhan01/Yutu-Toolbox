@@ -14,4 +14,7 @@
     <string name="chat_sug_db">查询数据库</string>
     <string name="chat_err_network">请求失败：%1$s</string>
     <string name="chat_thinking">正在生成…</string>
+    <string name="chat_pick_model">选择模型</string>
+    <string name="chat_pick_reasoning">思考能力</string>
+    <string name="chat_pick_empty">暂无可用项，请先到 AI 设置拉取</string>
 </resources>

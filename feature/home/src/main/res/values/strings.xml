@@ -14,4 +14,7 @@
     <string name="chat_sug_db">Query database</string>
     <string name="chat_err_network">Request failed: %1$s</string>
     <string name="chat_thinking">Generating…</string>
+    <string name="chat_pick_model">Choose model</string>
+    <string name="chat_pick_reasoning">Reasoning</string>
+    <string name="chat_pick_empty">Nothing available yet — pull models in AI settings</string>
 </resources>

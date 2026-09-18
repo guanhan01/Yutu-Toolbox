@@ -66,6 +66,7 @@ import com.mcp.toolbox.ui.ai.AiProviderListScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
+import com.mcp.toolbox.ui.ai.ReasoningEffort
 import com.mcp.toolbox.ui.ai.AiChatClient
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
 import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
@@ -199,6 +200,7 @@ private fun ToolboxNavHost(
     onNavigate: (String) -> Unit,
 ) {
     val notConfigured = stringResource(R.string.ai_not_configured)
+    val aiConfig by AiConfigStore.config.collectAsState()
 
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
     val shellContext = LocalContext.current
@@ -229,6 +231,18 @@ private fun ToolboxNavHost(
                         } else {
                             AiChatClient.complete(cfg, history)
                         }
+                    },
+                    currentModel = aiConfig.model,
+                    currentReasoning = aiConfig.reasoning.label,
+                    availableModels = aiConfig.cachedModels.ifEmpty {
+                        listOfNotNull(aiConfig.model.takeIf { it.isNotBlank() })
+                    },
+                    availableReasoning = ReasoningEffort.entries.map { it.label },
+                    onSelectModel = { AiConfigStore.selectModel(shellContext, it) },
+                    onSelectReasoning = { label ->
+                        ReasoningEffort.entries
+                            .firstOrNull { it.label == label }
+                            ?.let { AiConfigStore.selectReasoning(shellContext, it) }
                     },
                 )
             }

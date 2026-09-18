@@ -4,6 +4,13 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="ai_pull_desc">当前已缓存 %1$d 个</string>
+    <string name="ai_pulling">正在拉取…</string>
+    <string name="ai_pull_models">拉取模型</string>
+    <string name="ai_models_hint">从服务商拉取可用列表，点击选中</string>
+    <string name="ai_models">模型</string>
+    <string name="ai_reasoning_hint">部分服务商支持，不支持的会忽略该档位</string>
+    <string name="ai_reasoning">思考能力</string>
     <string name="ai_not_configured">尚未配置模型，请先到「AI 设置」填写服务商与 API Key。</string>
     <string name="chat_err_network">请求失败：%1$s</string>
     <string name="chat_sug_db">查询数据库</string>

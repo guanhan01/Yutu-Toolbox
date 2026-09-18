@@ -4,6 +4,13 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="ai_pull_desc">%1$d cached</string>
+    <string name="ai_pulling">Pulling…</string>
+    <string name="ai_pull_models">Pull models</string>
+    <string name="ai_models_hint">Pull the list from the provider, tap to select</string>
+    <string name="ai_models">Models</string>
+    <string name="ai_reasoning_hint">Supported by some providers; others ignore it</string>
+    <string name="ai_reasoning">Reasoning</string>
     <string name="ai_not_configured">No model configured. Set a provider and API key in AI settings first.</string>
     <string name="chat_err_network">Request failed: %1$s</string>
     <string name="chat_sug_db">Query database</string>
