@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_title">Chat</string>
+    <string name="chat_input_hint">Message…</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_empty_title">Start a conversation</string>
+    <string name="chat_empty_desc">Messages stay on this device; find history under Chat in the drawer</string>
+    <string name="chat_no_model">No model configured yet: this message was saved locally. Configure a model to get replies.</string>
+</resources>

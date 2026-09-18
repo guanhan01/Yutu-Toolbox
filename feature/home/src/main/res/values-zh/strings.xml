@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_title">对话</string>
+    <string name="chat_input_hint">发消息…</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_empty_title">开始新的对话</string>
+    <string name="chat_empty_desc">消息保存在本机，可在侧边栏「对话」中查看历史</string>
+    <string name="chat_no_model">尚未接入模型：这条消息已存入本地会话，配置模型后即可获得回复。</string>
+</resources>

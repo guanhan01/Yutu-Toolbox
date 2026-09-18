@@ -214,15 +214,6 @@ private fun ToolboxNavHost(
                 }
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
-                    onOpenTool = onNavigate,
-                    mcpConnected = mcpStates.values.any { it.state == McpConnectionState.READY },
-                    mcpServerRunning = builtInRunning,
-                    recentTasks = mcpCalls.take(3).map { "${it.toolName} · ${it.serverName}" },
-                    privilegeDetail =
-                        privilege?.let { "${it.summary}｜${it.detail}" } ?: "正在探测 root / Shizuku…",
-                    privilegeUsable = privilege?.usable == true,
-                    privilegeProbing = privilege == null,
-                    onOpenPrivilege = { onNavigate(Routes.SETTINGS_PRIVILEGE) },
                 )
             }
             composable(Routes.SETTINGS_THEME) {

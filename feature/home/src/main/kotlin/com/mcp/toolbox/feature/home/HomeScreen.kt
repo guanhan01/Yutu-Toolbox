@@ -4,283 +4,237 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
-import com.mcp.toolbox.core.design.component.MiuixCard
-import com.mcp.toolbox.core.design.component.MiuixIcon
-import com.mcp.toolbox.core.design.component.MiuixListItem
-import com.mcp.toolbox.core.design.component.MiuixSearchField
-import com.mcp.toolbox.core.design.component.miuixClickable
-import com.mcp.toolbox.core.design.component.rememberMiuixPressState
-import com.mcp.toolbox.core.design.component.MiuixTag
-import androidx.compose.material.icons.outlined.Menu
-import com.mcp.toolbox.core.design.component.MiuixTopAppBar
-import com.mcp.toolbox.core.design.component.MiuixText
-import com.mcp.toolbox.core.design.theme.MiuixTheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.Color
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.shape.CircleShape
-
-private data class QuickTool(
-    val id: String,
-    val label: String,
-    val icon: ImageVector,
-)
-
-private val quickTools = listOf(
-    QuickTool("apps", "应用", Icons.Outlined.Smartphone),
-    QuickTool("web", "网页", Icons.Outlined.Language),
-    QuickTool("network", "网络", Icons.Outlined.Wifi),
-    QuickTool("database", "数据库", Icons.Outlined.Storage),
-    QuickTool("capture", "抓包", Icons.Outlined.Bolt),
-    QuickTool("decompile", "反编译", Icons.Outlined.Terminal),
-    QuickTool("mcp", "MCP", Icons.Outlined.Hub),
-)
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.component.MiuixIcon
+import com.mcp.toolbox.core.design.component.MiuixIconButton
+import com.mcp.toolbox.core.design.component.MiuixText
+import com.mcp.toolbox.core.design.component.MiuixTextField
+import com.mcp.toolbox.core.design.component.MiuixTopAppBar
+import com.mcp.toolbox.core.design.theme.MiuixTheme
+import kotlinx.coroutines.launch
 
 /**
- * 首页：渐变 Banner + 搜索 + 快捷工具九宫格 + MCP 状态 + 最近任务。
- * 快捷工具后续支持编辑排序（与设置页同源持久化）。
+ * 首页：AI Agent 对话界面。
+ *
+ * 消息全部保存在本地会话中（[ChatStore]），侧边栏的「对话」可展开查看历史会话。
+ * 目前尚未接入具体模型：发送的内容会入档，并以一条系统消息提示需要配置模型。
  */
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenDrawer: () -> Unit = {},
-    onOpenTool: (String) -> Unit = {},
-    mcpConnected: Boolean = false,
-    mcpServerRunning: Boolean = false,
-    recentTasks: List<String> = emptyList(),
-    privilegeDetail: String = "等待探测",
-    privilegeUsable: Boolean = false,
-    privilegeProbing: Boolean = true,
-    onOpenPrivilege: () -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
-    var query by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val sessions by ChatStore.sessions.collectAsState()
+    val currentId by ChatStore.currentId.collectAsState()
+    val session = sessions.firstOrNull { it.id == currentId }
+    var input by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(Unit) { ChatStore.load(context) }
+
+    // 新消息后滚到底部
+    val messageCount = session?.messages?.size ?: 0
+    LaunchedEffect(messageCount) {
+        if (messageCount > 0) listState.animateScrollToItem(messageCount - 1)
+    }
+
+    val promptNoModel = stringResource(R.string.chat_no_model)
+
+    fun send() {
+        val text = input.trim()
+        if (text.isEmpty()) return
+        input = ""
+        scope.launch {
+            val target = session
+                ?: ChatStore.newSession(context, text.take(24))
+            ChatStore.append(
+                context, target.id,
+                ChatMessage(role = ChatMessage.Role.USER, content = text),
+            )
+            ChatStore.append(
+                context, target.id,
+                ChatMessage(
+                    role = ChatMessage.Role.SYSTEM,
+                    content = promptNoModel,
+                ),
+            )
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = spacing.pageHorizontal),
-        verticalArrangement = Arrangement.spacedBy(spacing.groupGap),
+            .background(colors.background),
     ) {
-        Spacer(Modifier.height(spacing.sm))
-
-        // 顶部只保留菜单入口与 MCP 状态，不再放大标题
         MiuixTopAppBar(
-            title = "",
+            title = session?.displayTitle ?: stringResource(R.string.chat_title),
             navigationIcon = Icons.Outlined.Menu,
             onNavigationClick = onOpenDrawer,
-            actions = { McpStatusBadge(connected = mcpConnected) },
         )
 
-        MiuixSearchField(value = query, onValueChange = { query = it }, placeholder = "搜索工具、请求…")
-
-        Column {
-            MiuixText(
-                text = "快捷工具",
-                style = MiuixTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-            )
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(4),
-                modifier = Modifier.fillMaxWidth().height(176.dp + 24.dp * (MiuixTheme.dimens.fontScale - 1f)),
-                verticalArrangement = Arrangement.spacedBy(spacing.groupGap),
-                horizontalArrangement = Arrangement.spacedBy(spacing.groupGap),
-                userScrollEnabled = false,
-            ) {
-                items(quickTools, key = { it.id }) { tool ->
-                    QuickToolTile(tool = tool, onClick = { onOpenTool(tool.id) })
-                }
-            }
-        }
-
-        MiuixCard {
-            MiuixListItem(
-                title = "内置 MCP Server",
-                subtitle = if (mcpServerRunning) "运行中 · 点开查看端点与 token" else "尚未启动，去 MCP 页面开启",
-                leadingIcon = Icons.Outlined.Hub,
-                trailing = {
-                    MiuixTag(
-                        text = if (mcpServerRunning) "运行中" else "已停止",
-                        color = if (mcpServerRunning) colors.success else colors.onSurfaceVariant,
-                    )
-                },
-                onClick = { onOpenTool("mcp") },
-            )
-        }
-
-        MiuixCard {
-            MiuixListItem(
-                title = "权限管理",
-                subtitle = privilegeDetail,
-                leadingIcon = Icons.Outlined.Security,
-                trailing = {
-                    MiuixTag(
-                        text = when {
-                            privilegeProbing -> "检测中"
-                            privilegeUsable -> "已就绪"
-                            else -> "未就绪"
-                        },
-                        color = when {
-                            privilegeProbing -> colors.onSurfaceVariant
-                            privilegeUsable -> colors.success
-                            else -> colors.warning
-                        },
-                    )
-                },
-                onClick = onOpenPrivilege,
-            )
-        }
-
-        Column {
-            MiuixText(
-                text = "最近任务",
-                style = MiuixTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-            )
-            MiuixCard {
-                if (recentTasks.isEmpty()) {
-                    Box(Modifier.padding(spacing.lg)) {
-                        MiuixText(
-                            text = "暂无任务记录",
-                            style = MiuixTheme.typography.bodyMedium,
-                            color = colors.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    recentTasks.forEachIndexed { index, task ->
-                        MiuixListItem(
-                            title = task,
-                            subtitle = "点击查看产物与日志",
-                            leadingIcon = Icons.Outlined.Bolt,
-                            showDivider = index != recentTasks.lastIndex,
-                            onClick = { onOpenTool("mcp") },
-                        )
+        Box(Modifier.weight(1f)) {
+            if (messageCount == 0) {
+                EmptyChatHint()
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = spacing.pageHorizontal,
+                        end = spacing.pageHorizontal,
+                        top = spacing.sm,
+                        bottom = spacing.md,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(session!!.messages, key = { it.id }) { message ->
+                        MessageBubble(message)
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surface)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(
+                    start = spacing.pageHorizontal,
+                    end = spacing.pageHorizontal,
+                    top = spacing.sm,
+                    bottom = spacing.sm,
+                ),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        ) {
+            Box(Modifier.weight(1f)) {
+                MiuixTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    placeholder = stringResource(R.string.chat_input_hint),
+                    singleLine = false,
+                    minLines = 1,
+                )
+            }
+            MiuixIconButton(
+                icon = Icons.Outlined.Send,
+                contentDescription = stringResource(R.string.chat_send),
+                onClick = { send() },
+                filled = true,
+                enabled = input.isNotBlank(),
+            )
+        }
     }
 }
 
+/** 尚无消息时的引导。 */
 @Composable
-private fun QuickToolTile(tool: QuickTool, onClick: () -> Unit) {
+private fun EmptyChatHint() {
     val colors = MiuixTheme.colors
-    val press = rememberMiuixPressState()
+    val spacing = MiuixTheme.dimens.spacing
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .fillMaxSize()
+            .padding(horizontal = spacing.pageHorizontal),
+        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(MiuixTheme.radius.field))
-                .background(colors.surfaceContainerHigh)
-                .miuixClickable(press, true, onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            MiuixIcon(tool.icon, tool.label, tint = colors.primary, size = 22.dp)
-        }
-        Spacer(Modifier.height(6.dp))
+        MiuixIcon(
+            Icons.Outlined.SmartToy,
+            null,
+            tint = colors.onSurfaceVariant,
+            size = 40.dp,
+        )
+        Spacer(Modifier.height(spacing.md))
         MiuixText(
-            text = tool.label,
-            style = MiuixTheme.typography.labelMedium,
+            text = stringResource(R.string.chat_empty_title),
+            style = MiuixTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(spacing.xs))
+        MiuixText(
+            text = stringResource(R.string.chat_empty_desc),
+            style = MiuixTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
-            maxLines = 1,
         )
     }
 }
 
-
-/** 大标题卡右上角的 MCP 连接角标：实心高对比，未连接时左侧圆点呼吸提醒。 */
+/** 单条消息气泡：用户靠右、AI 靠左、系统提示居中浅色。 */
 @Composable
-private fun McpStatusBadge(connected: Boolean) {
+private fun MessageBubble(message: ChatMessage) {
     val colors = MiuixTheme.colors
-    // 卡片底色现在是 primaryContainer（浅色 tone90 / 深色 tone30），标签就取
-    // onPrimaryContainer 作底、primaryContainer 作字，两者互为对比配对；圆点用
-    // 容器色而非 on 色，压在实底上才有足够反差
-    val background = colors.onPrimaryContainer
-    val foreground = colors.primaryContainer
-    val dot = if (connected) colors.successContainer else colors.errorContainer
-
-    val transition = rememberInfiniteTransition(label = "mcp-badge")
-    val pulse by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "mcp-badge-pulse",
-    )
+    val radius = RoundedCornerShape(MiuixTheme.radius.md)
+    val isUser = message.role == ChatMessage.Role.USER
+    val isSystem = message.role == ChatMessage.Role.SYSTEM
 
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(background)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = when {
+            isSystem -> Arrangement.Center
+            isUser -> Arrangement.End
+            else -> Arrangement.Start
+        },
     ) {
         Box(
             modifier = Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(dot.copy(alpha = if (connected) 1f else pulse)),
-        )
-        Spacer(Modifier.width(6.dp))
-        MiuixText(
-            text = if (connected) "MCP 已连接" else "MCP 未连接",
-            style = MiuixTheme.typography.labelMedium,
-            color = foreground,
-            maxLines = 1,
-        )
+                .widthIn(max = 300.dp)
+                .clip(radius)
+                .background(
+                    when {
+                        isUser -> colors.primary
+                        isSystem -> colors.surfaceContainerHigh
+                        else -> colors.surfaceContainer
+                    },
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            MiuixText(
+                text = message.content,
+                style = MiuixTheme.typography.bodyMedium,
+                color = when {
+                    isUser -> colors.onPrimary
+                    isSystem -> colors.onSurfaceVariant
+                    else -> colors.onSurface
+                },
+            )
+        }
     }
 }

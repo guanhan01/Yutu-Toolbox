@@ -3,7 +3,7 @@
     <string name="app_name">Yutu Toolbox Beta</string>
 
     <!-- 抽屉 / 底栏导航 -->
-    <string name="app_nav_home">首页</string>
+    <string name="app_nav_home">对话</string>
     <string name="app_nav_apps">应用</string>
     <string name="app_nav_files">文件</string>
     <string name="app_nav_web">网页</string>

@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,8 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.mcp.toolbox.R
 import com.mcp.toolbox.feature.capture.CaptureStore
+import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.core.design.component.MiuixBadge
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import androidx.compose.material.icons.outlined.Close
@@ -55,6 +58,7 @@ import com.mcp.toolbox.navigation.DrawerFooter
 import com.mcp.toolbox.navigation.DrawerNetworkChildren
 import com.mcp.toolbox.navigation.DrawerPrimary
 import com.mcp.toolbox.navigation.Routes
+import kotlinx.coroutines.launch
 
 /**
  * 汉堡抽屉内容：「应用工具」分组 + 可折叠「网络」二级菜单 + 条目 badge。
@@ -70,6 +74,10 @@ fun DrawerContent(
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     var networkExpanded by remember { mutableStateOf(currentRoute.startsWith("network")) }
+    var chatExpanded by remember { mutableStateOf(currentRoute == Routes.HOME) }
+    val chatSessions by ChatStore.sessions.collectAsState()
+    val currentChatId by ChatStore.currentId.collectAsState()
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -104,6 +112,7 @@ fun DrawerContent(
         ) {
             // 主列表只保留「首页」，工具统一收进底栏的「应用工具」子页面
             DrawerPrimary.forEach { destination ->
+                val isChat = destination.route == Routes.HOME
                 DrawerItem(
                     destination = destination,
                     selected = currentRoute == destination.route,
@@ -111,11 +120,34 @@ fun DrawerContent(
                         if (destination.route == Routes.NETWORK) {
                             networkExpanded = !networkExpanded
                         }
+                        if (isChat) chatExpanded = !chatExpanded
                         onNavigate(destination.route)
                     },
-                    expandable = destination.route == Routes.NETWORK,
-                    expanded = networkExpanded,
+                    expandable = destination.route == Routes.NETWORK || isChat,
+                    expanded = if (isChat) chatExpanded else networkExpanded,
                 )
+                if (isChat) {
+                    AnimatedVisibility(
+                        visible = chatExpanded,
+                        enter = expandVertically(tween(200)),
+                        exit = shrinkVertically(tween(200)),
+                    ) {
+                        Column {
+                            chatSessions.forEach { item ->
+                                ChatHistoryRow(
+                                    title = item.displayTitle,
+                                    selected = item.id == currentChatId,
+                                    onClick = {
+                                        scope.launch {
+                                            ChatStore.select(item.id)
+                                            onClose()
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 if (destination.route == Routes.NETWORK) {
                     AnimatedVisibility(
                         visible = networkExpanded,
@@ -239,6 +271,36 @@ private fun DrawerFooterIcon(
             stringResource(destination.labelRes),
             tint = if (selected) colors.primary else colors.onSurfaceVariant,
             size = 24.dp,
+        )
+    }
+}
+
+/** 抽屉里的一条历史对话。 */
+@Composable
+private fun ChatHistoryRow(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    val spacing = MiuixTheme.dimens.spacing
+    val press = rememberMiuixPressState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = spacing.xxl, end = spacing.md, top = 1.dp, bottom = 1.dp)
+            .clip(RoundedCornerShape(MiuixTheme.radius.inner))
+            .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
+            .miuixClickable(press, true, onClick = onClick)
+            .padding(horizontal = spacing.md, vertical = spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MiuixText(
+            text = title,
+            style = MiuixTheme.typography.bodyMedium,
+            color = if (selected) colors.primary else colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
