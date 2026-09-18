@@ -21,18 +21,18 @@ enum class AiProvider(
     /** 品牌图形资源；为 0 表示回退到字母徽标。 */
     @androidx.annotation.DrawableRes val iconRes: Int = 0,
 ) {
-    OPENAI("OpenAI", "AI", 0xFF10A37F, "https://api.openai.com/v1", "gpt-4o", "platform.openai.com", R.drawable.ic_ai_openai),
-    ANTHROPIC("Anthropic Claude", "C", 0xFFD97757, "https://api.anthropic.com", "claude-sonnet-4-20250514", "console.anthropic.com", R.drawable.ic_ai_anthropic),
-    GEMINI("Google Gemini", "G", 0xFF4285F4, "https://generativelanguage.googleapis.com/v1beta", "gemini-2.0-flash", "aistudio.google.com", R.drawable.ic_ai_gemini),
-    DEEPSEEK("DeepSeek", "D", 0xFF4D6BFE, "https://api.deepseek.com/v1", "deepseek-chat", "platform.deepseek.com", R.drawable.ic_ai_deepseek),
-    MOONSHOT("月之暗面 Kimi", "K", 0xFF1F1F1F, "https://api.moonshot.cn/v1", "moonshot-v1-8k", "platform.moonshot.cn", R.drawable.ic_ai_kimi),
+    OPENAI("OpenAI", "AI", 0xFF10A37F, "https://api.openai.com/v1", "gpt-4o", "platform.openai.com", R.drawable.ic_brand_openai),
+    ANTHROPIC("Anthropic Claude", "C", 0xFFD97757, "https://api.anthropic.com", "claude-sonnet-4-20250514", "console.anthropic.com", R.drawable.ic_brand_anthropic),
+    GEMINI("Google Gemini", "G", 0xFF4285F4, "https://generativelanguage.googleapis.com/v1beta", "gemini-2.0-flash", "aistudio.google.com", R.drawable.ic_brand_gemini),
+    DEEPSEEK("DeepSeek", "D", 0xFF4D6BFE, "https://api.deepseek.com/v1", "deepseek-chat", "platform.deepseek.com", R.drawable.ic_brand_deepseek),
+    MOONSHOT("月之暗面 Kimi", "K", 0xFF1F1F1F, "https://api.moonshot.cn/v1", "moonshot-v1-8k", "platform.moonshot.cn", R.drawable.ic_brand_kimi),
     ZHIPU("智谱 GLM", "Z", 0xFF3859FF, "https://open.bigmodel.cn/api/paas/v4", "glm-4-plus", "open.bigmodel.cn", 0),
-    DASHSCOPE("通义千问", "Q", 0xFF615CED, "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "bailian.console.aliyun.com", 0),
-    BAIDU("百度文心", "W", 0xFF2932E1, "https://qianfan.baidubce.com/v2", "ernie-4.0-8k", "console.bce.baidu.com", 0),
-    HUNYUAN("腾讯混元", "H", 0xFF0052D9, "https://api.hunyuan.cloud.tencent.com/v1", "hunyuan-turbo", "console.cloud.tencent.com", 0),
+    DASHSCOPE("通义千问", "Q", 0xFF615CED, "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "bailian.console.aliyun.com", R.drawable.ic_brand_dashscope),
+    BAIDU("百度文心", "W", 0xFF2932E1, "https://qianfan.baidubce.com/v2", "ernie-4.0-8k", "console.bce.baidu.com", R.drawable.ic_brand_baidu),
+    HUNYUAN("腾讯混元", "H", 0xFF0052D9, "https://api.hunyuan.cloud.tencent.com/v1", "hunyuan-turbo", "console.cloud.tencent.com", R.drawable.ic_brand_hunyuan),
     SPARK("讯飞星火", "S", 0xFF1E63FF, "https://spark-api-open.xf-yun.com/v1", "generalv3.5", "console.xfyun.cn", 0),
-    XAI("xAI Grok", "X", 0xFF1D1D1F, "https://api.x.ai/v1", "grok-2-latest", "console.x.ai", 0),
-    MISTRAL("Mistral", "M", 0xFFFF7000, "https://api.mistral.ai/v1", "mistral-large-latest", "console.mistral.ai", R.drawable.ic_ai_mistral),
+    XAI("xAI Grok", "X", 0xFF1D1D1F, "https://api.x.ai/v1", "grok-2-latest", "console.x.ai", R.drawable.ic_brand_xai),
+    MISTRAL("Mistral", "M", 0xFFFF7000, "https://api.mistral.ai/v1", "mistral-large-latest", "console.mistral.ai", R.drawable.ic_brand_mistral),
     CUSTOM("自定义（OpenAI 兼容）", "+", 0xFF6B7280, "", "", "", 0),
     ;
 

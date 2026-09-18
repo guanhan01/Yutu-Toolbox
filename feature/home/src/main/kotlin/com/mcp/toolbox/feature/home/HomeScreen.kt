@@ -80,13 +80,18 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenDrawer: () -> Unit = {},
-    onSend: suspend (
-        history: List<ChatMessage>,
-        onDelta: (String) -> Unit,
-        onToolCall: (String) -> Unit,
-    ) -> Result<String> = { _, _, _ ->
-        Result.failure(IllegalStateException("no sender"))
-    },
+    /**
+     * 启动一次请求。实现方应在应用级作用域里执行，
+     * 这样离开页面或进后台都不会中断。
+     */
+    onStart: (sessionId: String, history: List<ChatMessage>) -> Unit = { _, _ -> },
+    /** 当前正在流式接收的文本；未进行时为 null。 */
+    runningText: String? = null,
+    /** 当前正在调用的工具名；未进行时为 null。 */
+    runningTool: String? = null,
+    /** 是否已有请求在执行（可能刚发出、还没有增量）。 */
+    running: Boolean = false,
+    onStop: () -> Unit = {},
     currentModel: String = "",
     currentReasoning: String = "",
     availableModels: List<String> = emptyList(),
@@ -103,10 +108,8 @@ fun HomeScreen(
     val currentId by ChatStore.currentId.collectAsState()
     val session = sessions.firstOrNull { it.id == currentId }
     var input by remember { mutableStateOf("") }
-    var sending by remember { mutableStateOf(false) }
+    val sending = running
     var picker by remember { mutableStateOf<PickerKind?>(null) }
-    var streamingText by remember { mutableStateOf<String?>(null) }
-    var sendJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var showAttachMenu by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
@@ -152,7 +155,6 @@ fun HomeScreen(
     }
 
     val newChatTitle = stringResource(R.string.chat_title)
-    val errNetwork = stringResource(R.string.chat_err_network)
 
     val attachContext = stringResource(R.string.chat_attach_context)
     val toolRunning = stringResource(R.string.chat_tool_running)
@@ -163,73 +165,38 @@ fun HomeScreen(
         val attached = attachments.toList()
         input = ""
         attachments.clear()
-        sending = true
-        streamingText = ""
-        sendJob = scope.launch {
-            try {
-                val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
-                val target = session ?: ChatStore.newSession(context, title.take(24))
-                // 图片走多模态输入，其余附件仍转成文本上下文
-                val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
-                val textAttachments = attached.filterNot { it is ChatAttachment.Image }
+        scope.launch {
+            val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
+            val target = session ?: ChatStore.newSession(context, title.take(24))
 
-                val userMessage = ChatMessage(
-                    role = ChatMessage.Role.USER,
-                    content = content,
-                    imageUris = imageUris,
-                )
-                // 落盘时只保留文本，避免把临时 URI 写进会话记录
-                ChatStore.append(
-                    context, target.id,
-                    userMessage.copy(imageUris = emptyList()),
-                )
+            // 图片走多模态，其余附件转成文本上下文
+            val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
+            val textAttachments = attached.filterNot { it is ChatAttachment.Image }
 
-                // 附件以文本上下文随本次请求一起发出
-                val withAttachments = if (textAttachments.isEmpty()) {
-                    listOf(userMessage)
-                } else {
-                    listOf(
-                        userMessage,
-                        ChatMessage(
-                            role = ChatMessage.Role.USER,
-                            content = attachContext + "\n" +
-                                textAttachments.joinToString("\n\n") { it.toContext(context) },
-                        ),
-                    )
-                }
+            val userMessage = ChatMessage(
+                role = ChatMessage.Role.USER,
+                content = content,
+                imageUris = imageUris,
+            )
+            // 落盘只留文本，避免临时 URI 进会话记录
+            ChatStore.append(context, target.id, userMessage.copy(imageUris = emptyList()))
 
-                val history = (target.messages + withAttachments)
-                    .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-                // 工具调用先落成一条过程消息，让用户看得到进行到哪一步
-                var lastNotifiedCall = ""
-                val result = onSend(
-                    history,
-                    { delta -> streamingText = (streamingText ?: "") + delta },
-                    { toolName ->
-                        if (toolName != lastNotifiedCall) {
-                            lastNotifiedCall = toolName
-                            scope.launch {
-                                ChatStore.append(
-                                    context, target.id,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.SYSTEM,
-                                        content = toolRunning.format(toolName),
-                                    ),
-                                )
-                            }
-                        }
-                    },
+            val withAttachments = if (textAttachments.isEmpty()) {
+                listOf(userMessage)
+            } else {
+                listOf(
+                    userMessage,
+                    ChatMessage(
+                        role = ChatMessage.Role.USER,
+                        content = attachContext + "\n" +
+                            textAttachments.joinToString("\n\n") { it.toContext(context) },
+                    ),
                 )
-                val reply = result.getOrElse { errNetwork.format(it.message ?: "") }
-                ChatStore.append(
-                    context, target.id,
-                    ChatMessage(role = ChatMessage.Role.ASSISTANT, content = reply),
-                )
-            } finally {
-                sending = false
-                streamingText = null
-                sendJob = null
             }
+            val history = (target.messages + withAttachments)
+                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
+            // 交给外部任务持有者执行，离开页面也不会中断
+            onStart(target.id, history)
         }
     }
 
@@ -273,16 +240,19 @@ fun HomeScreen(
                     }
                     if (sending) {
                         item(key = "pending") {
-                            val partial = streamingText
-                            if (partial.isNullOrEmpty()) {
-                                PendingBubble()
-                            } else {
-                                MessageBubble(
+                            when {
+                                runningTool != null -> PendingBubble(
+                                    text = toolRunning.format(runningTool),
+                                )
+
+                                !runningText.isNullOrEmpty() -> MessageBubble(
                                     ChatMessage(
                                         role = ChatMessage.Role.ASSISTANT,
-                                        content = partial,
+                                        content = runningText,
                                     ),
                                 )
+
+                                else -> PendingBubble()
                             }
                         }
                     }
@@ -333,7 +303,7 @@ fun HomeScreen(
             onValueChange = { input = it },
             sending = sending,
             onSend = { submit(input) },
-            onStop = { sendJob?.cancel() },
+            onStop = onStop,
             onAttach = { showAttachMenu = true },
         )
     }
@@ -758,7 +728,7 @@ private fun SuggestionCard(
 
 /** 等待回复时的占位气泡。 */
 @Composable
-private fun PendingBubble() {
+private fun PendingBubble(text: String? = null) {
     val colors = MiuixTheme.colors
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Box(
@@ -768,7 +738,7 @@ private fun PendingBubble() {
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             MiuixText(
-                text = stringResource(R.string.chat_thinking),
+                text = text ?: stringResource(R.string.chat_thinking),
                 style = MiuixTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
             )

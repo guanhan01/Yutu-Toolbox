@@ -4,6 +4,7 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="ai_err_network">请求失败：%1$s</string>
     <string name="ai_pull_desc">当前已缓存 %1$d 个</string>
     <string name="ai_pulling">正在拉取…</string>
     <string name="ai_pull_models">拉取模型</string>

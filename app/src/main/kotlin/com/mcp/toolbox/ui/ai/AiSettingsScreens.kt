@@ -1,6 +1,7 @@
 package com.mcp.toolbox.ui.ai
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -144,7 +145,33 @@ fun AiSettingsScreen(
     }
 }
 
-/** 二级：服务商列表。点击其中一项进入该服务商的配置界面。 */
+/** 单选圆圈：只负责勾选，不触发跳转。 */
+@Composable
+private fun SelectionCircle(selected: Boolean, onClick: () -> Unit) {
+    val colors = MiuixTheme.colors
+    Box(
+        modifier = Modifier
+            .padding(end = 20.dp)
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) colors.primary else colors.surfaceContainerHighest,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            MiuixIcon(
+                Icons.Outlined.Check,
+                null,
+                tint = colors.onPrimary,
+                size = 16.dp,
+            )
+        }
+    }
+}
+
+/** 二级：服务商列表。点圆圈勾选，点其余区域进入该服务商的配置界面。 */
 @Composable
 fun AiProviderListScreen(
     onBack: () -> Unit,
@@ -167,21 +194,31 @@ fun AiProviderListScreen(
         MiuixSectionCard(title = stringResource(R.string.ai_provider_pick)) {
             Column {
                 AiProvider.entries.forEachIndexed { index, provider ->
-                    MiuixListItem(
-                        title = provider.title,
-                        subtitle = provider.baseUrl.ifBlank {
-                            stringResource(R.string.ai_custom_hint)
-                        },
-                        leading = { ProviderBadge(provider) },
-                        trailing = if (provider == config.provider) {
-                            { MiuixTag(text = stringResource(R.string.ai_in_use)) }
-                        } else null,
-                        showDivider = index != AiProvider.entries.lastIndex,
-                        onClick = {
-                            AiConfigStore.selectProvider(context, provider)
-                            onOpenProvider(provider)
-                        },
-                    )
+                    val active = provider == config.provider
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 圆圈以外：进入该服务商的配置界面
+                        MiuixListItem(
+                            title = provider.title,
+                            subtitle = provider.baseUrl.ifBlank {
+                                stringResource(R.string.ai_custom_hint)
+                            },
+                            leading = { ProviderBadge(provider) },
+                            modifier = Modifier.weight(1f),
+                            showDivider = index != AiProvider.entries.lastIndex,
+                            onClick = {
+                                AiConfigStore.selectProvider(context, provider)
+                                onOpenProvider(provider)
+                            },
+                        )
+                        // 圆圈本身：只切换选中，不跳转
+                        SelectionCircle(
+                            selected = active,
+                            onClick = { AiConfigStore.selectProvider(context, provider) },
+                        )
+                    }
                 }
             }
         }

@@ -66,6 +66,12 @@ import com.mcp.toolbox.ui.ai.AiProviderListScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
+import com.mcp.toolbox.feature.home.ChatStore
+import com.mcp.toolbox.feature.home.ChatMessage
+import com.mcp.toolbox.ui.ai.ChatRunner
 import com.mcp.toolbox.ui.ai.ReasoningEffort
 import com.mcp.toolbox.ui.ai.AiChatClient
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
@@ -200,6 +206,10 @@ private fun ToolboxNavHost(
     onNavigate: (String) -> Unit,
 ) {
     val notConfigured = stringResource(R.string.ai_not_configured)
+    val errNetwork = stringResource(R.string.ai_err_network)
+    val chatRunning by ChatRunner.running.collectAsState()
+    // 未配置时把提示写进会话用的应用级作用域
+    val scopeForNotice = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     val aiConfig by AiConfigStore.config.collectAsState()
 
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
@@ -226,22 +236,33 @@ private fun ToolboxNavHost(
                 }
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
-                    onSend = { history, onDelta, onToolCall ->
+                    onStart = { sessionId, history ->
                         val cfg = AiConfigStore.config.value
                         if (!cfg.ready) {
-                            Result.failure(IllegalStateException(notConfigured))
+                            // 未配置：直接把提示写进会话，不占用请求通道
+                            scopeForNotice.launch {
+                                ChatStore.append(
+                                    shellContext, sessionId,
+                                    ChatMessage(
+                                        role = ChatMessage.Role.ASSISTANT,
+                                        content = notConfigured,
+                                    ),
+                                )
+                            }
                         } else {
-                            AiChatClient.completeStream(
+                            ChatRunner.start(
                                 context = shellContext,
                                 config = cfg,
+                                sessionId = sessionId,
                                 history = history,
-                                systemPrompt = null,
-                                enableTools = true,
-                                onToolCall = { name, _ -> onToolCall(name) },
-                                onDelta = onDelta,
+                                onFallbackReply = errNetwork,
                             )
                         }
                     },
+                    runningText = chatRunning?.streamed,
+                    runningTool = chatRunning?.toolNotice,
+                    running = chatRunning != null,
+                    onStop = { ChatRunner.stop() },
                     currentModel = aiConfig.model,
                     currentReasoning = aiConfig.reasoning.label,
                     availableModels = aiConfig.cachedModels.ifEmpty {
