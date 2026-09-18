@@ -25,4 +25,5 @@
     <string name="chat_attach_path_hint">e.g. /sdcard/Download/a.txt</string>
     <string name="chat_attach_path_confirm">Read</string>
     <string name="chat_attach_context">Attached content:</string>
+    <string name="chat_tool_running">Calling tool %1$s …</string>
 </resources>

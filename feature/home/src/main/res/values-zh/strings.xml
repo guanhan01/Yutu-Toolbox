@@ -25,4 +25,5 @@
     <string name="chat_attach_path_hint">例如 /sdcard/Download/a.txt</string>
     <string name="chat_attach_path_confirm">读取</string>
     <string name="chat_attach_context">以下是附件内容：</string>
+    <string name="chat_tool_running">调用工具 %1$s …</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.mcp.toolbox.ui.ai
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Tune
@@ -35,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.R
@@ -48,7 +48,7 @@ import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
 
-/** 服务商字母徽标。 */
+/** 服务商徽标：有品牌图形的用图形，其余回退到字母。 */
 @Composable
 fun ProviderBadge(provider: AiProvider, size: Dp = 34.dp) {
     Box(
@@ -58,11 +58,19 @@ fun ProviderBadge(provider: AiProvider, size: Dp = 34.dp) {
             .background(Color(provider.tintArgb)),
         contentAlignment = Alignment.Center,
     ) {
-        MiuixText(
-            text = provider.badge,
-            style = MiuixTheme.typography.labelLarge,
-            color = Color.White,
-        )
+        if (provider.iconRes != 0) {
+            Image(
+                painter = painterResource(provider.iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(size * 0.58f),
+            )
+        } else {
+            MiuixText(
+                text = provider.badge,
+                style = MiuixTheme.typography.labelLarge,
+                color = Color.White,
+            )
+        }
     }
 }
 
@@ -122,22 +130,6 @@ fun AiSettingsScreen(
                     title = stringResource(R.string.ai_current_model),
                     subtitle = config.model.ifBlank { "-" },
                     leadingIcon = Icons.Outlined.Tune,
-                    showDivider = true,
-                )
-                MiuixListItem(
-                    title = stringResource(R.string.ai_reasoning),
-                    subtitle = config.reasoning.label,
-                    leadingIcon = Icons.Outlined.Psychology,
-                    showDivider = true,
-                )
-                MiuixListItem(
-                    title = stringResource(R.string.ai_api_key),
-                    subtitle = if (config.apiKey.isBlank()) {
-                        stringResource(R.string.ai_api_key_empty)
-                    } else {
-                        maskKey(config.apiKey)
-                    },
-                    leadingIcon = Icons.Outlined.Key,
                 )
             }
         }
@@ -382,6 +374,3 @@ fun AiProviderDetailScreen(
     }
 }
 
-/** 只显示首尾，中间打码。 */
-private fun maskKey(key: String): String =
-    if (key.length <= 8) "••••" else "${key.take(4)}••••${key.takeLast(4)}"

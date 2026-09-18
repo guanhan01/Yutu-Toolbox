@@ -80,7 +80,11 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onOpenDrawer: () -> Unit = {},
-    onSend: suspend (List<ChatMessage>, (String) -> Unit) -> Result<String> = { _, _ ->
+    onSend: suspend (
+        history: List<ChatMessage>,
+        onDelta: (String) -> Unit,
+        onToolCall: (String) -> Unit,
+    ) -> Result<String> = { _, _, _ ->
         Result.failure(IllegalStateException("no sender"))
     },
     currentModel: String = "",
@@ -151,6 +155,7 @@ fun HomeScreen(
     val errNetwork = stringResource(R.string.chat_err_network)
 
     val attachContext = stringResource(R.string.chat_attach_context)
+    val toolRunning = stringResource(R.string.chat_tool_running)
 
     fun submit(text: String) {
         val content = text.trim()
@@ -195,9 +200,26 @@ fun HomeScreen(
 
                 val history = (target.messages + withAttachments)
                     .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-                val result = onSend(history) { delta ->
-                    streamingText = (streamingText ?: "") + delta
-                }
+                // 工具调用先落成一条过程消息，让用户看得到进行到哪一步
+                var lastNotifiedCall = ""
+                val result = onSend(
+                    history,
+                    { delta -> streamingText = (streamingText ?: "") + delta },
+                    { toolName ->
+                        if (toolName != lastNotifiedCall) {
+                            lastNotifiedCall = toolName
+                            scope.launch {
+                                ChatStore.append(
+                                    context, target.id,
+                                    ChatMessage(
+                                        role = ChatMessage.Role.SYSTEM,
+                                        content = toolRunning.format(toolName),
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                )
                 val reply = result.getOrElse { errNetwork.format(it.message ?: "") }
                 ChatStore.append(
                     context, target.id,
@@ -615,7 +637,7 @@ private fun InputBar(
                 .clip(RoundedCornerShape(MiuixTheme.radius.lg))
                 .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
                 .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.Bottom,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             MiuixIconButton(
                 icon = Icons.Outlined.Add,
@@ -625,7 +647,7 @@ private fun InputBar(
                 iconSize = 18.dp,
             )
             Box(
-                modifier = Modifier.weight(1f).padding(bottom = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 36.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (value.isEmpty()) {

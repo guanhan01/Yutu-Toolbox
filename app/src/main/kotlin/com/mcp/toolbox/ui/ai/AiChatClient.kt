@@ -13,12 +13,16 @@ import java.net.URL
 /**
  * OpenAI 兼容协议的对话客户端。
  *
- * 请求 `POST {baseUrl}/chat/completions`；[complete] 一次性返回，
- * [completeStream] 走 SSE 逐段回调。各家差异（Anthropic / Gemini 原生协议）后续按需扩展。
+ * - [complete]：一次性返回
+ * - [completeStream]：SSE 流式，并可选开启内置 MCP 工具的 function calling 循环
  */
 object AiChatClient {
 
     private const val TIMEOUT_MS = 60_000
+    private const val MAX_TOOL_ROUNDS = 8
+    private const val MAX_TOOL_RESULT_CHARS = 16_000
+    private const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
+    private const val MAX_IMAGE_EDGE = 1568
 
     /** 一次性返回完整回复。 */
     suspend fun complete(
@@ -29,47 +33,111 @@ object AiChatClient {
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             validate(config)
-            val payload = buildPayload(context, config, history, systemPrompt, stream = false)
-            val body = post(context, config, payload)
-            parseContent(body)
+            val payload = buildPayload(
+                config = config,
+                messages = buildMessages(context, history, systemPrompt),
+                stream = false,
+                tools = null,
+            )
+            parseContent(post(config, payload))
         }
     }
 
     /**
-     * 流式返回：每收到一段增量就回调 [onDelta]。
-     *
-     * 返回值为拼接后的完整文本；调用方取消协程即可中断请求。
+     * 流式返回。开启 [enableTools] 时按 function calling 循环：
+     * 模型请求调用 -> 本地执行 -> 结果回填 -> 继续请求，直到模型给出最终文本。
+     * 取消协程即可中断整个循环。
      */
     suspend fun completeStream(
         context: Context,
         config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String? = null,
+        enableTools: Boolean = true,
+        onToolCall: (name: String, arguments: String) -> Unit = { _, _ -> },
+        onToolResult: (name: String, result: String) -> Unit = { _, _ -> },
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             validate(config)
-            val payload = buildPayload(context, config, history, systemPrompt, stream = true)
-            val conn = open(config, payload)
+            val messages = buildMessages(context, history, systemPrompt)
 
-            try {
-                val code = conn.responseCode
-                if (code !in 200..299) {
-                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    error("HTTP $code：${extractError(err).take(200)}")
-                }
-                val reader = conn.inputStream.bufferedReader()
-                val full = StringBuilder()
-                readSse(reader) { delta ->
-                    if (delta.isNotEmpty()) {
-                        full.append(delta)
-                        onDelta(delta)
+            repeat(MAX_TOOL_ROUNDS) { round ->
+                val payload = buildPayload(
+                    config = config,
+                    messages = messages,
+                    stream = true,
+                    tools = if (enableTools) AiToolBridge.toolsPayload(context) else null,
+                )
+
+                val roundText = StringBuilder()
+                val calls = mutableListOf<ToolCallAcc>()
+                val conn = open(config, payload)
+                try {
+                    val code = conn.responseCode
+                    if (code !in 200..299) {
+                        val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                        error("HTTP $code：${extractError(err).take(200)}")
                     }
+                    readSse(conn.inputStream.bufferedReader()) { content, callDelta ->
+                        if (content.isNotEmpty()) {
+                            roundText.append(content)
+                            onDelta(content)
+                        }
+                        callDelta?.let { mergeToolCall(calls, it) }
+                    }
+                } finally {
+                    conn.disconnect()
                 }
-                full.toString().ifBlank { error("回复内容为空") }
-            } finally {
-                conn.disconnect()
+
+                // 没有工具调用即为最终答复
+                if (calls.none { it.name.isNotBlank() }) {
+                    return@runCatching roundText.toString().ifBlank { error("回复内容为空") }
+                }
+
+                // 回填 assistant 的 tool_calls
+                messages.put(
+                    JSONObject()
+                        .put("role", "assistant")
+                        .put("content", roundText.toString())
+                        .put(
+                            "tool_calls",
+                            JSONArray().also { arr ->
+                                calls.filter { it.name.isNotBlank() }.forEach { c ->
+                                    arr.put(
+                                        JSONObject()
+                                            .put("id", c.id)
+                                            .put("type", "function")
+                                            .put(
+                                                "function",
+                                                JSONObject()
+                                                    .put("name", c.name)
+                                                    .put("arguments", c.arguments.toString().ifBlank { "{}" }),
+                                            ),
+                                    )
+                                }
+                            },
+                        ),
+                )
+
+                // 逐条执行并回填结果
+                calls.filter { it.name.isNotBlank() }.forEach { c ->
+                    onToolCall(c.name, c.arguments.toString())
+                    val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
+                    onToolResult(c.name, result)
+                    messages.put(
+                        JSONObject()
+                            .put("role", "tool")
+                            .put("tool_call_id", c.id)
+                            .put("content", result.take(MAX_TOOL_RESULT_CHARS)),
+                    )
+                }
+
+                if (round == MAX_TOOL_ROUNDS - 1) {
+                    return@runCatching roundText.toString().ifBlank { error("工具调用轮数已达上限") }
+                }
             }
+            error("工具调用轮数已达上限")
         }
     }
 
@@ -121,7 +189,7 @@ object AiChatClient {
             outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
         }
 
-    private fun post(context: Context, config: AiConfig, payload: String): String {
+    private fun post(config: AiConfig, payload: String): String {
         val conn = open(config, payload)
         return try {
             val code = conn.responseCode
@@ -134,35 +202,58 @@ object AiChatClient {
         }
     }
 
-    /** 逐行读 SSE，取出 `choices[0].delta.content`。 */
-    private fun readSse(reader: BufferedReader, onDelta: (String) -> Unit) {
+    /** 逐行读 SSE，产出文本增量与（可能分片的）tool_calls 增量。 */
+    private fun readSse(
+        reader: BufferedReader,
+        onChunk: (content: String, toolCall: JSONObject?) -> Unit,
+    ) {
         reader.useLines { lines ->
             lines.forEach { raw ->
                 val line = raw.trim()
                 if (!line.startsWith("data:")) return@forEach
                 val data = line.removePrefix("data:").trim()
                 if (data.isEmpty() || data == "[DONE]") return@forEach
-                val delta = runCatching {
-                    val root = JSONObject(data)
-                    val choices = root.optJSONArray("choices") ?: return@runCatching ""
-                    val first = choices.optJSONObject(0) ?: return@runCatching ""
-                    val d = first.optJSONObject("delta")
-                    d?.optString("content").orEmpty()
-                }.getOrDefault("")
-                onDelta(delta)
+                runCatching {
+                    val choices = JSONObject(data).optJSONArray("choices") ?: return@runCatching
+                    val d = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@runCatching
+                    d.optJSONArray("tool_calls")?.let { calls ->
+                        (0 until calls.length()).forEach { i ->
+                            calls.optJSONObject(i)?.let { onChunk("", it) }
+                        }
+                    }
+                    val content = d.optString("content")
+                    if (content.isNotEmpty()) onChunk(content, null)
+                }
             }
         }
     }
 
+    /** 一次工具调用的累积片段（流式下 name/arguments 会分多片到达）。 */
+    private class ToolCallAcc(
+        val id: String = "",
+        val name: String = "",
+        val arguments: StringBuilder = StringBuilder(),
+    )
+
+    private fun mergeToolCall(list: MutableList<ToolCallAcc>, delta: JSONObject) {
+        val index = delta.optInt("index", 0)
+        while (list.size <= index) list.add(ToolCallAcc())
+
+        val slot = list[index]
+        val id = delta.optString("id").takeIf { it.isNotBlank() } ?: slot.id
+        val fn = delta.optJSONObject("function")
+        val name = fn?.optString("name")?.takeIf { it.isNotBlank() } ?: slot.name
+        list[index] = ToolCallAcc(id, name, slot.arguments)
+        fn?.optString("arguments")?.takeIf { it.isNotEmpty() }?.let { list[index].arguments.append(it) }
+    }
+
     // ---------- 载荷 ----------
 
-    private fun buildPayload(
+    private fun buildMessages(
         context: Context,
-        config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String?,
-        stream: Boolean,
-    ): String {
+    ): JSONArray {
         val messages = JSONArray()
         systemPrompt?.takeIf { it.isNotBlank() }?.let {
             messages.put(JSONObject().put("role", "system").put("content", it))
@@ -191,7 +282,15 @@ object AiChatClient {
                 messages.put(JSONObject().put("role", role).put("content", parts))
             }
         }
+        return messages
+    }
 
+    private fun buildPayload(
+        config: AiConfig,
+        messages: JSONArray,
+        stream: Boolean,
+        tools: JSONArray?,
+    ): String {
         val root = JSONObject()
             .put("model", config.model)
             .put("messages", messages)
@@ -199,6 +298,7 @@ object AiChatClient {
             .put("stream", stream)
         // Default 不下发该字段；其余按 OpenAI 兼容的 reasoning_effort 传递
         config.reasoning.apiValue?.let { root.put("reasoning_effort", it) }
+        tools?.takeIf { it.length() > 0 }?.let { root.put("tools", it) }
         return root.toString()
     }
 
@@ -212,11 +312,7 @@ object AiChatClient {
             ?: error("回复内容为空")
     }
 
-    /**
-     * 把图片读成 data URI。
-     *
-     * 超过 [MAX_IMAGE_BYTES] 时按最长边 1568px 缩放再压成 JPEG（质量 85），仍超限则放弃该图。
-     */
+    /** 图片读成 data URI；过大时缩放压成 JPEG，仍超限则放弃该图。 */
     private fun encodeImage(context: Context, uri: String): String? = runCatching {
         val parsed = android.net.Uri.parse(uri)
         val raw = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
@@ -250,9 +346,6 @@ object AiChatClient {
             true,
         )
     }
-
-    private const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
-    private const val MAX_IMAGE_EDGE = 1568
 
     private fun extractError(body: String): String = runCatching {
         val err = JSONObject(body).opt("error")

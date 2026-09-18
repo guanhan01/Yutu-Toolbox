@@ -204,6 +204,8 @@ private fun ToolboxNavHost(
 
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
     val shellContext = LocalContext.current
+    // 配置只在这里加载一次：聊天页与其他入口读同一份，避免出现「设置页已配置、聊天页说没配」
+    LaunchedEffect(Unit) { AiConfigStore.load(shellContext) }
     var privilege by remember { mutableStateOf<PrivilegeStatus?>(null) }
     LaunchedEffect(Unit) {
         privilege = withContext(Dispatchers.IO) { PrivilegeManager.status(shellContext) }
@@ -224,12 +226,20 @@ private fun ToolboxNavHost(
                 }
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
-                    onSend = { history, onDelta ->
+                    onSend = { history, onDelta, onToolCall ->
                         val cfg = AiConfigStore.config.value
                         if (!cfg.ready) {
                             Result.failure(IllegalStateException(notConfigured))
                         } else {
-                            AiChatClient.completeStream(shellContext, cfg, history, null, onDelta)
+                            AiChatClient.completeStream(
+                                context = shellContext,
+                                config = cfg,
+                                history = history,
+                                systemPrompt = null,
+                                enableTools = true,
+                                onToolCall = { name, _ -> onToolCall(name) },
+                                onDelta = onDelta,
+                            )
                         }
                     },
                     currentModel = aiConfig.model,
