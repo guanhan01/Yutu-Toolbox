@@ -159,14 +159,23 @@ fun HomeScreen(
             try {
                 val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
                 val target = session ?: ChatStore.newSession(context, title.take(24))
+                // 图片走多模态输入，其余附件仍转成文本上下文
+                val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
+                val textAttachments = attached.filterNot { it is ChatAttachment.Image }
+
                 val userMessage = ChatMessage(
                     role = ChatMessage.Role.USER,
                     content = content,
+                    imageUris = imageUris,
                 )
-                ChatStore.append(context, target.id, userMessage)
+                // 落盘时只保留文本，避免把临时 URI 写进会话记录
+                ChatStore.append(
+                    context, target.id,
+                    userMessage.copy(imageUris = emptyList()),
+                )
 
                 // 附件以文本上下文随本次请求一起发出
-                val withAttachments = if (attached.isEmpty()) {
+                val withAttachments = if (textAttachments.isEmpty()) {
                     listOf(userMessage)
                 } else {
                     listOf(
@@ -174,7 +183,7 @@ fun HomeScreen(
                         ChatMessage(
                             role = ChatMessage.Role.USER,
                             content = attachContext + "\n" +
-                                attached.joinToString("\n\n") { it.toContext(context) },
+                                textAttachments.joinToString("\n\n") { it.toContext(context) },
                         ),
                     )
                 }

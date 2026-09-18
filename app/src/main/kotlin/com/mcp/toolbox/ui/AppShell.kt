@@ -229,7 +229,7 @@ private fun ToolboxNavHost(
                         if (!cfg.ready) {
                             Result.failure(IllegalStateException(notConfigured))
                         } else {
-                            AiChatClient.complete(cfg, history)
+                            AiChatClient.complete(shellContext, cfg, history)
                         }
                     },
                     currentModel = aiConfig.model,

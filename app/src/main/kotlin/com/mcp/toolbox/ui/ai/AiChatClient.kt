@@ -19,6 +19,7 @@ object AiChatClient {
     private const val TIMEOUT_MS = 60_000
 
     suspend fun complete(
+        context: android.content.Context,
         config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String? = null,
@@ -40,7 +41,7 @@ object AiChatClient {
             }
 
             try {
-                val payload = buildPayload(config, history, systemPrompt)
+                val payload = buildPayload(context, config, history, systemPrompt)
                 conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
 
                 val code = conn.responseCode
@@ -95,6 +96,7 @@ object AiChatClient {
     // ---------- 内部 ----------
 
     private fun buildPayload(
+        context: android.content.Context,
         config: AiConfig,
         history: List<ChatMessage>,
         systemPrompt: String?,
@@ -109,7 +111,24 @@ object AiChatClient {
                 ChatMessage.Role.ASSISTANT -> "assistant"
                 ChatMessage.Role.SYSTEM -> "system"
             }
-            messages.put(JSONObject().put("role", role).put("content", m.content))
+            val images = m.imageUris.mapNotNull { encodeImage(context, it) }
+            if (images.isEmpty()) {
+                messages.put(JSONObject().put("role", role).put("content", m.content))
+            } else {
+                // 多模态：content 变成数组，文本 + 若干 image_url（data URI）
+                val parts = JSONArray()
+                if (m.content.isNotBlank()) {
+                    parts.put(JSONObject().put("type", "text").put("text", m.content))
+                }
+                images.forEach { dataUri ->
+                    parts.put(
+                        JSONObject()
+                            .put("type", "image_url")
+                            .put("image_url", JSONObject().put("url", dataUri)),
+                    )
+                }
+                messages.put(JSONObject().put("role", role).put("content", parts))
+            }
         }
         return JSONObject()
             .put("model", config.model)
@@ -130,6 +149,53 @@ object AiChatClient {
             ?: error("回复内容为空")
         return content
     }
+
+    /**
+     * 把图片读成 data URI。
+     *
+     * 超过 [MAX_IMAGE_BYTES] 时先按最长边 1568px 缩放再压成 JPEG（质量 85），
+     * 仍超限则放弃该图，避免请求体过大被服务商拒绝。
+     */
+    private fun encodeImage(context: android.content.Context, uri: String): String? = runCatching {
+        val parsed = android.net.Uri.parse(uri)
+        val raw = context.contentResolver.openInputStream(parsed)?.use { it.readBytes() }
+            ?: return null
+
+        val mime = context.contentResolver.getType(parsed) ?: "image/jpeg"
+        val bytes = if (raw.size <= MAX_IMAGE_BYTES) {
+            raw
+        } else {
+            val bitmap = android.graphics.BitmapFactory.decodeByteArray(raw, 0, raw.size)
+                ?: return null
+            val scaled = scaleDown(bitmap, MAX_IMAGE_EDGE)
+            java.io.ByteArrayOutputStream().use { out ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+                if (scaled !== bitmap) scaled.recycle()
+                bitmap.recycle()
+                out.toByteArray()
+            }
+        }
+        if (bytes.size > MAX_IMAGE_BYTES * 3) return null
+        "data:$mime;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+    }.getOrNull()
+
+    private fun scaleDown(
+        bitmap: android.graphics.Bitmap,
+        maxEdge: Int,
+    ): android.graphics.Bitmap {
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= maxEdge) return bitmap
+        val ratio = maxEdge.toFloat() / longest
+        return android.graphics.Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).toInt().coerceAtLeast(1),
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
+    private const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
+    private const val MAX_IMAGE_EDGE = 1568
 
     private fun extractError(body: String): String = runCatching {
         val root = JSONObject(body)

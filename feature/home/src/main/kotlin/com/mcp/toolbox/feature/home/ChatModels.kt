@@ -8,6 +8,13 @@ data class ChatMessage(
     val role: Role,
     val content: String,
     val time: Long = System.currentTimeMillis(),
+    /**
+     * 随本条消息一起发出的图片（content URI）。
+     *
+     * 只用于当次请求的多模态输入，不写入本地会话文件：会话记录只保留文本，
+     * 避免把 base64 或失效的临时 URI 长期留在磁盘上。
+     */
+    val imageUris: List<String> = emptyList(),
 ) {
     enum class Role { USER, ASSISTANT, SYSTEM }
 }

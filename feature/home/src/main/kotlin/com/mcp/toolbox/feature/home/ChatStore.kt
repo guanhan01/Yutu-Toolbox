@@ -14,6 +14,7 @@ import java.io.File
  * 对话记录的本地存储。
  *
  * 落盘为 filesDir 下的一个 JSON 文件，全程不上传；文件损坏时按空列表降级，
+ * 对话记录只保留文本，消息上的图片 URI 不写入磁盘。
  * 不会因为一条坏记录导致整个对话页打不开。
  */
 object ChatStore {
