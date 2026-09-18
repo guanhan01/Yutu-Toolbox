@@ -1,6 +1,7 @@
 package com.mcp.toolbox.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,10 +27,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
@@ -36,6 +41,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.SmartToy
@@ -59,6 +66,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
@@ -89,11 +97,15 @@ fun HomeScreen(
     runningText: String? = null,
     /** 当前正在调用的工具名；未进行时为 null。 */
     runningTool: String? = null,
+    /** 正在进行的深度思考文本。 */
+    runningReasoning: String? = null,
     /** 是否已有请求在执行（可能刚发出、还没有增量）。 */
     running: Boolean = false,
     onStop: () -> Unit = {},
     currentModel: String = "",
     currentReasoning: String = "",
+    /** 当前服务商的品牌图标，用作模型选择入口的图标。 */
+    @androidx.annotation.DrawableRes providerIconRes: Int = 0,
     availableModels: List<String> = emptyList(),
     availableReasoning: List<String> = emptyList(),
     onSelectModel: (String) -> Unit = {},
@@ -110,7 +122,7 @@ fun HomeScreen(
     var input by remember { mutableStateOf("") }
     val sending = running
     var picker by remember { mutableStateOf<PickerKind?>(null) }
-    var showAttachMenu by remember { mutableStateOf(false) }
+    var showOverflow by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
@@ -210,12 +222,52 @@ fun HomeScreen(
             navigationIcon = Icons.Outlined.Menu,
             onNavigationClick = onOpenDrawer,
             actions = {
+                // 模型：图标就是当前服务商的 Logo
+                if (providerIconRes != 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { picker = PickerKind.MODEL },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter = painterResource(providerIconRes),
+                            contentDescription = stringResource(R.string.chat_pick_model),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                // 思考模式
                 MiuixIconButton(
-                    icon = Icons.Outlined.Add,
+                    icon = Icons.Outlined.Psychology,
+                    contentDescription = stringResource(R.string.chat_pick_reasoning),
+                    onClick = { picker = PickerKind.REASONING },
+                    buttonSize = 40.dp,
+                    iconSize = 20.dp,
+                    tint = if (currentReasoning != "Default") {
+                        MiuixTheme.colors.primary
+                    } else {
+                        MiuixTheme.colors.onSurfaceVariant
+                    },
+                )
+                // 新建对话
+                MiuixIconButton(
+                    icon = Icons.Outlined.AddComment,
                     contentDescription = stringResource(R.string.chat_new),
                     onClick = {
                         if (!sending) scope.launch { ChatStore.newSession(context, newChatTitle) }
                     },
+                    buttonSize = 40.dp,
+                    iconSize = 20.dp,
+                )
+                // 溢出菜单：上传与附件
+                MiuixIconButton(
+                    icon = Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(R.string.chat_more),
+                    onClick = { showOverflow = true },
+                    buttonSize = 40.dp,
+                    iconSize = 20.dp,
                 )
             },
         )
@@ -236,13 +288,25 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     items(session!!.messages, key = { it.id }) { message ->
-                        MessageBubble(message)
+                        if (message.role == ChatMessage.Role.REASONING) {
+                            ReasoningBlock(message.content)
+                        } else {
+                            MessageBubble(message)
+                        }
                     }
                     if (sending) {
                         item(key = "pending") {
+                            val liveReasoning = buildString {
+                                if (!runningReasoning.isNullOrEmpty()) append(runningReasoning)
+                                if (runningTool != null) {
+                                    if (isNotEmpty()) append("\n\n")
+                                    append("\u00b7 \u8c03\u7528 ").append(runningTool)
+                                }
+                            }
                             when {
-                                runningTool != null -> PendingBubble(
-                                    text = toolRunning.format(runningTool),
+                                liveReasoning.isNotBlank() -> ReasoningBlock(
+                                    text = liveReasoning,
+                                    live = true,
                                 )
 
                                 !runningText.isNullOrEmpty() -> MessageBubble(
@@ -277,39 +341,18 @@ fun HomeScreen(
             }
         }
 
-        // 输入栏上方的模型与思考档位入口
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = spacing.pageHorizontal, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-        ) {
-            if (currentModel.isNotBlank()) {
-                SelectorChip(
-                    text = currentModel,
-                    onClick = { picker = PickerKind.MODEL },
-                )
-            }
-            if (currentReasoning.isNotBlank()) {
-                SelectorChip(
-                    text = currentReasoning,
-                    onClick = { picker = PickerKind.REASONING },
-                )
-            }
-        }
-
         InputBar(
             value = input,
             onValueChange = { input = it },
             sending = sending,
             onSend = { submit(input) },
             onStop = onStop,
-            onAttach = { showAttachMenu = true },
+
         )
     }
 
-    if (showAttachMenu) {
-        AttachMenu(
+    if (showOverflow) {
+        OverflowMenu(
             onPickImage = {
                 pickImage.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -318,9 +361,10 @@ fun HomeScreen(
             onPickFile = { pickFile.launch(arrayOf("*/*")) },
             onPickFolder = { pickFolder.launch(null) },
             onPickPath = { showPathDialog = true },
-            onDismiss = { showAttachMenu = false },
+            onDismiss = { showOverflow = false },
         )
     }
+
 
     if (showPathDialog) {
         PathDialog(
@@ -379,7 +423,7 @@ private fun AttachmentChip(label: String, onRemove: () -> Unit) {
 
 /** 附件类型选择弹层。 */
 @Composable
-private fun AttachMenu(
+private fun OverflowMenu(
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
     onPickFolder: () -> Unit,
@@ -582,7 +626,6 @@ private fun InputBar(
     sending: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    onAttach: () -> Unit,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -606,16 +649,9 @@ private fun InputBar(
                 .weight(1f)
                 .clip(RoundedCornerShape(MiuixTheme.radius.lg))
                 .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
-                .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MiuixIconButton(
-                icon = Icons.Outlined.Add,
-                contentDescription = stringResource(R.string.chat_attach),
-                onClick = onAttach,
-                buttonSize = 36.dp,
-                iconSize = 18.dp,
-            )
             Box(
                 modifier = Modifier.weight(1f).heightIn(min = 36.dp),
                 contentAlignment = Alignment.CenterStart,
@@ -723,6 +759,61 @@ private fun SuggestionCard(
             style = MiuixTheme.typography.bodyMedium,
             maxLines = 2,
         )
+    }
+}
+
+/**
+ * 深度思考折叠块。
+ *
+ * 推理文本与期间的工具调用合并展示在同一块里，默认收起；
+ * [live] 为 true 时表示仍在推理，标题会动态提示。
+ */
+@Composable
+private fun ReasoningBlock(text: String, live: Boolean = false) {
+    val colors = MiuixTheme.colors
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(MiuixTheme.radius.md))
+            .background(colors.surfaceContainerLow)
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            MiuixIcon(
+                Icons.Outlined.Psychology,
+                null,
+                tint = colors.primary,
+                size = 16.dp,
+            )
+            MiuixText(
+                text = if (live) stringResource(R.string.chat_reasoning_live)
+                else stringResource(R.string.chat_reasoning_done),
+                style = MiuixTheme.typography.labelMedium,
+                color = colors.primary,
+                modifier = Modifier.weight(1f),
+            )
+            MiuixIcon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                null,
+                tint = colors.onSurfaceVariant,
+                size = 16.dp,
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(6.dp))
+            MiuixText(
+                text = text,
+                style = MiuixTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
     }
 }
 

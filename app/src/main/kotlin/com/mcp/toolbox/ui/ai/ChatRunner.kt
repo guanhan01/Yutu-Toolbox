@@ -25,8 +25,14 @@ object ChatRunner {
     data class Running(
         val sessionId: String,
         val streamed: String = "",
-        val toolNotice: String? = null,
+        /** 正在进行的推理文本。 */
+        val reasoning: String = "",
+        /** 本轮已发生的工具调用（名称 + 结果摘要）。 */
+        val tools: List<ToolStep> = emptyList(),
     )
+
+    /** 一次工具调用记录。 */
+    data class ToolStep(val name: String, val result: String = "")
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -57,18 +63,45 @@ object ChatRunner {
                     systemPrompt = null,
                     enableTools = true,
                     onToolCall = { name, _ ->
-                        val current = _running.value
-                        _running.value = current?.copy(toolNotice = name)
+                        val current = _running.value ?: return@completeStream
+                        _running.value = current.copy(tools = current.tools + ToolStep(name))
+                    },
+                    onToolResult = { name, result ->
+                        val current = _running.value ?: return@completeStream
+                        _running.value = current.copy(
+                            tools = current.tools.map {
+                                if (it.name == name && it.result.isEmpty()) {
+                                    it.copy(result = result.take(200))
+                                } else {
+                                    it
+                                }
+                            },
+                        )
+                    },
+                    onReasoning = { delta ->
+                        val current = _running.value ?: return@completeStream
+                        _running.value = current.copy(reasoning = current.reasoning + delta)
                     },
                     onDelta = { delta ->
                         val current = _running.value ?: return@completeStream
-                        _running.value = current.copy(
-                            streamed = current.streamed + delta,
-                            toolNotice = null,
-                        )
+                        _running.value = current.copy(streamed = current.streamed + delta)
                     },
                 )
                 val reply = result.getOrElse { onFallbackReply.format(it.message ?: "") }
+
+                // 先把思考过程（推理 + 工具调用）落成一条消息，再落最终回复
+                val finished = _running.value
+                val reasoning = finished?.reasoning.orEmpty()
+                val tools = finished?.tools.orEmpty()
+                if (reasoning.isNotBlank() || tools.isNotEmpty()) {
+                    ChatStore.append(
+                        context, sessionId,
+                        ChatMessage(
+                            role = ChatMessage.Role.REASONING,
+                            content = buildReasoningText(reasoning, tools),
+                        ),
+                    )
+                }
                 ChatStore.append(
                     context, sessionId,
                     ChatMessage(role = ChatMessage.Role.ASSISTANT, content = reply),
@@ -98,8 +131,17 @@ object ChatRunner {
         _running.value = null
     }
 
-    /** 记住一条工具调用过程消息，回到界面时能补显。 */
-    fun notice(name: String) {
-        _running.value = _running.value?.copy(toolNotice = name)
-    }
 }
+
+/** 把推理文本与工具调用拼成一条可折叠展示的内容。 */
+private fun buildReasoningText(reasoning: String, tools: List<ChatRunner.ToolStep>): String =
+    buildString {
+        if (reasoning.isNotBlank()) append(reasoning.trim())
+        tools.forEach { step ->
+            if (isNotEmpty()) append("\n\n")
+            append("\u00b7 \u8c03\u7528 ").append(step.name)
+            if (step.result.isNotBlank()) {
+                append("\n").append(step.result.lineSequence().take(4).joinToString("\n"))
+            }
+        }
+    }

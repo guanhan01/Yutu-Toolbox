@@ -26,4 +26,7 @@
     <string name="chat_attach_path_confirm">读取</string>
     <string name="chat_attach_context">以下是附件内容：</string>
     <string name="chat_tool_running">调用工具 %1$s …</string>
+    <string name="chat_more">更多</string>
+    <string name="chat_reasoning_live">深度思考中…</string>
+    <string name="chat_reasoning_done">已深度思考</string>
 </resources>

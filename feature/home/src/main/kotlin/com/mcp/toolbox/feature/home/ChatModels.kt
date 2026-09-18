@@ -16,7 +16,14 @@ data class ChatMessage(
      */
     val imageUris: List<String> = emptyList(),
 ) {
-    enum class Role { USER, ASSISTANT, SYSTEM }
+    enum class Role {
+        USER,
+        ASSISTANT,
+        SYSTEM,
+
+        /** 深度思考过程：模型推理文本 + 期间的工具调用记录。 */
+        REASONING,
+    }
 }
 
 /** 一次对话（会话），包含其全部消息。 */

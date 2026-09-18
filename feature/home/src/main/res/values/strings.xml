@@ -26,4 +26,7 @@
     <string name="chat_attach_path_confirm">Read</string>
     <string name="chat_attach_context">Attached content:</string>
     <string name="chat_tool_running">Calling tool %1$s …</string>
+    <string name="chat_more">More</string>
+    <string name="chat_reasoning_live">Thinking…</string>
+    <string name="chat_reasoning_done">Thought</string>
 </resources>

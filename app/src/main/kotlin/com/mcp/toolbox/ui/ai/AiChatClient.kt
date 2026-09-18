@@ -56,17 +56,19 @@ object AiChatClient {
         enableTools: Boolean = true,
         onToolCall: (name: String, arguments: String) -> Unit = { _, _ -> },
         onToolResult: (name: String, result: String) -> Unit = { _, _ -> },
+        /** 深度思考增量（DeepSeek 等返回的 reasoning_content）。 */
+        onReasoning: (String) -> Unit = {},
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
         when (config.current) {
             AiProvider.ANTHROPIC -> return@withContext anthropicStream(
                 context, config, history, systemPrompt, enableTools,
-                onToolCall, onToolResult, onDelta,
+                onToolCall, onToolResult, onReasoning, onDelta,
             )
 
             AiProvider.GEMINI -> return@withContext geminiStream(
                 context, config, history, systemPrompt, enableTools,
-                onToolCall, onToolResult, onDelta,
+                onToolCall, onToolResult, onReasoning, onDelta,
             )
 
             else -> Unit // OpenAI 兼容协议继续走下面的实现
@@ -92,11 +94,12 @@ object AiChatClient {
                         val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                         error("HTTP $code：${extractError(err).take(200)}")
                     }
-                    readSse(conn.inputStream.bufferedReader()) { content, callDelta ->
+                    readSse(conn.inputStream.bufferedReader()) { content, callDelta, reasoning ->
                         if (content.isNotEmpty()) {
                             roundText.append(content)
                             onDelta(content)
                         }
+                        if (reasoning.isNotEmpty()) onReasoning(reasoning)
                         callDelta?.let { mergeToolCall(calls, it) }
                     }
                 } finally {
@@ -164,6 +167,7 @@ object AiChatClient {
         enableTools: Boolean,
         onToolCall: (String, String) -> Unit,
         onToolResult: (String, String) -> Unit,
+        onReasoning: (String) -> Unit,
         onDelta: (String) -> Unit,
     ): Result<String> = runCatching {
         // 把历史摊成可变列表，便于逐轮回填
@@ -265,6 +269,7 @@ object AiChatClient {
         enableTools: Boolean,
         onToolCall: (String, String) -> Unit,
         onToolResult: (String, String) -> Unit,
+        onReasoning: (String) -> Unit,
         onDelta: (String) -> Unit,
     ): Result<String> = runCatching {
         val working = JSONArray()
@@ -451,7 +456,7 @@ object AiChatClient {
     /** 逐行读 SSE，产出文本增量与（可能分片的）tool_calls 增量。 */
     private fun readSse(
         reader: BufferedReader,
-        onChunk: (content: String, toolCall: JSONObject?) -> Unit,
+        onChunk: (content: String, toolCall: JSONObject?, reasoning: String) -> Unit,
     ) {
         reader.useLines { lines ->
             lines.forEach { raw ->
@@ -464,11 +469,17 @@ object AiChatClient {
                     val d = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@runCatching
                     d.optJSONArray("tool_calls")?.let { calls ->
                         (0 until calls.length()).forEach { i ->
-                            calls.optJSONObject(i)?.let { onChunk("", it) }
+                            calls.optJSONObject(i)?.let { onChunk("", it, "") }
                         }
                     }
+                    // 深度思考增量：DeepSeek 等在此字段返回推理过程
+                    val reasoning = d.optString("reasoning_content")
+                        .ifBlank { d.optString("reasoning") }
                     val content = d.optString("content")
-                    if (content.isNotEmpty()) onChunk(content, null)
+                    when {
+                        content.isNotEmpty() -> onChunk(content, null, reasoning)
+                        reasoning.isNotEmpty() -> onChunk("", null, reasoning)
+                    }
                 }
             }
         }
@@ -509,6 +520,8 @@ object AiChatClient {
                 ChatMessage.Role.USER -> "user"
                 ChatMessage.Role.ASSISTANT -> "assistant"
                 ChatMessage.Role.SYSTEM -> "system"
+                // 思考过程不回传给模型
+                ChatMessage.Role.REASONING -> return@forEach
             }
             val images = m.imageUris.mapNotNull { encodeImage(context, it) }
             if (images.isEmpty()) {

@@ -1,6 +1,7 @@
 package com.mcp.toolbox.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -225,7 +226,27 @@ private fun ToolboxNavHost(
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
-        modifier = Modifier.fillMaxSize()) {
+        modifier = Modifier.fillMaxSize(),
+        // 一级到二级的转场：轻微右进 + 淡入，返回时反向
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { it / 5 },
+                animationSpec = tween(260),
+            ) + fadeIn(tween(220))
+        },
+        exitTransition = {
+            fadeOut(tween(140))
+        },
+        popEnterTransition = {
+            fadeIn(tween(200))
+        },
+        popExitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { it / 5 },
+                animationSpec = tween(260),
+            ) + fadeOut(tween(220))
+        },
+    ) {
             composable(Routes.HOME) {
                 val homeContext = LocalContext.current
                 val mcpStates by McpRegistry.states.collectAsState()
@@ -260,8 +281,10 @@ private fun ToolboxNavHost(
                             )
                         }
                     },
+                    providerIconRes = aiConfig.current.iconRes,
                     runningText = chatRunning?.streamed,
-                    runningTool = chatRunning?.toolNotice,
+                    runningReasoning = chatRunning?.reasoning,
+                    runningTool = chatRunning?.tools?.lastOrNull()?.name,
                     running = chatRunning != null,
                     onStop = { ChatRunner.stop() },
                     currentModel = aiConfig.model,
