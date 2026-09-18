@@ -246,14 +246,6 @@ fun HomeScreen(
                     buttonSize = 40.dp,
                     iconSize = 20.dp,
                 )
-                // 溢出菜单：上传与附件
-                MiuixIconButton(
-                    icon = Icons.Outlined.MoreVert,
-                    contentDescription = stringResource(R.string.chat_more),
-                    onClick = { showOverflow = true },
-                    buttonSize = 40.dp,
-                    iconSize = 20.dp,
-                )
             },
         )
 
@@ -352,7 +344,20 @@ fun HomeScreen(
         expanded = showOverflow,
         onDismiss = { showOverflow = false },
         anchor = attachAnchor,
+        // 加号在输入栏左侧，菜单从左边缘向右展开
+        alignStart = true,
     ) {
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_pick_model),
+            icon = Icons.Outlined.SwapHoriz,
+            onClick = { showOverflow = false; picker = PickerKind.MODEL },
+        )
+        MiuixMenuItem(
+            text = stringResource(R.string.chat_pick_reasoning),
+            icon = Icons.Outlined.Psychology,
+            onClick = { showOverflow = false; picker = PickerKind.REASONING },
+        )
+        MiuixMenuDivider()
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_image),
             icon = Icons.Outlined.Image,

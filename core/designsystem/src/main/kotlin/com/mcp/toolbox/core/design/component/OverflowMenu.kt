@@ -64,6 +64,8 @@ fun MiuixOverflowMenu(
     modifier: Modifier = Modifier,
     offset: IntOffset = IntOffset(0, 0),
     anchor: Rect? = null,
+    /** 强制从锚点左边缘向右展开；用在锚点本身靠左的场景（例如输入栏的加号）。 */
+    alignStart: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -76,7 +78,9 @@ fun MiuixOverflowMenu(
     val boxWidthPx = with(LocalDensity.current) { (MenuContentWidth + MenuEdgePadding * 2).roundToPx() }
     // 贴锚点右边缘会溢出到屏幕左侧时，改成从锚点左边缘向右展开；
     // 缩放原点同步从右上角切到左上角，动画方向才和菜单实际位置一致。
-    val expandToEnd = anchor != null && anchor.right.roundToInt() - boxWidthPx < 0
+    // 锚点靠左、或显式要求时，从左边缘向右展开，避免菜单甩到屏幕另一侧
+    val expandToEnd = alignStart ||
+        (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
     val originX = if (expandToEnd) 0f else 1f
     val positionProvider =
         remember(anchor, offset, gapPx, expandToEnd) {
@@ -240,7 +244,9 @@ private class OverflowMenuPositionProvider(
         val rawX =
             when {
                 // 没有锚点：退回 Popup 父布局，仍然右对齐它的右边缘。
-                anchorRect == null -> anchorBounds.right - popupContentSize.width + offset.x
+                anchorRect == null ->
+                    if (expandToEnd) anchorBounds.left + offset.x
+                    else anchorBounds.right - popupContentSize.width + offset.x
                 // 右对齐会溢出左边：贴锚点左边缘向右展开，菜单落在按钮右下侧。
                 expandToEnd -> anchorRect.left.roundToInt() + offset.x
                 // 常规情况：右边缘对齐锚点右边缘。
