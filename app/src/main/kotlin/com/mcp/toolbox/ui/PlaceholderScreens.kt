@@ -96,14 +96,12 @@ fun SettingsOverview(
             Column {
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_screen_theme),
-                    subtitle = stringResource(R.string.app_settings_theme_subtitle),
                     leadingIcon = Icons.Outlined.Palette,
                     valueText = stringResource(R.string.app_settings_theme_value),
                     onClick = onOpenTheme,
                 )
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_language),
-                    subtitle = stringResource(R.string.app_settings_language_subtitle),
                     leadingIcon = Icons.Outlined.Language,
                     valueText = languageDisplayName(currentLanguage),
                     onClick = { languageDialog = true },

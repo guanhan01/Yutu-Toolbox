@@ -82,10 +82,6 @@ import com.mcp.toolbox.navigation.Routes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.mcp.toolbox.feature.decompile.engine.DecompileHub
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
-import com.mcp.toolbox.core.design.component.HomeHeaderBackground
 
 /** 应用外壳：自绘抽屉 + 底栏 + 顶部 Toast 宿主。 抽屉支持汉堡按钮打开、左侧边缘滑动打开、面板左滑关闭、点遮罩关闭。 */
 @Composable
@@ -229,18 +225,6 @@ private fun ToolboxNavHost(
                 )
             }
             composable(Routes.SETTINGS_THEME) {
-                val headerBgContext = LocalContext.current
-                val headerHasBg by HomeHeaderBackground.hasCustom.collectAsState()
-                val pickHeaderBg = rememberLauncherForActivityResult(
-                    ActivityResultContracts.PickVisualMedia(),
-                ) { uri ->
-                    if (uri != null) {
-                        HomeHeaderBackground.apply(headerBgContext, uri)
-                            .onSuccess { toastState.show("首页背景已更新") }
-                            .onFailure { toastState.show("设置失败：" + (it.message ?: "未知错误")) }
-                    }
-                }
-                LaunchedEffect(Unit) { HomeHeaderBackground.refresh(headerBgContext) }
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_theme),
@@ -249,16 +233,6 @@ private fun ToolboxNavHost(
                         config = config,
                         onConfigChange = onConfigChange,
                         toastState = toastState,
-                        headerHasCustom = headerHasBg,
-                        onPickHeaderImage = {
-                            pickHeaderBg.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        },
-                        onClearHeaderImage = {
-                            HomeHeaderBackground.clear(headerBgContext)
-                            toastState.show("已恢复默认渐变背景")
-                        },
                     )
                 }
             }

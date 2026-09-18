@@ -19,11 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
@@ -71,10 +71,8 @@ import com.mcp.toolbox.core.design.theme.presetById
 import com.mcp.toolbox.core.design.theme.toColorOrNull
 import com.mcp.toolbox.core.design.theme.toHexString
 import com.mcp.toolbox.feature.settings.widget.ColorWheelPicker
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
-import com.mcp.toolbox.core.design.component.HomeHeaderBackground
 
 /**
  * 「主题与色彩」页（Theme Studio）：上半屏实时预览，下半屏调色盘与参数滑杆。
@@ -86,13 +84,8 @@ fun ThemeSettingsScreen(
     onConfigChange: ((ThemeConfig) -> ThemeConfig) -> Unit,
     modifier: Modifier = Modifier,
     toastState: MiuixToastState? = null,
-    headerHasCustom: Boolean,
-    onPickHeaderImage: () -> Unit,
-    onClearHeaderImage: () -> Unit,
 ) {
     val blurContext = LocalContext.current
-    val headerBlurred by HomeHeaderBackground.blurred.collectAsState()
-    val headerAurora by HomeHeaderBackground.aurora.collectAsState()
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val currentSeed = Color(config.customSeedArgb.toInt())
@@ -142,47 +135,6 @@ fun ThemeSettingsScreen(
                             text = if (isZh) config.paletteStyle.labelZh else config.paletteStyle.labelEn,
                             color = colors.primary,
                             filled = true,
-                        )
-                        Spacer(Modifier.weight(1f))
-                        // 没有自定义背景图时模糊无从作用，这个开关直接不显示
-                        if (headerHasCustom) {
-                            MiuixCheckbox(
-                                checked = headerBlurred,
-                                onCheckedChange = { value -> HomeHeaderBackground.setBlur(blurContext, value) },
-                            )
-                            MiuixText(
-                                text = stringResource(R.string.settings_blur_label),
-                                style = MiuixTheme.typography.labelMedium,
-                                color = colors.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    MiuixListItem(
-                        title = stringResource(R.string.settings_header_bg_title),
-                        subtitle = stringResource(R.string.settings_header_bg_desc),
-                        leadingIcon = Icons.Outlined.Image,
-                        trailing = {
-                            MiuixTag(
-                                text = if (headerHasCustom) {
-                                    stringResource(R.string.settings_header_bg_custom)
-                                } else {
-                                    stringResource(R.string.settings_header_bg_default)
-                                },
-                                color = if (headerHasCustom) colors.success else colors.secondary,
-                            )
-                        },
-                        onClick = onPickHeaderImage,
-                    )
-                    MiuixSuperSwitch(
-                        title = stringResource(R.string.settings_header_aurora_title),
-                        checked = headerAurora,
-                        onCheckedChange = { value -> HomeHeaderBackground.setAurora(blurContext, value) },
-                    )
-                    if (headerHasCustom) {
-                        MiuixListItem(
-                            title = stringResource(R.string.settings_header_bg_clear),
-                            leadingIcon = Icons.Outlined.Refresh,
-                            onClick = onClearHeaderImage,
                         )
                     }
                 }
