@@ -169,7 +169,7 @@ fun AppShell(
                     currentRoute = currentRoute,
                     onNavigate = { navigate(it) },
                     onClose = { drawerOpen = false },
-                    modifier = Modifier.fillMaxSize().statusBarsPadding(),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -73,15 +74,21 @@ fun DrawerContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.surfaceContainerLow),
+            .background(colors.surfaceContainerLow)
+            .statusBarsPadding(),
     ) {
-        // 顶部只有一个关闭按钮，不放标题，避免上方留白
+        // 顶部：左侧 Yutu 标题，右侧关闭按钮
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = spacing.md, end = spacing.md, top = spacing.sm),
-            horizontalArrangement = Arrangement.End,
+                .padding(start = spacing.lg, end = spacing.md, top = spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            MiuixText(
+                text = "Yutu",
+                style = MiuixTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.weight(1f))
             MiuixIconButton(
                 onClick = onClose,
                 icon = Icons.Outlined.Close,
