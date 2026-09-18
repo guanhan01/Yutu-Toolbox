@@ -4,6 +4,30 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="chat_sug_db">查询数据库</string>
+    <string name="chat_sug_network">网络诊断</string>
+    <string name="chat_sug_screen">查看设备信息</string>
+    <string name="chat_sug_apk">分析 APK</string>
+    <string name="chat_hero_title">有什么可以帮你？</string>
+    <string name="chat_new">新建对话</string>
+    <string name="ai_key_note">密钥以明文存储在本机 SharedPreferences，请勿在共享设备上填写。</string>
+    <string name="ai_save">保存</string>
+    <string name="ai_field_model">模型名称</string>
+    <string name="ai_field_api_key">API Key</string>
+    <string name="ai_field_base_url">接口地址 Base URL</string>
+    <string name="ai_custom_hint">自行填写地址与模型</string>
+    <string name="ai_in_use">使用中</string>
+    <string name="ai_provider_pick">选择服务商</string>
+    <string name="ai_local_note">API Key 仅保存在本机，不会随对话记录上传。</string>
+    <string name="ai_api_key_empty">尚未填写</string>
+    <string name="ai_api_key">API Key</string>
+    <string name="ai_current_model">模型</string>
+    <string name="ai_not_ready">待配置</string>
+    <string name="ai_ready">已配置</string>
+    <string name="ai_provider_title">服务商</string>
+    <string name="ai_section_current">当前服务</string>
+    <string name="app_screen_ai">AI 设置</string>
+    <string name="app_nav_ai">AI 设置</string>
     <string name="app_nav_apps">应用</string>
     <string name="app_nav_files">文件</string>
     <string name="app_nav_web">网页</string>

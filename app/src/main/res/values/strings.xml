@@ -4,6 +4,30 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="chat_sug_db">Query database</string>
+    <string name="chat_sug_network">Network check</string>
+    <string name="chat_sug_screen">Device info</string>
+    <string name="chat_sug_apk">Analyze APK</string>
+    <string name="chat_hero_title">What can I help with?</string>
+    <string name="chat_new">New chat</string>
+    <string name="ai_key_note">The key is stored in plain text in local SharedPreferences; avoid entering it on a shared device.</string>
+    <string name="ai_save">Save</string>
+    <string name="ai_field_model">Model name</string>
+    <string name="ai_field_api_key">API key</string>
+    <string name="ai_field_base_url">Base URL</string>
+    <string name="ai_custom_hint">Set the endpoint and model yourself</string>
+    <string name="ai_in_use">In use</string>
+    <string name="ai_provider_pick">Choose a provider</string>
+    <string name="ai_local_note">The API key is stored only on this device and is never uploaded with chats.</string>
+    <string name="ai_api_key_empty">Not set</string>
+    <string name="ai_api_key">API key</string>
+    <string name="ai_current_model">Model</string>
+    <string name="ai_not_ready">Not configured</string>
+    <string name="ai_ready">Ready</string>
+    <string name="ai_provider_title">Provider</string>
+    <string name="ai_section_current">Current service</string>
+    <string name="app_screen_ai">AI settings</string>
+    <string name="app_nav_ai">AI settings</string>
     <string name="app_nav_apps">Apps</string>
     <string name="app_nav_files">Files</string>
     <string name="app_nav_web">Web</string>

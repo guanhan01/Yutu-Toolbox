@@ -1,6 +1,7 @@
 package com.mcp.toolbox.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -68,31 +75,26 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) { ChatStore.load(context) }
 
-    // 新消息后滚到底部
     val messageCount = session?.messages?.size ?: 0
     LaunchedEffect(messageCount) {
         if (messageCount > 0) listState.animateScrollToItem(messageCount - 1)
     }
 
     val promptNoModel = stringResource(R.string.chat_no_model)
+    val newChatTitle = stringResource(R.string.chat_title)
 
-    fun send() {
-        val text = input.trim()
-        if (text.isEmpty()) return
-        input = ""
+    fun submit(text: String) {
+        val content = text.trim()
+        if (content.isEmpty()) return
         scope.launch {
-            val target = session
-                ?: ChatStore.newSession(context, text.take(24))
+            val target = session ?: ChatStore.newSession(context, content.take(24))
             ChatStore.append(
                 context, target.id,
-                ChatMessage(role = ChatMessage.Role.USER, content = text),
+                ChatMessage(role = ChatMessage.Role.USER, content = content),
             )
             ChatStore.append(
                 context, target.id,
-                ChatMessage(
-                    role = ChatMessage.Role.SYSTEM,
-                    content = promptNoModel,
-                ),
+                ChatMessage(role = ChatMessage.Role.SYSTEM, content = promptNoModel),
             )
         }
     }
@@ -106,11 +108,20 @@ fun HomeScreen(
             title = session?.displayTitle ?: stringResource(R.string.chat_title),
             navigationIcon = Icons.Outlined.Menu,
             onNavigationClick = onOpenDrawer,
+            actions = {
+                MiuixIconButton(
+                    icon = Icons.Outlined.Add,
+                    contentDescription = stringResource(R.string.chat_new),
+                    onClick = {
+                        scope.launch { ChatStore.newSession(context, newChatTitle) }
+                    },
+                )
+            },
         )
 
         Box(Modifier.weight(1f)) {
             if (messageCount == 0) {
-                EmptyChatHint()
+                ChatSuggestions(onPick = { submit(it) })
             } else {
                 LazyColumn(
                     state = listState,
@@ -157,7 +168,7 @@ fun HomeScreen(
             MiuixIconButton(
                 icon = Icons.Outlined.Send,
                 contentDescription = stringResource(R.string.chat_send),
-                onClick = { send() },
+                onClick = { submit(input); input = "" },
                 filled = true,
                 enabled = input.isNotBlank(),
             )
@@ -165,11 +176,19 @@ fun HomeScreen(
     }
 }
 
-/** 尚无消息时的引导。 */
+/** 空态：标题 + 常用能力卡片。点击直接发起一次对话。 */
 @Composable
-private fun EmptyChatHint() {
+private fun ChatSuggestions(onPick: (String) -> Unit) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
+
+    val items = listOf(
+        Icons.Outlined.Terminal to stringResource(R.string.chat_sug_apk),
+        Icons.Outlined.Smartphone to stringResource(R.string.chat_sug_screen),
+        Icons.Outlined.Wifi to stringResource(R.string.chat_sug_network),
+        Icons.Outlined.Storage to stringResource(R.string.chat_sug_db),
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -181,18 +200,55 @@ private fun EmptyChatHint() {
             Icons.Outlined.SmartToy,
             null,
             tint = colors.onSurfaceVariant,
-            size = 40.dp,
+            size = 36.dp,
         )
         Spacer(Modifier.height(spacing.md))
         MiuixText(
-            text = stringResource(R.string.chat_empty_title),
-            style = MiuixTheme.typography.titleMedium,
+            text = stringResource(R.string.chat_hero_title),
+            style = MiuixTheme.typography.titleLarge,
         )
-        Spacer(Modifier.height(spacing.xs))
+        Spacer(Modifier.height(spacing.xl))
+        items.chunked(2).forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            ) {
+                rowItems.forEach { (icon, label) ->
+                    SuggestionCard(
+                        icon = icon,
+                        label = label,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onPick(label) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(spacing.sm))
+        }
+    }
+}
+
+@Composable
+private fun SuggestionCard(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(MiuixTheme.radius.md))
+            .background(colors.surfaceContainerLow)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        MiuixIcon(icon, null, tint = colors.primary, size = 20.dp)
         MiuixText(
-            text = stringResource(R.string.chat_empty_desc),
-            style = MiuixTheme.typography.bodySmall,
-            color = colors.onSurfaceVariant,
+            text = label,
+            style = MiuixTheme.typography.bodyMedium,
+            maxLines = 2,
         )
     }
 }

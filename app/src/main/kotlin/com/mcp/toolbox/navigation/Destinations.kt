@@ -2,6 +2,7 @@ package com.mcp.toolbox.navigation
 
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.GridView
@@ -44,6 +45,9 @@ object Routes {
     const val MCP = "mcp"
     const val ARTIFACTS = "artifacts"
     const val SETTINGS = "settings"
+    const val AI_SETTINGS = "settings/ai"
+    const val AI_PROVIDERS = "settings/ai/providers"
+    const val AI_PROVIDER_DETAIL = "settings/ai/provider"
     const val SETTINGS_THEME = "settings/theme"
     const val SETTINGS_PRIVILEGE = "settings/privilege"
     const val ABOUT = "about"
@@ -79,6 +83,7 @@ val DrawerNetworkChildren: List<Destination> = listOf(
 /** 抽屉底部固定项。 */
 val DrawerFooter: List<Destination> = listOf(
     Destination(Routes.TOOLS, R.string.app_drawer_group_tools, Icons.Outlined.GridView),
+    Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, Icons.Outlined.AutoAwesome),
     Destination(Routes.SETTINGS, R.string.app_nav_settings, Icons.Outlined.Settings),
     Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
 )
