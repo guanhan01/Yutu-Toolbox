@@ -79,6 +79,7 @@ import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixMenuDivider
+import com.mcp.toolbox.core.design.component.MiuixMenuGroupLabel
 import com.mcp.toolbox.core.design.component.MiuixMenuItem
 import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -138,6 +139,8 @@ fun HomeScreen(
     var showOverflow by remember { mutableStateOf(false) }
     // 加号按钮在窗口中的位置，用作溢出菜单的锚点
     var attachAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var modelAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var reasoningAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
@@ -332,6 +335,8 @@ fun HomeScreen(
             onStop = onStop,
             onAttach = { showOverflow = true },
             onAttachPositioned = { attachAnchor = it },
+            onModelPositioned = { modelAnchor = it },
+            onReasoningPositioned = { reasoningAnchor = it },
             onPickModel = { picker = PickerKind.MODEL },
             onPickReasoning = { picker = PickerKind.REASONING },
             providerIconRes = providerIconRes,
@@ -400,21 +405,56 @@ fun HomeScreen(
         )
     }
 
-    picker?.let { kind ->
-        when (kind) {
-            PickerKind.MODEL -> ModelSheet(
-                options = modelOptions,
-                fallback = availableModels,
-                onPickOption = { onSelectModelOption(it); picker = null },
-                onPickFallback = { onSelectModel(it); picker = null },
-                onDismiss = { picker = null },
+    // 模型：锚定到右下角的模型按钮，右对齐展开
+    MiuixOverflowMenu(
+        expanded = picker == PickerKind.MODEL,
+        onDismiss = { picker = null },
+        anchor = modelAnchor,
+    ) {
+        if (modelOptions.isEmpty() && availableModels.isEmpty()) {
+            MiuixMenuItem(
+                text = stringResource(R.string.chat_pick_empty),
+                enabled = false,
+                onClick = {},
             )
+        }
+        if (modelOptions.isEmpty()) {
+            availableModels.forEach { id ->
+                MiuixMenuItem(
+                    text = id,
+                    checked = id == currentModel,
+                    onClick = { onSelectModel(id); picker = null },
+                )
+            }
+        } else {
+            var lastProvider = ""
+            modelOptions.forEach { option ->
+                if (option.providerName != lastProvider) {
+                    if (lastProvider.isNotEmpty()) MiuixMenuDivider()
+                    MiuixMenuGroupLabel(text = option.providerTitle)
+                    lastProvider = option.providerName
+                }
+                MiuixMenuItem(
+                    text = option.modelId,
+                    checked = option.isCurrent,
+                    onClick = { onSelectModelOption(option); picker = null },
+                )
+            }
+        }
+    }
 
-            PickerKind.REASONING -> ReasoningSheet(
-                options = availableReasoning,
-                selected = currentReasoning,
-                onPick = { onSelectReasoning(it); picker = null },
-                onDismiss = { picker = null },
+    // 思考档位：锚定到左下角的思考按钮，左对齐展开
+    MiuixOverflowMenu(
+        expanded = picker == PickerKind.REASONING,
+        onDismiss = { picker = null },
+        anchor = reasoningAnchor,
+        alignStart = true,
+    ) {
+        availableReasoning.forEach { label ->
+            MiuixMenuItem(
+                text = label,
+                checked = label == currentReasoning,
+                onClick = { onSelectReasoning(label); picker = null },
             )
         }
     }
@@ -538,6 +578,8 @@ private fun InputBar(
     onStop: () -> Unit,
     onAttach: () -> Unit,
     onAttachPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
+    onModelPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
+    onReasoningPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
     onPickModel: () -> Unit,
     onPickReasoning: () -> Unit,
     @androidx.annotation.DrawableRes providerIconRes: Int,
@@ -611,14 +653,21 @@ private fun InputBar(
                     size = 20.dp,
                 )
             }
-            MiuixIconButton(
-                icon = Icons.Outlined.Psychology,
-                contentDescription = stringResource(R.string.chat_pick_reasoning),
-                onClick = onPickReasoning,
-                buttonSize = 36.dp,
-                iconSize = 20.dp,
-                tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onPickReasoning)
+                    .onGloballyPositioned { onReasoningPositioned(it.boundsInWindow()) },
+                contentAlignment = Alignment.Center,
+            ) {
+                MiuixIcon(
+                    Icons.Outlined.Psychology,
+                    stringResource(R.string.chat_pick_reasoning),
+                    tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
+                    size = 20.dp,
+                )
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -627,8 +676,8 @@ private fun InputBar(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF1F1F1F).copy(alpha = 0f))
-                    .clickable(onClick = onPickModel),
+                    .clickable(onClick = onPickModel)
+                    .onGloballyPositioned { onModelPositioned(it.boundsInWindow()) },
                 contentAlignment = Alignment.Center,
             ) {
                 if (providerIconRes != 0) {
@@ -884,120 +933,8 @@ private fun ToolStepCard(
     }
 }
 
-/** 思考档位：贴底 Sheet。 */
-@Composable
-private fun ReasoningSheet(
-    options: List<String>,
-    selected: String,
-    onPick: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    MiuixBottomSheet(visible = true, onDismiss = onDismiss) {
-        MiuixText(
-            text = stringResource(R.string.chat_pick_reasoning),
-            style = MiuixTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        )
-        options.forEach { option ->
-            SheetRow(text = option, active = option == selected) { onPick(option) }
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-}
 
-/** 跨厂模型选择：贴底 Sheet。 */
-@Composable
-private fun ModelSheet(
-    options: List<ModelOption>,
-    fallback: List<String>,
-    onPickOption: (ModelOption) -> Unit,
-    onPickFallback: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    MiuixBottomSheet(visible = true, onDismiss = onDismiss) {
-        MiuixText(
-            text = stringResource(R.string.chat_pick_model),
-            style = MiuixTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-        )
-        Column(
-            modifier = Modifier
-                .heightIn(max = 460.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            if (options.isEmpty() && fallback.isEmpty()) {
-                MiuixText(
-                    text = stringResource(R.string.chat_pick_empty),
-                    style = MiuixTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
-            }
-            if (options.isEmpty()) {
-                fallback.forEach { id ->
-                    SheetRow(text = id, active = false) { onPickFallback(id) }
-                }
-            } else {
-                var lastProvider = ""
-                options.forEach { option ->
-                    if (option.providerName != lastProvider) {
-                        lastProvider = option.providerName
-                        Row(
-                            modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (option.providerIconRes != 0) {
-                                Image(
-                                    painter = painterResource(option.providerIconRes),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            MiuixText(
-                                text = option.providerTitle,
-                                style = MiuixTheme.typography.labelMedium,
-                                color = colors.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    SheetRow(text = option.modelId, active = option.isCurrent) {
-                        onPickOption(option)
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-}
 
-/** Sheet 里的一行。 */
-@Composable
-private fun SheetRow(text: String, active: Boolean, onClick: () -> Unit) {
-    val colors = MiuixTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(MiuixTheme.radius.field))
-            .background(
-                if (active) colors.primary.copy(alpha = 0.10f)
-                else Color.Transparent,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (active) MiuixIcon(Icons.Outlined.Check, null, tint = colors.primary, size = 16.dp)
-        MiuixText(
-            text = text,
-            style = MiuixTheme.typography.bodyMedium,
-            color = if (active) colors.primary else colors.onSurface,
-        )
-    }
-}
 
 /** 等待回复时的占位气泡。 */
 @Composable
