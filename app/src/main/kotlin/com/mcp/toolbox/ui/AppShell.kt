@@ -60,9 +60,6 @@ import com.mcp.toolbox.feature.apps.AppsScreen
 import com.mcp.toolbox.feature.capture.CaptureScreen
 import com.mcp.toolbox.feature.database.DatabaseScreen
 import com.mcp.toolbox.feature.decompile.DecompileScreen
-import com.mcp.toolbox.feature.files.FileViewerOverlay
-import com.mcp.toolbox.feature.files.FilesScreen
-import com.mcp.toolbox.feature.files.installApk
 import com.mcp.toolbox.feature.home.HomeScreen
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
 import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
@@ -120,8 +117,6 @@ fun AppShell(
     }
 
     Box(modifier = modifier.fillMaxSize().background(colors.background)) {
-        val shellContext = LocalContext.current
-        var viewerPath by remember { mutableStateOf<String?>(null) }
         val wideScreen = LocalConfiguration.current.screenWidthDp >= 600
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.weight(1f)) {
@@ -136,12 +131,10 @@ fun AppShell(
                         toastState = toastState,
                         onOpenDrawer = { drawerOpen = true },
                         onNavigate = { navigate(it) },
-                        onOpenViewer = { viewerPath = it },
                     )
                 }
             }
             if (!wideScreen) {
-                MiuixBottomBar(currentRoute = currentRoute, onNavigate = { navigate(it) })
             }
         }
 
@@ -190,20 +183,6 @@ fun AppShell(
 
         MiuixToastHost(state = toastState)
 
-        // 内置文件阅读器：覆盖整个应用，返回键先关闭它
-        viewerPath?.let { open ->
-            FileViewerOverlay(
-                path = open,
-                onClose = { viewerPath = null },
-                onToast = { toastState.show(it) },
-                onInstallApk = { installApk(shellContext, it) { msg -> toastState.show(msg) } },
-                onDecompile = { path ->
-                    viewerPath = null
-                    DecompileHub.pendingPath.value = path
-                    navigate(Routes.DECOMPILE)
-                },
-            )
-        }
     }
 }
 
@@ -215,7 +194,6 @@ private fun ToolboxNavHost(
     toastState: MiuixToastState,
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
-    onOpenViewer: (String) -> Unit,
 ) {
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
     val shellContext = LocalContext.current
@@ -316,20 +294,6 @@ private fun ToolboxNavHost(
             composable(Routes.APPS) {
                 AppsScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
             }
-            composable(Routes.FILES) {
-                FilesScreen(
-                    onOpenDrawer = onOpenDrawer,
-                    onToast = { toastState.show(it) },
-                    onOpenViewer = onOpenViewer,
-                    onInstallApk = { path ->
-                        installApk(shellContext, path) { msg -> toastState.show(msg) }
-                    },
-                    onDecompile = { path ->
-                        DecompileHub.pendingPath.value = path
-                        onNavigate(Routes.DECOMPILE)
-                    },
-                )
-            }
             composable(Routes.CAPTURE) {
                 CaptureScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
             }
@@ -382,7 +346,6 @@ private fun ToolboxNavHost(
                         setOf(
                             Routes.HOME,
                             Routes.APPS,
-                            Routes.FILES,
                             Routes.WEB,
                             Routes.NETWORK,
                             Routes.CAPTURE,

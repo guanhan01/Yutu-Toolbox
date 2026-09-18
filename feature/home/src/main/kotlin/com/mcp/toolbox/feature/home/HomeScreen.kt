@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Language
@@ -47,17 +46,14 @@ import com.mcp.toolbox.core.design.component.MiuixSearchField
 import com.mcp.toolbox.core.design.component.miuixClickable
 import com.mcp.toolbox.core.design.component.rememberMiuixPressState
 import com.mcp.toolbox.core.design.component.MiuixTag
+import androidx.compose.material.icons.outlined.Menu
+import com.mcp.toolbox.core.design.component.MiuixTopAppBar
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
-import androidx.compose.foundation.Image
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
-import com.mcp.toolbox.core.design.component.HomeHeaderBackground
-import com.mcp.toolbox.core.design.component.FlowingAuroraBackground
-import androidx.compose.ui.draw.blur
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -74,7 +70,6 @@ private data class QuickTool(
 
 private val quickTools = listOf(
     QuickTool("apps", "应用", Icons.Outlined.Smartphone),
-    QuickTool("files", "文件", Icons.Outlined.Folder),
     QuickTool("web", "网页", Icons.Outlined.Language),
     QuickTool("network", "网络", Icons.Outlined.Wifi),
     QuickTool("database", "数据库", Icons.Outlined.Storage),
@@ -114,61 +109,15 @@ fun HomeScreen(
     ) {
         Spacer(Modifier.height(spacing.sm))
 
-        val headerContext = LocalContext.current
-        val headerBitmap by HomeHeaderBackground.bitmap.collectAsState()
-        val headerBlurred by HomeHeaderBackground.blurred.collectAsState()
-        val headerAurora by HomeHeaderBackground.aurora.collectAsState()
-        LaunchedEffect(Unit) { HomeHeaderBackground.refresh(headerContext) }
+        // 顶部只保留菜单入口与 MCP 状态，不再放大标题
+        MiuixTopAppBar(
+            title = "",
+            navigationIcon = Icons.Outlined.Menu,
+            onNavigationClick = onOpenDrawer,
+            actions = { McpStatusBadge(connected = mcpConnected) },
+        )
 
-        // 大标题 Banner：设了自定义图片就铺图压暗，否则用主题渐变
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(148.dp)
-                .clip(RoundedCornerShape(MiuixTheme.radius.card)),
-        ) {
-            val bg = headerBitmap
-            if (bg != null) {
-                Image(
-                    bitmap = bg,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .then(
-                            // blur 需要 Android 12+，更低版本会自动忽略
-                            if (headerBlurred) Modifier.blur(26.dp) else Modifier,
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Black.copy(alpha = 0.12f), Color.Black.copy(alpha = 0.58f)),
-                            ),
-                        ),
-                )
-            } else if (headerAurora) {
-                // 未设置自定义图片时的默认背景：动态流光
-                FlowingAuroraBackground(modifier = Modifier.matchParentSize())
-            } else {
-                // 关掉流光同样用这套配色，只是静止不飘
-                FlowingAuroraBackground(modifier = Modifier.matchParentSize(), animated = false)
-            }
-            Column(modifier = Modifier.align(Alignment.BottomStart).padding(spacing.lg)) {
-                MiuixText(
-                    text = "Yutu",
-                    style = MiuixTheme.typography.displaySmall,
-                    color = colors.onPrimaryContainer,
-                )
-            }
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(spacing.sm)) {
-                McpStatusBadge(connected = mcpConnected)
-            }
-        }
-
-        MiuixSearchField(value = query, onValueChange = { query = it }, placeholder = "搜索工具、文件、请求…")
+        MiuixSearchField(value = query, onValueChange = { query = it }, placeholder = "搜索工具、请求…")
 
         Column {
             MiuixText(

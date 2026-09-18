@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Yutu Toolbox</string>
+    <string name="app_name">Yutu Toolbox Beta</string>
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Home</string>
@@ -62,6 +62,7 @@
     <string name="app_about_license_title">License</string>
     <string name="app_about_license_subtitle">Apache License 2.0</string>
     <string name="app_about_section_update">Updates</string>
+    <string name="app_about_update_disabled">Beta build, update check disabled</string>
     <string name="app_about_update_check">Check for updates</string>
     <string name="app_about_update_checking">Checking for updates…</string>
     <string name="app_about_update_uptodate">Up to date</string>

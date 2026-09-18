@@ -150,18 +150,22 @@ fun AboutScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // 进入本页时自动检查一次更新
-    LaunchedEffect(Unit) { checkUpdate() }
+    // 内测包默认关闭，不发起任何请求
+    LaunchedEffect(Unit) {
+        if (UpdateChecker.ENABLED) checkUpdate()
+    }
 
     val state = updateState
-    val statusText = when (state) {
-        UpdateState.Idle, UpdateState.Checking ->
+    val statusText = when {
+        !UpdateChecker.ENABLED ->
+            stringResource(R.string.app_about_update_disabled)
+        state is UpdateState.Idle || state is UpdateState.Checking ->
             stringResource(R.string.app_about_update_checking)
-        is UpdateState.UpToDate ->
+        state is UpdateState.UpToDate ->
             stringResource(R.string.app_about_update_uptodate)
-        is UpdateState.Available ->
+        state is UpdateState.Available ->
             stringResource(R.string.app_about_update_available, state.latest)
-        is UpdateState.Failed ->
+        else ->
             stringResource(R.string.app_about_update_failed)
     }
     val available = state as? UpdateState.Available
@@ -200,7 +204,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     title = stringResource(R.string.app_about_update_check),
                     subtitle = statusText,
                     leadingIcon = Icons.Outlined.SystemUpdate,
-                    onClick = { checkUpdate() },
+                    onClick = if (UpdateChecker.ENABLED) ({ checkUpdate() }) else null,
                     showDivider = available != null,
                 )
                 if (available != null) {

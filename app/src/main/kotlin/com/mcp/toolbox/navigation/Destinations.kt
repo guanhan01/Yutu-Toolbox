@@ -4,12 +4,10 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Settings
@@ -31,7 +29,6 @@ data class Destination(
 object Routes {
     const val HOME = "home"
     const val APPS = "apps"
-    const val FILES = "files"
     const val WEB = "web"
     const val NETWORK = "network"
     const val NETWORK_HTTP = "network/http"
@@ -55,7 +52,6 @@ object Routes {
 val DrawerPrimary: List<Destination> = listOf(
     Destination(Routes.HOME, R.string.app_nav_home, Icons.Outlined.Public),
     Destination(Routes.APPS, R.string.app_nav_apps, Icons.Outlined.Smartphone, implStage = "P2"),
-    Destination(Routes.FILES, R.string.app_nav_files, Icons.Outlined.Folder, implStage = "P2"),
     Destination(Routes.WEB, R.string.app_nav_web, Icons.Outlined.Language, implStage = "P3"),
     Destination(Routes.NETWORK, R.string.app_nav_network, Icons.Outlined.Wifi, implStage = "P3"),
     Destination(Routes.DATABASE, R.string.app_nav_database, Icons.Outlined.Storage, implStage = "P4"),
@@ -81,9 +77,3 @@ val DrawerFooter: List<Destination> = listOf(
     Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
 )
 
-/** 底栏入口。 */
-val BottomDestinations: List<Destination> = listOf(
-    Destination(Routes.HOME, R.string.app_nav_home, Icons.Outlined.Public),
-    Destination(Routes.SETTINGS_THEME, R.string.app_nav_theme, Icons.Outlined.Palette),
-    Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
-)
