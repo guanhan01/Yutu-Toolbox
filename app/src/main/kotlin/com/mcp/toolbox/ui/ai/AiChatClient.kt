@@ -58,6 +58,19 @@ object AiChatClient {
         onToolResult: (name: String, result: String) -> Unit = { _, _ -> },
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
+        when (config.provider) {
+            AiProvider.ANTHROPIC -> return@withContext anthropicStream(
+                context, config, history, systemPrompt, enableTools,
+                onToolCall, onToolResult, onDelta,
+            )
+
+            AiProvider.GEMINI -> return@withContext geminiStream(
+                context, config, history, systemPrompt, enableTools,
+                onToolCall, onToolResult, onDelta,
+            )
+
+            else -> Unit // OpenAI 兼容协议继续走下面的实现
+        }
         runCatching {
             validate(config)
             val messages = buildMessages(context, history, systemPrompt)
@@ -140,6 +153,209 @@ object AiChatClient {
             error("工具调用轮数已达上限")
         }
     }
+
+    // ---------- Anthropic 原生 ----------
+
+    private suspend fun anthropicStream(
+        context: Context,
+        config: AiConfig,
+        history: List<ChatMessage>,
+        systemPrompt: String?,
+        enableTools: Boolean,
+        onToolCall: (String, String) -> Unit,
+        onToolResult: (String, String) -> Unit,
+        onDelta: (String) -> Unit,
+    ): Result<String> = runCatching {
+        // 把历史摊成可变列表，便于逐轮回填
+        val working = JSONArray()
+        val initial = JSONObject(
+            AnthropicBackend.buildPayload(
+                context, config, history, systemPrompt, stream = true, tools = enableTools,
+            ),
+        ).optJSONArray("messages")
+        (0 until (initial?.length() ?: 0)).forEach { working.put(initial!!.opt(it)) }
+        val system = systemPrompt?.takeIf { it.isNotBlank() }
+
+        repeat(MAX_TOOL_ROUNDS) { round ->
+            val payload = JSONObject()
+                .put("model", config.model)
+                .put("max_tokens", 4096)
+                .put("messages", working)
+                .put("stream", true)
+                .put("temperature", config.temperature.toDouble())
+                .also { root ->
+                    system?.let { root.put("system", it) }
+                    if (enableTools) {
+                        root.put(
+                            "tools",
+                            JSONArray().also { arr ->
+                                com.mcp.toolbox.feature.mcp.BuiltInToolSet.all(context).forEach { def ->
+                                    arr.put(
+                                        JSONObject()
+                                            .put("name", AiToolBridge.toFunctionName(def.name))
+                                            .put("description", def.description)
+                                            .put("input_schema", def.schema),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+
+            val conn = openRaw(
+                url = AnthropicBackend.endpoint(config),
+                payload = payload.toString(),
+                headers = AnthropicBackend.headers(config),
+            )
+            val text = StringBuilder()
+            val acc = ToolCallAccumulator()
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    error("HTTP $code：${extractError(err).take(200)}")
+                }
+                conn.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { raw ->
+                        val line = raw.trim()
+                        if (!line.startsWith("data:")) return@forEach
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isEmpty() || data == "[DONE]") return@forEach
+                        val delta = AnthropicBackend.parseEvent(data, acc)?.first.orEmpty()
+                        if (delta.isNotEmpty()) {
+                            text.append(delta)
+                            onDelta(delta)
+                        }
+                    }
+                }
+            } finally {
+                conn.disconnect()
+            }
+
+            val calls = acc.calls()
+            if (calls.isEmpty()) {
+                return@runCatching text.toString().ifBlank { error("回复内容为空") }
+            }
+
+            working.put(AnthropicBackend.assistantToolUseBlock(text.toString(), calls))
+            val results = calls.map { c ->
+                onToolCall(c.name, c.arguments.toString())
+                val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
+                    .take(MAX_TOOL_RESULT_CHARS)
+                onToolResult(c.name, result)
+                Triple(c.id, c.name, result)
+            }
+            working.put(AnthropicBackend.toolResultsBlock(results))
+
+            if (round == MAX_TOOL_ROUNDS - 1) {
+                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+            }
+        }
+        error("工具调用轮数已达上限")
+    }
+
+    // ---------- Gemini 原生 ----------
+
+    private suspend fun geminiStream(
+        context: Context,
+        config: AiConfig,
+        history: List<ChatMessage>,
+        systemPrompt: String?,
+        enableTools: Boolean,
+        onToolCall: (String, String) -> Unit,
+        onToolResult: (String, String) -> Unit,
+        onDelta: (String) -> Unit,
+    ): Result<String> = runCatching {
+        val working = JSONArray()
+        val initial = JSONObject(
+            GeminiBackend.buildPayload(
+                context, config, history, systemPrompt, tools = enableTools,
+            ),
+        ).optJSONArray("contents")
+        (0 until (initial?.length() ?: 0)).forEach { working.put(initial!!.opt(it)) }
+
+        repeat(MAX_TOOL_ROUNDS) { round ->
+            val payload = JSONObject()
+                .put("contents", working)
+                .put(
+                    "generationConfig",
+                    JSONObject().put("temperature", config.temperature.toDouble()),
+                )
+                .also { root ->
+                    systemPrompt?.takeIf { it.isNotBlank() }?.let {
+                        root.put(
+                            "systemInstruction",
+                            JSONObject().put("parts", JSONArray().put(JSONObject().put("text", it))),
+                        )
+                    }
+                }
+
+            val conn = openRaw(
+                url = GeminiBackend.withKey(GeminiBackend.endpoint(config), config),
+                payload = payload.toString(),
+                headers = GeminiBackend.headers(config),
+            )
+            val text = StringBuilder()
+            val acc = ToolCallAccumulator()
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    error("HTTP $code：${extractError(err).take(200)}")
+                }
+                conn.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { raw ->
+                        val line = raw.trim()
+                        if (!line.startsWith("data:")) return@forEach
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isEmpty() || data == "[DONE]") return@forEach
+                        val delta = GeminiBackend.parseEvent(data, acc)
+                        if (delta.isNotEmpty()) {
+                            text.append(delta)
+                            onDelta(delta)
+                        }
+                    }
+                }
+            } finally {
+                conn.disconnect()
+            }
+
+            val calls = acc.calls()
+            if (calls.isEmpty()) {
+                return@runCatching text.toString().ifBlank { error("回复内容为空") }
+            }
+
+            working.put(GeminiBackend.modelFunctionCallContent(text.toString(), calls))
+            val results = calls.map { c ->
+                onToolCall(c.name, c.arguments.toString())
+                val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
+                    .take(MAX_TOOL_RESULT_CHARS)
+                onToolResult(c.name, result)
+                Triple(c.id, c.name, result)
+            }
+            working.put(GeminiBackend.toolResponseContent(results))
+
+            if (round == MAX_TOOL_ROUNDS - 1) {
+                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+            }
+        }
+        error("工具调用轮数已达上限")
+    }
+
+    /** 通用 POST，headers 由调用方给定。 */
+    private fun openRaw(
+        url: String,
+        payload: String,
+        headers: Map<String, String>,
+    ): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = TIMEOUT_MS
+            readTimeout = TIMEOUT_MS
+            doOutput = true
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+        }
 
     /** 拉取该服务商可用模型列表（OpenAI 兼容的 GET /models）。 */
     suspend fun listModels(config: AiConfig): Result<List<String>> = withContext(Dispatchers.IO) {
