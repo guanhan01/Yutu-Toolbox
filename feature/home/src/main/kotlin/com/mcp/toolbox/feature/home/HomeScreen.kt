@@ -343,6 +343,8 @@ fun HomeScreen(
             onPickFile = { pickFile.launch(arrayOf("*/*")) },
             onPickFolder = { pickFolder.launch(null) },
             onPickPath = { showPathDialog = true },
+            onPickModel = { picker = PickerKind.MODEL },
+            onPickReasoning = { picker = PickerKind.REASONING },
             onDismiss = { showOverflow = false },
         )
     }
@@ -417,6 +419,8 @@ private fun OverflowMenu(
     onPickFile: () -> Unit,
     onPickFolder: () -> Unit,
     onPickPath: () -> Unit,
+    onPickModel: () -> Unit,
+    onPickReasoning: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -428,6 +432,13 @@ private fun OverflowMenu(
                 .background(colors.surface)
                 .padding(vertical = 12.dp),
         ) {
+            MenuRow(Icons.Outlined.SwapHoriz, stringResource(R.string.chat_pick_model)) {
+                onDismiss(); onPickModel()
+            }
+            MenuRow(Icons.Outlined.Psychology, stringResource(R.string.chat_pick_reasoning)) {
+                onDismiss(); onPickReasoning()
+            }
+            MenuDivider()
             MenuRow(Icons.Outlined.Image, stringResource(R.string.chat_attach_image)) {
                 onDismiss(); onPickImage()
             }
@@ -442,6 +453,17 @@ private fun OverflowMenu(
             }
         }
     }
+}
+
+@Composable
+private fun MenuDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .height(1.dp)
+            .background(MiuixTheme.colors.outlineVariant),
+    )
 }
 
 @Composable
@@ -740,7 +762,7 @@ private fun InputBar(
     val spacing = MiuixTheme.dimens.spacing
     val active = value.isNotBlank()
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
@@ -750,18 +772,42 @@ private fun InputBar(
                 end = spacing.pageHorizontal,
                 top = spacing.sm,
                 bottom = spacing.sm,
-            ),
-        verticalAlignment = Alignment.Bottom,
+            )
+            .clip(RoundedCornerShape(MiuixTheme.radius.lg))
+            .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
+            .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 8.dp),
     ) {
-        Row(
+        // 第一行：输入
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(MiuixTheme.radius.lg))
-                .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
-                .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                .fillMaxWidth()
+                .heightIn(min = 28.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (value.isEmpty()) {
+                MiuixText(
+                    text = stringResource(R.string.chat_input_hint),
+                    style = MiuixTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                cursorBrush = SolidColor(colors.primary),
+                maxLines = 6,
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // 第二行：左（附件 / 思考）  右（模型 / 发送）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 附件
             MiuixIconButton(
                 icon = Icons.Outlined.Add,
                 contentDescription = stringResource(R.string.chat_attach),
@@ -770,20 +816,40 @@ private fun InputBar(
                 iconSize = 20.dp,
                 tint = colors.onSurfaceVariant,
             )
-            // 模型：图标即当前服务商 Logo
+            MiuixIconButton(
+                icon = Icons.Outlined.Psychology,
+                contentDescription = stringResource(R.string.chat_pick_reasoning),
+                onClick = onPickReasoning,
+                buttonSize = 36.dp,
+                iconSize = 20.dp,
+                tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            // 模型：品牌色圆底 + 白色图形，放在发送键左侧
             Box(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
+                    .background(Color(0xFF1F1F1F).copy(alpha = 0f))
                     .clickable(onClick = onPickModel),
                 contentAlignment = Alignment.Center,
             ) {
                 if (providerIconRes != 0) {
-                    Image(
-                        painter = painterResource(providerIconRes),
-                        contentDescription = providerIconLabel,
-                        modifier = Modifier.size(20.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(colors.onSurface),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter = painterResource(providerIconRes),
+                            contentDescription = providerIconLabel,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 } else {
                     MiuixIcon(
                         Icons.Outlined.SwapHoriz,
@@ -793,35 +859,7 @@ private fun InputBar(
                     )
                 }
             }
-            // 思考模式
-            MiuixIconButton(
-                icon = Icons.Outlined.Psychology,
-                contentDescription = stringResource(R.string.chat_pick_reasoning),
-                onClick = onPickReasoning,
-                buttonSize = 36.dp,
-                iconSize = 20.dp,
-                tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
-            )
-            Box(
-                modifier = Modifier.weight(1f).heightIn(min = 36.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (value.isEmpty()) {
-                    MiuixText(
-                        text = stringResource(R.string.chat_input_hint),
-                        style = MiuixTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
-                    cursorBrush = SolidColor(colors.primary),
-                    maxLines = 6,
-                )
-            }
+
             MiuixIconButton(
                 icon = if (sending) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
                 contentDescription = stringResource(R.string.chat_send),
