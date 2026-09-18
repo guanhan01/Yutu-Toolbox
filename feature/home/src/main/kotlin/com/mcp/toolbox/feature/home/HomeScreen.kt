@@ -138,9 +138,6 @@ fun HomeScreen(
     var picker by remember { mutableStateOf<PickerKind?>(null) }
     var showOverflow by remember { mutableStateOf(false) }
     // 加号按钮在窗口中的位置，用作溢出菜单的锚点
-    var attachAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    var modelAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-    var reasoningAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
@@ -334,9 +331,6 @@ fun HomeScreen(
             onSend = { submit(input) },
             onStop = onStop,
             onAttach = { showOverflow = true },
-            onAttachPositioned = { attachAnchor = it },
-            onModelPositioned = { modelAnchor = it },
-            onReasoningPositioned = { reasoningAnchor = it },
             onPickModel = { picker = PickerKind.MODEL },
             onPickReasoning = { picker = PickerKind.REASONING },
             providerIconRes = providerIconRes,
@@ -349,9 +343,9 @@ fun HomeScreen(
     MiuixOverflowMenu(
         expanded = showOverflow,
         onDismiss = { showOverflow = false },
-        anchor = attachAnchor,
-        // 加号在输入栏左侧，菜单从左边缘向右展开
+        // 加号在输入栏左侧、屏幕底部：贴底 + 左对齐
         alignStart = true,
+        stickToBottom = true,
     ) {
         MiuixMenuItem(
             text = stringResource(R.string.chat_pick_model),
@@ -409,7 +403,7 @@ fun HomeScreen(
     MiuixOverflowMenu(
         expanded = picker == PickerKind.MODEL,
         onDismiss = { picker = null },
-        anchor = modelAnchor,
+        stickToBottom = true,
     ) {
         if (modelOptions.isEmpty() && availableModels.isEmpty()) {
             MiuixMenuItem(
@@ -447,8 +441,8 @@ fun HomeScreen(
     MiuixOverflowMenu(
         expanded = picker == PickerKind.REASONING,
         onDismiss = { picker = null },
-        anchor = reasoningAnchor,
         alignStart = true,
+        stickToBottom = true,
     ) {
         availableReasoning.forEach { label ->
             MiuixMenuItem(
@@ -577,9 +571,6 @@ private fun InputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onAttach: () -> Unit,
-    onAttachPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onModelPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onReasoningPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
     onPickModel: () -> Unit,
     onPickReasoning: () -> Unit,
     @androidx.annotation.DrawableRes providerIconRes: Int,
@@ -642,8 +633,7 @@ private fun InputBar(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onAttach)
-                    .onGloballyPositioned { onAttachPositioned(it.boundsInWindow()) },
+                    .clickable(onClick = onAttach),
                 contentAlignment = Alignment.Center,
             ) {
                 MiuixIcon(
@@ -657,8 +647,7 @@ private fun InputBar(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onPickReasoning)
-                    .onGloballyPositioned { onReasoningPositioned(it.boundsInWindow()) },
+                    .clickable(onClick = onPickReasoning),
                 contentAlignment = Alignment.Center,
             ) {
                 MiuixIcon(
@@ -676,8 +665,7 @@ private fun InputBar(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onPickModel)
-                    .onGloballyPositioned { onModelPositioned(it.boundsInWindow()) },
+                    .clickable(onClick = onPickModel),
                 contentAlignment = Alignment.Center,
             ) {
                 if (providerIconRes != 0) {

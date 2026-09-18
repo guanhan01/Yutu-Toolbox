@@ -66,6 +66,13 @@ fun MiuixOverflowMenu(
     anchor: Rect? = null,
     /** 强制从锚点左边缘向右展开；用在锚点本身靠左的场景（例如输入栏的加号）。 */
     alignStart: Boolean = false,
+    /**
+     * 菜单底边贴住屏幕底部（留 [gapPx]）。
+     *
+     * 用在锚点就在屏幕底部的场景（如聊天输入栏的三个入口）：此时无法依赖
+     * 锚点矩形计算位置，直接贴底反而稳定准确。
+     */
+    stickToBottom: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -82,15 +89,15 @@ fun MiuixOverflowMenu(
     val expandToEnd = alignStart ||
         (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
     // 向上展开（锚点在屏幕下半部，菜单让到上方）时，进场位移改为从下往上
-    val growUpward = anchor != null && run {
+    val growUpward = stickToBottom || (anchor != null && run {
         val screenH = LocalConfiguration.current.screenHeightDp.dp
         val anchorBottomDp = with(LocalDensity.current) { anchor.bottom.toDp() }
         anchorBottomDp > screenH * 0.6f
-    }
+    })
     val originX = if (expandToEnd) 0f else 1f
     val positionProvider =
-        remember(anchor, offset, gapPx, expandToEnd) {
-            OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd)
+        remember(anchor, offset, gapPx, expandToEnd, stickToBottom) {
+            OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd, stickToBottom)
         }
 
     // Popup 必须活到退出动画播完，所以另用一个「是否还挂在屏幕上」的标志，不能在 expanded 变 false 时直接 return。
@@ -237,6 +244,7 @@ private class OverflowMenuPositionProvider(
     private val offset: IntOffset,
     private val gapPx: Int,
     private val expandToEnd: Boolean,
+    private val stickToBottom: Boolean,
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -268,6 +276,10 @@ private class OverflowMenuPositionProvider(
         }
         val top =
             when {
+                // 贴底模式：底边固定在屏幕底部上方 gapPx 处
+                stickToBottom -> (windowSize.height - popupContentSize.height - gapPx + offset.y)
+                    .coerceAtLeast(0)
+
                 below + popupContentSize.height <= windowSize.height -> below
                 above != null -> above.coerceAtLeast(0)
                 else -> below
