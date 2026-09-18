@@ -4,6 +4,30 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="linux_entry_desc">Debian / Alpine, installed on demand</string>
+    <string name="linux_section_title">Development</string>
+    <string name="app_nav_linux">Linux tools</string>
+    <string name="linux_check_empty">Environment not installed yet</string>
+    <string name="linux_status_missing">missing</string>
+    <string name="linux_status_ready">ready</string>
+    <string name="linux_check_summary">%1$d of %2$d ready</string>
+    <string name="linux_checking">Checking…</string>
+    <string name="linux_check_hint">Check components and install what is missing</string>
+    <string name="linux_check_title">Environment check</string>
+    <string name="linux_install">Install</string>
+    <string name="linux_installed">Installed</string>
+    <string name="linux_tools_hint">Installed on demand</string>
+    <string name="linux_section_tools">Optional tools</string>
+    <string name="linux_browse_desc">Browse files inside Linux (read-only)</string>
+    <string name="linux_browse">Browse files</string>
+    <string name="linux_shared_desc">Mount Android folders into Linux</string>
+    <string name="linux_shared">Shared folders</string>
+    <string name="linux_workspace_desc">Import, export and folder access</string>
+    <string name="linux_workspace">Workspace</string>
+    <string name="linux_section_files">Files and folders</string>
+    <string name="linux_runtime">Runtime</string>
+    <string name="linux_distro">Distribution</string>
+    <string name="linux_section_config">Environment</string>
     <string name="ai_current">Current</string>
     <string name="ai_model_cancel">Cancel</string>
     <string name="ai_model_delete">Delete model</string>

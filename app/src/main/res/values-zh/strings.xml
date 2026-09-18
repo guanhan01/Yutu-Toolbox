@@ -4,6 +4,30 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="linux_entry_desc">Debian / Alpine，按需下载安装</string>
+    <string name="linux_section_title">开发环境</string>
+    <string name="app_nav_linux">Linux 工具环境</string>
+    <string name="linux_check_empty">环境尚未安装</string>
+    <string name="linux_status_missing">缺失</string>
+    <string name="linux_status_ready">ready</string>
+    <string name="linux_check_summary">当前已就绪 %1$d/%2$d 项</string>
+    <string name="linux_checking">正在检测…</string>
+    <string name="linux_check_hint">检查各组件是否就绪，可直接补装缺失项</string>
+    <string name="linux_check_title">环境检测</string>
+    <string name="linux_install">安装</string>
+    <string name="linux_installed">已安装</string>
+    <string name="linux_tools_hint">按需安装，不随应用打包</string>
+    <string name="linux_section_tools">可选用工具</string>
+    <string name="linux_browse_desc">浏览 Linux 环境中的文件（只读）</string>
+    <string name="linux_browse">文件浏览</string>
+    <string name="linux_shared_desc">把 Android 目录挂载到 Linux 环境</string>
+    <string name="linux_shared">共享文件夹</string>
+    <string name="linux_workspace_desc">导入、导出与目录访问</string>
+    <string name="linux_workspace">工作区与文件</string>
+    <string name="linux_section_files">文件与目录</string>
+    <string name="linux_runtime">运行方式</string>
+    <string name="linux_distro">Linux 发行版</string>
+    <string name="linux_section_config">环境配置</string>
     <string name="ai_current">当前</string>
     <string name="ai_model_cancel">取消</string>
     <string name="ai_model_delete">删除模型</string>

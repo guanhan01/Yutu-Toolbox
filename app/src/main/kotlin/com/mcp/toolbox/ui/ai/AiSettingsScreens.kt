@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -177,6 +178,7 @@ private fun PlainField(
 fun AiSettingsScreen(
     onOpenProviders: () -> Unit,
     onOpenModels: () -> Unit,
+    onOpenLinux: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = MiuixTheme.colors
@@ -236,6 +238,38 @@ fun AiSettingsScreen(
                 }
             }
         }
+        Spacer(Modifier.height(spacing.groupGap))
+
+        // Linux 工具环境：点击进入二级页面
+        MiuixSectionCard(title = stringResource(R.string.linux_section_title)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenLinux)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                MiuixIcon(
+                    Icons.Outlined.Terminal,
+                    null,
+                    tint = colors.onSurfaceVariant,
+                    size = 20.dp,
+                )
+                Column(Modifier.weight(1f)) {
+                    MiuixText(
+                        text = stringResource(R.string.app_nav_linux),
+                        style = MiuixTheme.typography.bodyLarge,
+                    )
+                    MiuixText(
+                        text = stringResource(R.string.linux_entry_desc),
+                        style = MiuixTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(spacing.groupGap))
         MiuixText(
             text = stringResource(R.string.ai_local_note),

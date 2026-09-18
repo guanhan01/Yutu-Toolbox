@@ -68,6 +68,9 @@ import com.mcp.toolbox.ui.ai.AiModelScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
+import com.mcp.toolbox.ui.linux.LinuxScreen
+import com.mcp.toolbox.ui.linux.LinuxDistro
+import com.mcp.toolbox.ui.linux.LinuxCheckScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
@@ -363,6 +366,7 @@ private fun ToolboxNavHost(
                             AiHub.pendingProvider = AiConfigStore.config.value.current.name
                             onNavigate(Routes.AI_MODELS)
                         },
+                        onOpenLinux = { onNavigate(Routes.LINUX) },
                     )
                 }
             }
@@ -389,6 +393,27 @@ private fun ToolboxNavHost(
                             ?: AiConfigStore.config.value.current.name,
                         onOpenModels = { onNavigate(Routes.AI_MODELS) },
                     )
+                }
+            }
+            composable(Routes.LINUX) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.app_nav_linux),
+                        onOpenDrawer = onOpenDrawer)
+                    LinuxScreen(
+                        onOpenChecker = { onNavigate(Routes.LINUX_CHECK) },
+                        onOpenFiles = { toastState.show("Linux 文件浏览待接入") },
+                        onOpenShared = { toastState.show("共享文件夹待接入") },
+                        onOpenWorkspace = { toastState.show("工作区待接入") },
+                    )
+                }
+            }
+            composable(Routes.LINUX_CHECK) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.linux_check_title),
+                        onOpenDrawer = onOpenDrawer)
+                    LinuxCheckScreen(distro = LinuxDistro.DEBIAN)
                 }
             }
             composable(Routes.AI_MODELS) {
