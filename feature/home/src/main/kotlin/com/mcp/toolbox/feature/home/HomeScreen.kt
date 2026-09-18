@@ -66,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -133,6 +135,8 @@ fun HomeScreen(
     val sending = running
     var picker by remember { mutableStateOf<PickerKind?>(null) }
     var showOverflow by remember { mutableStateOf(false) }
+    // 加号按钮在窗口中的位置，用作溢出菜单的锚点
+    var attachAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
@@ -334,6 +338,7 @@ fun HomeScreen(
             onSend = { submit(input) },
             onStop = onStop,
             onAttach = { showOverflow = true },
+            onAttachPositioned = { attachAnchor = it },
             onPickModel = { picker = PickerKind.MODEL },
             onPickReasoning = { picker = PickerKind.REASONING },
             providerIconRes = providerIconRes,
@@ -342,19 +347,12 @@ fun HomeScreen(
         )
     }
 
-    // 复用项目统一的锚定式溢出菜单
-    MiuixOverflowMenu(expanded = showOverflow, onDismiss = { showOverflow = false }) {
-        MiuixMenuItem(
-            text = stringResource(R.string.chat_pick_model),
-            icon = Icons.Outlined.SwapHoriz,
-            onClick = { showOverflow = false; picker = PickerKind.MODEL },
-        )
-        MiuixMenuItem(
-            text = stringResource(R.string.chat_pick_reasoning),
-            icon = Icons.Outlined.Psychology,
-            onClick = { showOverflow = false; picker = PickerKind.REASONING },
-        )
-        MiuixMenuDivider()
+    // 复用项目统一的锚定式溢出菜单，锚点取自输入栏加号按钮
+    MiuixOverflowMenu(
+        expanded = showOverflow,
+        onDismiss = { showOverflow = false },
+        anchor = attachAnchor,
+    ) {
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_image),
             icon = Icons.Outlined.Image,
@@ -714,6 +712,7 @@ private fun InputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onAttach: () -> Unit,
+    onAttachPositioned: (androidx.compose.ui.geometry.Rect) -> Unit,
     onPickModel: () -> Unit,
     onPickReasoning: () -> Unit,
     @androidx.annotation.DrawableRes providerIconRes: Int,
@@ -774,6 +773,9 @@ private fun InputBar(
                 icon = Icons.Outlined.Add,
                 contentDescription = stringResource(R.string.chat_attach),
                 onClick = onAttach,
+                modifier = Modifier.onGloballyPositioned {
+                    onAttachPositioned(it.boundsInWindow())
+                },
                 buttonSize = 36.dp,
                 iconSize = 20.dp,
                 tint = colors.onSurfaceVariant,
