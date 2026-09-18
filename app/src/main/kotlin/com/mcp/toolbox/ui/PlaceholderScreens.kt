@@ -1,5 +1,6 @@
 package com.mcp.toolbox.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +34,7 @@ import com.mcp.toolbox.core.design.component.MiuixSectionCard
 import com.mcp.toolbox.core.design.component.MiuixSuperArrow
 import com.mcp.toolbox.core.design.component.MiuixTag
 import com.mcp.toolbox.core.design.component.MiuixText
+import com.mcp.toolbox.core.design.component.MiuixToastState
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.navigation.Destination
 import android.content.Intent
@@ -128,33 +130,52 @@ fun SettingsOverview(
 
 /** 关于页：版本与更新检查、开源项目、合规声明。 */
 @Composable
-fun AboutScreen(modifier: Modifier = Modifier) {
+fun AboutScreen(
+    toastState: MiuixToastState,
+    modifier: Modifier = Modifier,
+) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentVersion = remember { BuildConfig.VERSION_NAME }
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    var expanded by remember { mutableStateOf(false) }
 
     fun openUrl(url: String) {
         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
     }
 
     fun checkUpdate() {
+        if (!UpdateChecker.ENABLED) return
         scope.launch {
             updateState = UpdateState.Checking
             updateState = UpdateChecker.check(currentVersion)
         }
     }
 
-    // 内测包默认关闭，不发起任何请求
+    // 进页自动检查一次并展开结果（内测包不联网）
     LaunchedEffect(Unit) {
-        if (UpdateChecker.ENABLED) checkUpdate()
+        if (UpdateChecker.ENABLED) {
+            expanded = true
+            checkUpdate()
+        }
     }
 
     val state = updateState
-    // 有新版本时给出下载入口；版本状态本身不在列表里展示
     val available = state as? UpdateState.Available
+    val statusText = when {
+        !UpdateChecker.ENABLED ->
+            stringResource(R.string.app_about_update_beta_disabled)
+        state is UpdateState.Idle || state is UpdateState.Checking ->
+            stringResource(R.string.app_about_update_checking)
+        state is UpdateState.UpToDate ->
+            stringResource(R.string.app_about_update_uptodate)
+        state is UpdateState.Available ->
+            stringResource(R.string.app_about_update_has_new)
+        else ->
+            stringResource(R.string.app_about_update_failed)
+    }
 
     Column(
         modifier = modifier
@@ -164,46 +185,62 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             .padding(horizontal = spacing.pageHorizontal),
     ) {
         Spacer(Modifier.height(spacing.sm))
-        MiuixSectionCard(
-            title = stringResource(R.string.app_name),
-            subtitle = stringResource(R.string.app_about_version, currentVersion),
-        ) {
-            Column(Modifier.padding(spacing.lg)) {
-                MiuixText(
-                    text = stringResource(R.string.app_about_desc),
-                    style = MiuixTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                MiuixText(
-                    text = stringResource(R.string.app_about_theme),
-                    style = MiuixTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-        }
-        Spacer(Modifier.height(spacing.groupGap))
 
-        // 版本更新：进页自动检查，点该行可手动重查；有新版本时给出下载入口
+        // 版本更新：进页自动检查一次，点该行可收起 / 重新展开
         MiuixSectionCard(title = stringResource(R.string.app_about_section_update)) {
             Column {
                 MiuixListItem(
                     title = stringResource(R.string.app_about_update_check),
+                    subtitle = stringResource(R.string.app_about_update_current, currentVersion),
                     leadingIcon = Icons.Outlined.SystemUpdate,
-                    onClick = if (UpdateChecker.ENABLED) ({ checkUpdate() }) else null,
-                    showDivider = available != null,
+                    onClick = {
+                        expanded = !expanded
+                        if (UpdateChecker.ENABLED) checkUpdate()
+                    },
+                    showDivider = expanded,
                 )
-                if (available != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = spacing.lg, vertical = spacing.md),
-                        horizontalArrangement = Arrangement.Center,
+                AnimatedVisibility(visible = expanded) {
+                    Column(
+                        modifier = Modifier.padding(
+                            start = spacing.lg,
+                            end = spacing.lg,
+                            bottom = spacing.md,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(spacing.sm),
                     ) {
-                        MiuixButton(
-                            text = stringResource(R.string.app_about_update_go),
-                            onClick = { openUrl(available.releaseUrl) },
-                            leadingIcon = Icons.Outlined.Download,
+                        MiuixText(
+                            text = statusText,
+                            style = MiuixTheme.typography.bodyMedium,
                         )
+                        if (available != null) {
+                            MiuixText(
+                                text = stringResource(
+                                    R.string.app_about_update_latest,
+                                    available.latest,
+                                ),
+                                style = MiuixTheme.typography.bodyMedium,
+                                color = colors.primary,
+                            )
+                            available.notes?.let { notes ->
+                                Spacer(Modifier.height(2.dp))
+                                MiuixText(
+                                    text = stringResource(R.string.app_about_update_changelog),
+                                    style = MiuixTheme.typography.labelMedium,
+                                    color = colors.onSurfaceVariant,
+                                )
+                                MiuixText(
+                                    text = notes.take(1200),
+                                    style = MiuixTheme.typography.bodySmall,
+                                    color = colors.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            MiuixButton(
+                                text = stringResource(R.string.app_about_update_go),
+                                onClick = { openUrl(available.releaseUrl) },
+                                leadingIcon = Icons.Outlined.Download,
+                            )
+                        }
                     }
                 }
             }

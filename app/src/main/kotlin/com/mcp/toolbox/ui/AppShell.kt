@@ -263,7 +263,7 @@ private fun ToolboxNavHost(
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_about),
                         onOpenDrawer = onOpenDrawer)
-                    AboutScreen()
+                    AboutScreen(toastState = toastState)
                 }
             }
             composable(Routes.TOOLS) {

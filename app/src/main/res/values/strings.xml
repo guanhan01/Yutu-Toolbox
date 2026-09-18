@@ -70,6 +70,11 @@
     <string name="app_about_update_uptodate">Up to date</string>
     <string name="app_about_update_available">Version %1$s is available</string>
     <string name="app_about_update_failed">Check failed, try again later</string>
+    <string name="app_about_update_changelog">Changelog</string>
+    <string name="app_about_update_latest">Latest version %1$s</string>
+    <string name="app_about_update_current">Current version %1$s</string>
+    <string name="app_about_update_has_new">A new version is available</string>
+    <string name="app_about_update_beta_disabled">Beta build: update check disabled</string>
     <string name="app_about_update_retry">Check again</string>
     <string name="app_about_update_go">Download</string>
     <string name="app_about_desc">A local toolbox for developers: app management, file browsing, web, network diagnostics, database, packet capture, decompilation, plus an MCP client and a built-in MCP server.</string>
