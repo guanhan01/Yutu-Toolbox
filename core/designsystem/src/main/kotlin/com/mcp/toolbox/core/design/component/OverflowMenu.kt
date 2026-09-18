@@ -81,6 +81,12 @@ fun MiuixOverflowMenu(
     // 锚点靠左、或显式要求时，从左边缘向右展开，避免菜单甩到屏幕另一侧
     val expandToEnd = alignStart ||
         (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
+    // 向上展开（锚点在屏幕下半部，菜单让到上方）时，进场位移改为从下往上
+    val growUpward = anchor != null && run {
+        val screenH = LocalConfiguration.current.screenHeightDp.dp
+        val anchorBottomDp = with(LocalDensity.current) { anchor.bottom.toDp() }
+        anchorBottomDp > screenH * 0.6f
+    }
     val originX = if (expandToEnd) 0f else 1f
     val positionProvider =
         remember(anchor, offset, gapPx, expandToEnd) {
@@ -123,9 +129,10 @@ fun MiuixOverflowMenu(
                         // 缩放原点固定在右上角：像从三点按钮里「长」出来，收起时再吸回去。
                         scaleX = 0.55f + 0.45f * p
                         scaleY = 0.55f + 0.45f * p
-                        transformOrigin = TransformOrigin(originX, 0f)
+                        transformOrigin = TransformOrigin(originX, if (growUpward) 1f else 0f)
                         alpha = 0.25f + 0.75f * clamped
-                        translationY = (1f - clamped) * -16.dp.toPx()
+                        translationY = (1f - clamped) *
+                            (if (growUpward) 16.dp.toPx() else -16.dp.toPx())
                     }
                     .padding(8.dp)
                     .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(radius.field))
@@ -255,11 +262,14 @@ private class OverflowMenuPositionProvider(
         // 垂直自适应：优先贴锚点下方展开；下方放不下就改成「覆盖锚点」向上生长，
         // 让菜单底边贴住锚点底边，保证整份菜单都留在屏幕内，而不是顶到屏幕顶后被截掉下半截。
         val below = (anchorBottom ?: anchorBounds.top) + gapPx + offset.y
+        val above = anchorRect?.let {
+            // 向上展开：菜单底边落在锚点顶边上方，留出 gap，避免盖住按钮
+            it.top.roundToInt() - popupContentSize.height - gapPx + offset.y
+        }
         val top =
             when {
                 below + popupContentSize.height <= windowSize.height -> below
-                anchorBottom != null ->
-                    (anchorBottom - popupContentSize.height + offset.y).coerceAtLeast(0)
+                above != null -> above.coerceAtLeast(0)
                 else -> below
             }
         return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
