@@ -44,6 +44,9 @@ fun MiuixTextField(
     minLines: Int = 1,
     maxCharCount: Int? = null,
     showClear: Boolean = true,
+    /** 输入内容变换；传 [PasswordVisualTransformation] 即为密码框。 */
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
+        androidx.compose.ui.text.input.VisualTransformation.None,
 ) {
     val colors = MiuixTheme.colors
     val typography = MiuixTheme.typography
@@ -63,6 +66,7 @@ fun MiuixTextField(
             enabled = enabled,
             singleLine = singleLine,
             minLines = minLines,
+            visualTransformation = visualTransformation,
             textStyle = typography.bodyLarge.copy(color = colors.onSurface),
             cursorBrush = SolidColor(colors.primary),
             modifier = Modifier

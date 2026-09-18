@@ -20,7 +20,7 @@
     <string name="chat_sug_apk">分析 APK</string>
     <string name="chat_hero_title">有什么可以帮你？</string>
     <string name="chat_new">新建对话</string>
-    <string name="ai_key_note">密钥以明文存储在本机 SharedPreferences，请勿在共享设备上填写。</string>
+    <string name="ai_key_note">密钥已用系统密钥库（Keystore）加密后保存在本机，不会随对话上传。</string>
     <string name="ai_save">保存</string>
     <string name="ai_field_model">模型名称</string>
     <string name="ai_field_api_key">API Key</string>

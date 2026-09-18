@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,7 +41,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.R
 import com.mcp.toolbox.core.design.component.MiuixButton
+import com.mcp.toolbox.core.design.component.MiuixDivider
 import com.mcp.toolbox.core.design.component.MiuixIcon
+import androidx.compose.material.icons.outlined.Visibility
+import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixListItem
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
 import com.mcp.toolbox.core.design.component.MiuixTag
@@ -151,7 +155,7 @@ private fun SelectionCircle(selected: Boolean, onClick: () -> Unit) {
     val colors = MiuixTheme.colors
     Box(
         modifier = Modifier
-            .padding(end = 20.dp)
+            .padding(horizontal = 20.dp)
             .size(26.dp)
             .clip(CircleShape)
             .background(
@@ -194,31 +198,92 @@ fun AiProviderListScreen(
         MiuixSectionCard(title = stringResource(R.string.ai_provider_pick)) {
             Column {
                 AiProvider.entries.forEachIndexed { index, provider ->
-                    MiuixListItem(
-                        title = provider.title,
-                        subtitle = provider.baseUrl.ifBlank {
-                            stringResource(R.string.ai_custom_hint)
-                        },
-                        leading = { ProviderBadge(provider) },
-                        // 整行点击进入配置；圆圈在 trailing 里自行消费点击，只做勾选
-                        trailing = {
+                    // 不用 MiuixListItem：它的整行 onClick 会吞掉 trailing 的点击，
+                    // 导致点圆圈也跳转。这里自己排两段可点区域，互不干扰。
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        AiConfigStore.selectProvider(context, provider)
+                                        onOpenProvider(provider)
+                                    }
+                                    .padding(start = 20.dp, top = 14.dp, bottom = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                ProviderBadge(provider)
+                                Column {
+                                    MiuixText(
+                                        text = provider.title,
+                                        style = MiuixTheme.typography.bodyLarge,
+                                    )
+                                    MiuixText(
+                                        text = provider.baseUrl.ifBlank {
+                                            stringResource(R.string.ai_custom_hint)
+                                        },
+                                        style = MiuixTheme.typography.bodySmall,
+                                        color = colors.onSurfaceVariant,
+                                    )
+                                }
+                            }
                             SelectionCircle(
                                 selected = provider == config.provider,
                                 onClick = {
                                     AiConfigStore.selectProvider(context, provider)
                                 },
                             )
-                        },
-                        showDivider = index != AiProvider.entries.lastIndex,
-                        onClick = {
-                            AiConfigStore.selectProvider(context, provider)
-                            onOpenProvider(provider)
-                        },
-                    )
+                        }
+                        if (index != AiProvider.entries.lastIndex) {
+                            MiuixDivider()
+                        }
+                    }
                 }
             }
         }
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+/** 密码样式的输入框：默认遮蔽，右侧可切换明文。 */
+@Composable
+private fun PasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+) {
+    val colors = MiuixTheme.colors
+    var visible by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(Modifier.weight(1f)) {
+            MiuixTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = placeholder,
+                singleLine = true,
+                visualTransformation = if (visible) {
+                    androidx.compose.ui.text.input.VisualTransformation.None
+                } else {
+                    androidx.compose.ui.text.input.PasswordVisualTransformation()
+                },
+            )
+        }
+        MiuixIconButton(
+            icon = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+            contentDescription = placeholder,
+            onClick = { visible = !visible },
+            buttonSize = 40.dp,
+            iconSize = 20.dp,
+            tint = colors.onSurfaceVariant,
+        )
     }
 }
 
@@ -296,11 +361,11 @@ fun AiProviderDetailScreen(
                     placeholder = stringResource(R.string.ai_field_base_url),
                     singleLine = true,
                 )
-                MiuixTextField(
+                // 密钥按密码样式输入，避免旁观者直接看到
+                PasswordField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
                     placeholder = stringResource(R.string.ai_field_api_key),
-                    singleLine = true,
                 )
                 MiuixTextField(
                     value = model,
@@ -370,28 +435,6 @@ fun AiProviderDetailScreen(
                             { MiuixTag(text = stringResource(R.string.ai_in_use)) }
                         } else null,
                         onClick = { model = name; persist() },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(spacing.groupGap))
-
-        // 思考能力
-        MiuixSectionCard(
-            title = stringResource(R.string.ai_reasoning),
-            subtitle = stringResource(R.string.ai_reasoning_hint),
-        ) {
-            Column {
-                ReasoningEffort.entries.forEach { effort ->
-                    MiuixListItem(
-                        title = effort.label,
-                        leadingIcon = if (effort == saved.reasoning) {
-                            Icons.Outlined.Check
-                        } else null,
-                        trailing = if (effort == saved.reasoning) {
-                            { MiuixTag(text = stringResource(R.string.ai_in_use)) }
-                        } else null,
-                        onClick = { AiConfigStore.selectReasoning(context, effort) },
                     )
                 }
             }

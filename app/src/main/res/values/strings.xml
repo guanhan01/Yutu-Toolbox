@@ -20,7 +20,7 @@
     <string name="chat_sug_apk">Analyze APK</string>
     <string name="chat_hero_title">What can I help with?</string>
     <string name="chat_new">New chat</string>
-    <string name="ai_key_note">The key is stored in plain text in local SharedPreferences; avoid entering it on a shared device.</string>
+    <string name="ai_key_note">The key is encrypted with the system keystore and kept on this device only.</string>
     <string name="ai_save">Save</string>
     <string name="ai_field_model">Model name</string>
     <string name="ai_field_api_key">API key</string>
