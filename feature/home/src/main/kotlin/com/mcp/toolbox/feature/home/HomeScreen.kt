@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Stop
@@ -108,8 +110,12 @@ fun HomeScreen(
     @androidx.annotation.DrawableRes providerIconRes: Int = 0,
     availableModels: List<String> = emptyList(),
     availableReasoning: List<String> = emptyList(),
+    /** 跨服务商的可选模型，仅含已拉取过列表的服务商。 */
+    modelOptions: List<ModelOption> = emptyList(),
     onSelectModel: (String) -> Unit = {},
     onSelectReasoning: (String) -> Unit = {},
+    /** 选中跨厂模型的某个模型：需要同时切换服务商与模型。 */
+    onSelectModelOption: (ModelOption) -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -222,35 +228,6 @@ fun HomeScreen(
             navigationIcon = Icons.Outlined.Menu,
             onNavigationClick = onOpenDrawer,
             actions = {
-                // 模型：图标就是当前服务商的 Logo
-                if (providerIconRes != 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .clickable { picker = PickerKind.MODEL },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Image(
-                            painter = painterResource(providerIconRes),
-                            contentDescription = stringResource(R.string.chat_pick_model),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-                // 思考模式
-                MiuixIconButton(
-                    icon = Icons.Outlined.Psychology,
-                    contentDescription = stringResource(R.string.chat_pick_reasoning),
-                    onClick = { picker = PickerKind.REASONING },
-                    buttonSize = 40.dp,
-                    iconSize = 20.dp,
-                    tint = if (currentReasoning != "Default") {
-                        MiuixTheme.colors.primary
-                    } else {
-                        MiuixTheme.colors.onSurfaceVariant
-                    },
-                )
                 // 新建对话
                 MiuixIconButton(
                     icon = Icons.Outlined.AddComment,
@@ -347,7 +324,12 @@ fun HomeScreen(
             sending = sending,
             onSend = { submit(input) },
             onStop = onStop,
-
+            onAttach = { showOverflow = true },
+            onPickModel = { picker = PickerKind.MODEL },
+            onPickReasoning = { picker = PickerKind.REASONING },
+            providerIconRes = providerIconRes,
+            providerIconLabel = stringResource(R.string.chat_pick_model),
+            reasoningActive = currentReasoning != "Default",
         )
     }
 
@@ -380,16 +362,23 @@ fun HomeScreen(
     }
 
     picker?.let { kind ->
-        PickerSheet(
-            kind = kind,
-            options = if (kind == PickerKind.MODEL) availableModels else availableReasoning,
-            selected = if (kind == PickerKind.MODEL) currentModel else currentReasoning,
-            onPick = { value ->
-                if (kind == PickerKind.MODEL) onSelectModel(value) else onSelectReasoning(value)
-                picker = null
-            },
-            onDismiss = { picker = null },
-        )
+        when (kind) {
+            PickerKind.MODEL -> ModelPickerSheet(
+                options = modelOptions,
+                fallback = availableModels,
+                onPickOption = { onSelectModelOption(it); picker = null },
+                onPickFallback = { onSelectModel(it); picker = null },
+                onDismiss = { picker = null },
+            )
+
+            PickerKind.REASONING -> PickerSheet(
+                kind = PickerKind.REASONING,
+                options = availableReasoning,
+                selected = currentReasoning,
+                onPick = { onSelectReasoning(it); picker = null },
+                onDismiss = { picker = null },
+            )
+        }
     }
 }
 
@@ -549,6 +538,120 @@ private fun SelectorChip(text: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * 跨服务商的模型选择弹层。
+ *
+ * 只列出「已经拉取过模型列表」的服务商；选中即同时切换服务商与该模型。
+ */
+@Composable
+private fun ModelPickerSheet(
+    options: List<ModelOption>,
+    fallback: List<String>,
+    onPickOption: (ModelOption) -> Unit,
+    onPickFallback: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
+                .background(colors.surface)
+                .padding(vertical = 16.dp),
+        ) {
+            MiuixText(
+                text = stringResource(R.string.chat_pick_model),
+                style = MiuixTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
+            ) {
+                if (options.isEmpty() && fallback.isEmpty()) {
+                    MiuixText(
+                        text = stringResource(R.string.chat_pick_empty),
+                        style = MiuixTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    )
+                }
+
+                // 没有跨厂信息时，退回当前服务商的模型列表
+                if (options.isEmpty()) {
+                    fallback.forEach { id ->
+                        PickerRow(text = id, active = false) { onPickFallback(id) }
+                    }
+                } else {
+                    var lastProvider = ""
+                    options.forEach { option ->
+                        if (option.providerName != lastProvider) {
+                            lastProvider = option.providerName
+                            Row(
+                                modifier = Modifier.padding(
+                                    start = 8.dp,
+                                    top = 10.dp,
+                                    bottom = 4.dp,
+                                ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (option.providerIconRes != 0) {
+                                    Image(
+                                        painter = painterResource(option.providerIconRes),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                                MiuixText(
+                                    text = option.providerTitle,
+                                    style = MiuixTheme.typography.labelMedium,
+                                    color = colors.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        PickerRow(text = option.modelId, active = option.isCurrent) {
+                            onPickOption(option)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 弹层里的一行选项。 */
+@Composable
+private fun PickerRow(text: String, active: Boolean, onClick: () -> Unit) {
+    val colors = MiuixTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(MiuixTheme.radius.field))
+            .background(
+                if (active) colors.primary.copy(alpha = 0.10f)
+                else androidx.compose.ui.graphics.Color.Transparent,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (active) {
+            MiuixIcon(Icons.Outlined.Check, null, tint = colors.primary, size = 16.dp)
+        }
+        MiuixText(
+            text = text,
+            style = MiuixTheme.typography.bodyMedium,
+            color = if (active) colors.primary else colors.onSurface,
+        )
+    }
+}
+
 /** 模型 / 档位选择弹层。 */
 @Composable
 private fun PickerSheet(
@@ -626,6 +729,12 @@ private fun InputBar(
     sending: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onAttach: () -> Unit,
+    onPickModel: () -> Unit,
+    onPickReasoning: () -> Unit,
+    @androidx.annotation.DrawableRes providerIconRes: Int,
+    providerIconLabel: String,
+    reasoningActive: Boolean,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -649,9 +758,50 @@ private fun InputBar(
                 .weight(1f)
                 .clip(RoundedCornerShape(MiuixTheme.radius.lg))
                 .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
-                .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // 附件
+            MiuixIconButton(
+                icon = Icons.Outlined.Add,
+                contentDescription = stringResource(R.string.chat_attach),
+                onClick = onAttach,
+                buttonSize = 36.dp,
+                iconSize = 20.dp,
+                tint = colors.onSurfaceVariant,
+            )
+            // 模型：图标即当前服务商 Logo
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onPickModel),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (providerIconRes != 0) {
+                    Image(
+                        painter = painterResource(providerIconRes),
+                        contentDescription = providerIconLabel,
+                        modifier = Modifier.size(20.dp),
+                    )
+                } else {
+                    MiuixIcon(
+                        Icons.Outlined.SwapHoriz,
+                        null,
+                        tint = colors.onSurfaceVariant,
+                        size = 20.dp,
+                    )
+                }
+            }
+            // 思考模式
+            MiuixIconButton(
+                icon = Icons.Outlined.Psychology,
+                contentDescription = stringResource(R.string.chat_pick_reasoning),
+                onClick = onPickReasoning,
+                buttonSize = 36.dp,
+                iconSize = 20.dp,
+                tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
+            )
             Box(
                 modifier = Modifier.weight(1f).heightIn(min = 36.dp),
                 contentAlignment = Alignment.CenterStart,

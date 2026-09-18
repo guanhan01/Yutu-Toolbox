@@ -45,3 +45,16 @@ data class ChatSession(
             ?.takeIf { it.isNotEmpty() }
             ?: title
 }
+
+/**
+ * 可供切换的一个模型。
+ *
+ * 跨服务商聚合：只有已拉取过模型列表的服务商才会出现在切换菜单里。
+ */
+data class ModelOption(
+    val providerName: String,
+    val providerTitle: String,
+    @androidx.annotation.DrawableRes val providerIconRes: Int,
+    val modelId: String,
+    val isCurrent: Boolean,
+)

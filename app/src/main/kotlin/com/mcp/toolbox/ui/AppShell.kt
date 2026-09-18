@@ -281,6 +281,30 @@ private fun ToolboxNavHost(
                             )
                         }
                     },
+                    // 跨服务商的可选模型：只列出已拉取过模型列表的服务商
+                    modelOptions = aiConfig.perProvider.values
+                        .filter { it.models.isNotEmpty() }
+                        .flatMap { cfg ->
+                            cfg.models.map { entry ->
+                                com.mcp.toolbox.feature.home.ModelOption(
+                                    providerName = cfg.provider.name,
+                                    providerTitle = cfg.provider.title,
+                                    providerIconRes = cfg.provider.iconRes,
+                                    modelId = entry.id,
+                                    isCurrent = cfg.provider == aiConfig.current &&
+                                        entry.id == cfg.selectedModel,
+                                )
+                            }
+                        },
+                    onSelectModelOption = { option ->
+                        val target = runCatching {
+                            com.mcp.toolbox.ui.ai.AiProvider.valueOf(option.providerName)
+                        }.getOrNull()
+                        if (target != null) {
+                            AiConfigStore.selectProvider(shellContext, target)
+                            AiConfigStore.selectModel(shellContext, option.modelId)
+                        }
+                    },
                     providerIconRes = aiConfig.current.iconRes,
                     runningText = chatRunning?.streamed,
                     runningReasoning = chatRunning?.reasoning,
