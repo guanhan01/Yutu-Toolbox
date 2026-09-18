@@ -133,7 +133,12 @@ object MitmProxy {
             val seed = seedId?.let { CaptureStore.find(it) }
             if (!running.get()) return
 
-            val sslContext = contextFor(name) ?: throw IllegalStateException("无法为 $name 生成解密证书")
+            val sslContext = contextFor(name) ?: throw IllegalStateException(
+                buildString {
+                    append("无法为 ").append(name).append(" 生成解密证书")
+                    MitmCa.lastLeafError?.let { append("｜").append(it) }
+                },
+            )
             stage = "连接上游"
             val rawUpstream = Socket()
             protectSocket?.invoke(rawUpstream)

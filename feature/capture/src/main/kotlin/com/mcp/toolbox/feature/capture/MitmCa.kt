@@ -66,6 +66,16 @@ object MitmCa {
             "MCP Toolbox Capture",
         )
 
+    /**
+     * 最近一次签发失败的原因。
+     *
+     * 界面上原先只显示笼统的「无法生成解密证书」，无从定位到底是 CA、私钥还是
+     * DER 编码出错；这里把每一步的异常记下来，供记录详情展示。
+     */
+    @Volatile
+    var lastLeafError: String? = null
+        private set
+
     /** 取（或生成）host 的叶子证书与私钥；失败返回 null，调用方应回退为直连。 */
     fun leaf(context: Context, host: String): Pair<X509Certificate, PrivateKey>? {
         synchronized(cache) {
@@ -73,11 +83,26 @@ object MitmCa {
                 return it
             }
         }
-        val ca = CertificateAuthority.ensure(context).getOrNull() ?: return null
-        val caKey = CertificateAuthority.loadPrivateKey(ca.keyFile) ?: return null
-        val leafKey = leafKeyPair(context) ?: return null
-        val certificate =
-            runCatching { sign(host, leafKey.public, caKey) }.getOrNull() ?: return null
+        val ca = CertificateAuthority.ensure(context).getOrElse {
+            lastLeafError = "CA 不可用：${it::class.simpleName}: ${it.message}"
+            return null
+        }
+        val caKey = CertificateAuthority.loadPrivateKey(ca.keyFile)
+        if (caKey == null) {
+            lastLeafError = "CA 私钥读取失败（${ca.keyFile.name}）"
+            return null
+        }
+        val leafKey = leafKeyPair(context)
+        if (leafKey == null) {
+            lastLeafError = "叶子私钥准备失败"
+            return null
+        }
+        val signResult = runCatching { sign(host, leafKey.public, caKey) }
+        val certificate = signResult.getOrElse {
+            lastLeafError = "签名失败：${it::class.simpleName}: ${it.message}"
+            return null
+        }
+        lastLeafError = null
         val pair = certificate to leafKey.private
         synchronized(cache) { cache[host] = pair }
         return pair
