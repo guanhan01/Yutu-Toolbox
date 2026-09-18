@@ -447,7 +447,7 @@ private fun ReplaySection(record: CaptureRecord, onToast: (String) -> Unit) {
         if (record.kind != CaptureKind.HTTP) {
 
             MiuixText(
-                text = "只有明文 HTTP 记录可以原样重放；HTTPS 记录没有可用明文请求（未做中间人解密）。",
+                text = "只有明文 HTTP 记录可以原样重放；HTTPS 记录需要打开「HTTPS 解密」并已把 CA 装到系统证书区，否则没有可用的明文请求。",
                 style = MiuixTheme.typography.bodySmall,
                 color = colors.warning,
             )

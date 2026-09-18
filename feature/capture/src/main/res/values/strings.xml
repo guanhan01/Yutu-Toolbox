@@ -11,7 +11,7 @@
     <string name="capture_screen_menu_scope">Scope / app filter</string>
     <string name="capture_screen_menu_dns_log">DNS observations</string>
     <string name="capture_screen_menu_ca">User CA certificate</string>
-    <string name="capture_screen_menu_decrypt">HTTPS decryption (CA)</string>
+    <string name="capture_screen_menu_decrypt">HTTPS decrypt</string>
     <string name="capture_screen_state_on">On</string>
     <string name="capture_screen_state_off">Off</string>
     <string name="capture_screen_toast_decrypt_on">HTTPS decryption on: install the CA from User CA certificate first, then start capture again</string>

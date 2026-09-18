@@ -216,7 +216,17 @@ object ArtifactStore {
             )
             writeManifest(dir, updated)
             if (config.value.externalSync && externalRootUri(context) != null) {
+                // 不要静默：失败要能在 MCP 页面的产物卡片里看到原因
                 runCatching { mirror(context, dir) }
+                    .onFailure {
+                        mirrorState.value = MirrorReport(
+                            at = System.currentTimeMillis(),
+                            sessions = 1,
+                            files = 0,
+                            bytes = 0,
+                            error = it.message ?: it::class.simpleName ?: "同步失败",
+                        )
+                    }
             }
             enforce(context)
             return updated
@@ -360,6 +370,27 @@ object ArtifactStore {
             .getString(KEY_ROOT_URI, null)
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
 
+    /**
+     * 探测外置目录当前是否真的可写。
+     *
+     * SAF 的授权可能因为用户清理、目录被删等情况失效，而 `externalRootUri` 仍然非空，
+     * 于是同步会静默失败。这里实际写一个探针文件来判断。
+     */
+    fun externalRootWritable(context: Context): Boolean {
+        val tree = externalRootUri(context) ?: return false
+        val target = DocumentFile.fromTreeUri(context, tree) ?: return false
+        val probeName = ".write-test"
+        return runCatching {
+            val doc = target.findFile(probeName) ?: target.createFile("application/octet-stream", probeName)
+            if (doc == null) return@runCatching false
+            context.contentResolver.openOutputStream(doc.uri, "wt")?.use { out ->
+                out.write(byteArrayOf(1))
+            } ?: return@runCatching false
+            doc.delete()
+            true
+        }.getOrDefault(false)
+    }
+
     /** 绑定 / 解绑外置目录；绑定会持久化授权，重启后仍可写。 */
     fun setExternalRoot(context: Context, uri: Uri?) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -393,9 +424,12 @@ object ArtifactStore {
      */
     fun mirror(context: Context, only: File? = null): MirrorReport {
         val tree = externalRootUri(context)
-            ?: return MirrorReport(System.currentTimeMillis(), 0, 0, 0, "未选择外置目录")
+            ?: return MirrorReport(System.currentTimeMillis(), 0, 0, 0, "未选择外置目录").also {
+                mirrorState.value = it
+            }
         val target = DocumentFile.fromTreeUri(context, tree)
-            ?: return MirrorReport(System.currentTimeMillis(), 0, 0, 0, "外置目录不可访问，请重新选择")
+            ?: return MirrorReport(System.currentTimeMillis(), 0, 0, 0, "外置目录授权已失效，请重新选择")
+                .also { mirrorState.value = it }
         val base = root(context)
         val sessions = if (only != null) {
             listOf(only)
@@ -454,7 +488,12 @@ object ArtifactStore {
                 continue
             }
             val doc = existing ?: parent.createFile(mimeOf(name), name) ?: continue
-            context.contentResolver.openOutputStream(doc.uri, "wt")?.use { out ->
+            // 部分 SAF provider 不认 "wt"（truncate），依次回退到 "w" 与 "rwt"
+            val stream = context.contentResolver.openOutputStream(doc.uri, "wt")
+                ?: context.contentResolver.openOutputStream(doc.uri, "w")
+                ?: context.contentResolver.openOutputStream(doc.uri, "rwt")
+                ?: throw IllegalStateException("无法打开写入流：$name")
+            stream.use { out ->
                 file.inputStream().use { input -> input.copyTo(out) }
             }
             files++

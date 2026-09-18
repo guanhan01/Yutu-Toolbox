@@ -11,7 +11,7 @@
     <string name="capture_screen_menu_scope">接管范围 / 应用过滤</string>
     <string name="capture_screen_menu_dns_log">DNS 观测记录</string>
     <string name="capture_screen_menu_ca">用户 CA 证书</string>
-    <string name="capture_screen_menu_decrypt">HTTPS 解密（CA 中间人）</string>
+    <string name="capture_screen_menu_decrypt">HTTPS 解密</string>
     <string name="capture_screen_state_on">开</string>
     <string name="capture_screen_state_off">关</string>
     <string name="capture_screen_toast_decrypt_on">已开启 HTTPS 解密：先在「用户 CA 证书」里一键装到证书区，再重新开始抓包</string>
