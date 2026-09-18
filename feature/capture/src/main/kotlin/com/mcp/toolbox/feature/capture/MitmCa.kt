@@ -422,8 +422,20 @@ object MitmCa {
             .getOrNull()
 
     /** DER Name（RDNSequence），CertificateAuthority.name 是私有的，这里用公开的 der/utf8 组一份。 */
+    /**
+     * X.501 Name：
+     * `SEQUENCE OF RelativeDistinguishedName`，其中
+     * `RelativeDistinguishedName ::= SET OF AttributeTypeAndValue`，
+     * `AttributeTypeAndValue ::= SEQUENCE { type OID, value ANY }`。
+     *
+     * 注意中间必须是 SET（0x31）而不是 SEQUENCE——写成 SEQUENCE 时 OpenSSL 会报
+     * `ASN.1 encoding routines: WRONG_TAG`，证书无法解析。
+     */
     private fun nameOf(vararg entries: Pair<ByteArray, String>): ByteArray =
-        der(0x30, entries.map { der(0x30, listOf(it.first, utf8(it.second))) })
+        der(
+            0x30,
+            entries.map { der(0x31, der(0x30, listOf(it.first, utf8(it.second)))) },
+        )
 
     private fun caSubjectDer(): ByteArray =
         nameOf(
