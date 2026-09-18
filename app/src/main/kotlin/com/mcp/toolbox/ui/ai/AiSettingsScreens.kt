@@ -1,8 +1,8 @@
 package com.mcp.toolbox.ui.ai
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,13 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,26 +35,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.R
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import com.mcp.toolbox.core.design.component.MiuixIcon
-import androidx.compose.material.icons.outlined.Visibility
 import com.mcp.toolbox.core.design.component.MiuixIconButton
-import com.mcp.toolbox.core.design.component.MiuixListItem
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
 import com.mcp.toolbox.core.design.component.MiuixTag
-import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
 
-/** 服务商徽标：有品牌图形的用图形，其余回退到字母。 */
+/** 服务商徽标：有品牌图形的用图形，其余回退字母。 */
 @Composable
 fun ProviderBadge(provider: AiProvider, size: Dp = 34.dp) {
     Box(
@@ -67,7 +68,7 @@ fun ProviderBadge(provider: AiProvider, size: Dp = 34.dp) {
             Image(
                 painter = painterResource(provider.iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(size * 0.58f),
+                modifier = Modifier.size(size * 0.62f),
             )
         } else {
             MiuixText(
@@ -79,10 +80,103 @@ fun ProviderBadge(provider: AiProvider, size: Dp = 34.dp) {
     }
 }
 
-/** AI 设置主页：当前服务概览 + 进入服务商选择。 */
+/** 单选圆圈：只负责勾选。 */
+@Composable
+private fun SelectionCircle(
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MiuixTheme.colors
+    Box(
+        modifier = modifier
+            .padding(horizontal = 20.dp)
+            .size(26.dp)
+            .clip(CircleShape)
+            .background(if (selected) colors.primary else colors.surfaceContainerHighest)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            MiuixIcon(Icons.Outlined.Check, null, tint = colors.onPrimary, size = 16.dp)
+        }
+    }
+}
+
+/** 密码框：眼睛图标内嵌在输入框右侧。 */
+@Composable
+private fun SecretField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+) {
+    val colors = MiuixTheme.colors
+    val typography = MiuixTheme.typography
+    var visible by remember { mutableStateOf(false) }
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        visualTransformation = if (visible) VisualTransformation.None
+        else PasswordVisualTransformation(),
+        textStyle = typography.bodyLarge.copy(color = colors.onSurface),
+        cursorBrush = SolidColor(colors.primary),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(MiuixTheme.radius.field))
+                    .background(colors.surfaceContainerHigh)
+                    .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        MiuixText(
+                            text = placeholder,
+                            style = typography.bodyLarge,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                    inner()
+                }
+                MiuixIconButton(
+                    icon = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = placeholder,
+                    onClick = { visible = !visible },
+                    buttonSize = 40.dp,
+                    iconSize = 18.dp,
+                    tint = colors.onSurfaceVariant,
+                )
+            }
+        },
+    )
+}
+
+/** 普通输入框，关闭右侧清除按钮。 */
+@Composable
+private fun PlainField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = true,
+) {
+    com.mcp.toolbox.core.design.component.MiuixTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = placeholder,
+        singleLine = singleLine,
+        showClear = false,
+    )
+}
+
+/** AI 设置主页。 */
 @Composable
 fun AiSettingsScreen(
     onOpenProviders: () -> Unit,
+    onOpenModels: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MiuixTheme.colors
@@ -102,40 +196,44 @@ fun AiSettingsScreen(
         Spacer(Modifier.height(spacing.sm))
         MiuixSectionCard(title = stringResource(R.string.ai_section_current)) {
             Column {
-                MiuixListItem(
-                    title = stringResource(R.string.ai_provider_title),
-                    subtitle = config.provider.title,
-                    leading = { ProviderBadge(config.provider) },
-                    trailing = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            MiuixText(
-                                text = if (config.ready) {
-                                    stringResource(R.string.ai_ready)
-                                } else {
-                                    stringResource(R.string.ai_not_ready)
-                                },
-                                style = MiuixTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant,
-                            )
-                            MiuixIcon(
-                                Icons.Outlined.ChevronRight,
-                                null,
-                                tint = colors.onSurfaceVariant,
-                                size = 18.dp,
-                            )
-                        }
-                    },
-                    showDivider = true,
-                    onClick = onOpenProviders,
-                )
-                MiuixListItem(
-                    title = stringResource(R.string.ai_current_model),
-                    subtitle = config.model.ifBlank { "-" },
-                    leadingIcon = Icons.Outlined.Tune,
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenProviders)
+                        .padding(start = 20.dp, top = 14.dp, bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    ProviderBadge(config.current)
+                    Column(Modifier.weight(1f)) {
+                        MiuixText(config.current.title, style = MiuixTheme.typography.bodyLarge)
+                        MiuixText(
+                            text = if (config.ready) stringResource(R.string.ai_ready)
+                            else stringResource(R.string.ai_not_ready),
+                            style = MiuixTheme.typography.bodySmall,
+                            color = if (config.ready) colors.success else colors.onSurfaceVariant,
+                        )
+                    }
+                }
+                MiuixDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenModels)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    MiuixIcon(Icons.Outlined.Tune, null, tint = colors.onSurfaceVariant, size = 20.dp)
+                    Column(Modifier.weight(1f)) {
+                        MiuixText(stringResource(R.string.ai_models), style = MiuixTheme.typography.bodyLarge)
+                        MiuixText(
+                            text = config.model.ifBlank { "-" },
+                            style = MiuixTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(spacing.groupGap))
@@ -149,36 +247,9 @@ fun AiSettingsScreen(
     }
 }
 
-/** 单选圆圈：只负责勾选，不触发跳转。 */
-@Composable
-private fun SelectionCircle(selected: Boolean, onClick: () -> Unit) {
-    val colors = MiuixTheme.colors
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 20.dp)
-            .size(26.dp)
-            .clip(CircleShape)
-            .background(
-                if (selected) colors.primary else colors.surfaceContainerHighest,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (selected) {
-            MiuixIcon(
-                Icons.Outlined.Check,
-                null,
-                tint = colors.onPrimary,
-                size = 16.dp,
-            )
-        }
-    }
-}
-
 /** 二级：服务商列表。点圆圈勾选，点其余区域进入该服务商的配置界面。 */
 @Composable
 fun AiProviderListScreen(
-    onBack: () -> Unit,
     onOpenProvider: (AiProvider) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -198,8 +269,6 @@ fun AiProviderListScreen(
         MiuixSectionCard(title = stringResource(R.string.ai_provider_pick)) {
             Column {
                 AiProvider.entries.forEachIndexed { index, provider ->
-                    // 不用 MiuixListItem：它的整行 onClick 会吞掉 trailing 的点击，
-                    // 导致点圆圈也跳转。这里自己排两段可点区域，互不干扰。
                     Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -208,10 +277,7 @@ fun AiProviderListScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable {
-                                        AiConfigStore.selectProvider(context, provider)
-                                        onOpenProvider(provider)
-                                    }
+                                    .clickable { onOpenProvider(provider) }
                                     .padding(start = 20.dp, top = 14.dp, bottom = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -232,15 +298,11 @@ fun AiProviderListScreen(
                                 }
                             }
                             SelectionCircle(
-                                selected = provider == config.provider,
-                                onClick = {
-                                    AiConfigStore.selectProvider(context, provider)
-                                },
+                                selected = provider == config.current,
+                                onClick = { AiConfigStore.selectProvider(context, provider) },
                             )
                         }
-                        if (index != AiProvider.entries.lastIndex) {
-                            MiuixDivider()
-                        }
+                        if (index != AiProvider.entries.lastIndex) MiuixDivider()
                     }
                 }
             }
@@ -249,77 +311,58 @@ fun AiProviderListScreen(
     }
 }
 
-/** 密码样式的输入框：默认遮蔽，右侧可切换明文。 */
-@Composable
-private fun PasswordField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-) {
-    val colors = MiuixTheme.colors
-    var visible by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Box(Modifier.weight(1f)) {
-            MiuixTextField(
-                value = value,
-                onValueChange = onValueChange,
-                placeholder = placeholder,
-                singleLine = true,
-                visualTransformation = if (visible) {
-                    androidx.compose.ui.text.input.VisualTransformation.None
-                } else {
-                    androidx.compose.ui.text.input.PasswordVisualTransformation()
-                },
-            )
-        }
-        MiuixIconButton(
-            icon = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-            contentDescription = placeholder,
-            onClick = { visible = !visible },
-            buttonSize = 40.dp,
-            iconSize = 20.dp,
-            tint = colors.onSurfaceVariant,
-        )
-    }
-}
-
-/** 三级：服务商配置。含连接参数、拉取模型、思考档位。 */
+/** 三级：服务商配置。 */
 @Composable
 fun AiProviderDetailScreen(
     providerName: String,
-    onBack: () -> Unit,
+    onOpenModels: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val saved by AiConfigStore.config.collectAsState()
+    val config by AiConfigStore.config.collectAsState()
+
     val provider = remember(providerName) {
         runCatching { AiProvider.valueOf(providerName) }.getOrDefault(AiProvider.OPENAI)
     }
-
-    var baseUrl by remember(provider) { mutableStateOf(saved.baseUrl) }
-    var apiKey by remember(provider) { mutableStateOf(saved.apiKey) }
-    var model by remember(provider) { mutableStateOf(saved.model) }
-    var tip by remember { mutableStateOf<String?>(null) }
-    var pulling by remember { mutableStateOf(false) }
-    var models by remember(provider) { mutableStateOf(saved.cachedModels) }
-
-    fun persist() {
-        AiConfigStore.save(
-            context,
-            saved.copy(
-                provider = provider,
-                baseUrl = baseUrl.trim(),
-                apiKey = apiKey.trim(),
-                model = model.trim(),
-            ),
+    val cfg = remember(config, provider) {
+        config.perProvider[provider] ?: ProviderConfig(
+            provider = provider,
+            baseUrl = provider.baseUrl,
+            selectedModel = provider.defaultModel,
         )
+    }
+
+    var baseUrl by remember(provider, cfg.baseUrl) { mutableStateOf(cfg.baseUrl) }
+    var apiKey by remember(provider, cfg.apiKey) { mutableStateOf(cfg.apiKey) }
+    var sysPrompt by remember(provider, cfg.systemPrompt) { mutableStateOf(cfg.systemPrompt) }
+    var headerKey by remember { mutableStateOf("") }
+    var headerValue by remember { mutableStateOf("") }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var saved by remember { mutableStateOf(false) }
+
+    fun persist(change: (ProviderConfig) -> ProviderConfig = { it }) {
+        AiConfigStore.update(context) { c ->
+            val cur = c.perProvider[provider] ?: ProviderConfig(
+                provider = provider,
+                baseUrl = provider.baseUrl,
+                selectedModel = provider.defaultModel,
+            )
+            c.copy(
+                perProvider = c.perProvider + (
+                    provider to change(
+                        cur.copy(
+                            baseUrl = baseUrl.trim(),
+                            apiKey = apiKey.trim(),
+                            systemPrompt = sysPrompt,
+                        ),
+                    )
+                    ),
+            )
+        }
     }
 
     Column(
@@ -331,14 +374,10 @@ fun AiProviderDetailScreen(
     ) {
         Spacer(Modifier.height(spacing.sm))
 
-        // 连接参数
+        // 连接
         MiuixSectionCard(
             title = provider.title,
-            subtitle = if (provider.isCustom) {
-                stringResource(R.string.ai_custom_hint)
-            } else {
-                provider.docsHint
-            },
+            subtitle = provider.docsHint.ifBlank { stringResource(R.string.ai_custom_hint) },
         ) {
             Column(
                 modifier = Modifier.padding(spacing.lg),
@@ -350,29 +389,12 @@ fun AiProviderDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(spacing.md),
                 ) {
                     ProviderBadge(provider, size = 44.dp)
-                    MiuixText(
-                        text = provider.title,
-                        style = MiuixTheme.typography.titleMedium,
-                    )
+                    MiuixText(provider.title, style = MiuixTheme.typography.titleMedium)
                 }
-                MiuixTextField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it },
-                    placeholder = stringResource(R.string.ai_field_base_url),
-                    singleLine = true,
-                )
-                // 密钥按密码样式输入，避免旁观者直接看到
-                PasswordField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    placeholder = stringResource(R.string.ai_field_api_key),
-                )
-                MiuixTextField(
-                    value = model,
-                    onValueChange = { model = it },
-                    placeholder = stringResource(R.string.ai_field_model),
-                    singleLine = true,
-                )
+                PlainField(baseUrl, { baseUrl = it }, stringResource(R.string.ai_field_base_url))
+                SecretField(apiKey, { apiKey = it }, stringResource(R.string.ai_field_api_key))
+                PlainField(sysPrompt, { sysPrompt = it }, stringResource(R.string.ai_field_system), singleLine = false)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -380,61 +402,123 @@ fun AiProviderDetailScreen(
                 ) {
                     MiuixButton(
                         text = stringResource(R.string.ai_save),
-                        onClick = { persist(); tip = "已保存" },
-                        enabled = baseUrl.isNotBlank() && model.isNotBlank(),
+                        onClick = { persist(); saved = true },
+                        enabled = baseUrl.isNotBlank(),
                     )
-                    tip?.let {
+                    MiuixButton(
+                        text = if (testing) stringResource(R.string.ai_testing)
+                        else stringResource(R.string.ai_test),
+                        onClick = {
+                            testing = true
+                            testResult = null
+                            scope.launch {
+                                persist()
+                                testResult = AiChatClient.listModelsFor(
+                                    provider = provider,
+                                    baseUrl = baseUrl.trim(),
+                                    apiKey = apiKey.trim(),
+                                )
+                                    .fold(
+                                        onSuccess = { "连接正常，可用模型 ${it.size} 个" },
+                                        onFailure = { "连接失败：${it.message}" },
+                                    )
+                                testing = false
+                            }
+                        },
+                        enabled = baseUrl.isNotBlank() && !testing,
+                        loading = testing,
+                    )
+                    if (saved && testResult == null) {
                         MiuixText(
-                            text = it,
+                            text = "已保存",
                             style = MiuixTheme.typography.bodySmall,
                             color = colors.success,
                         )
                     }
                 }
+                testResult?.let {
+                    MiuixText(
+                        text = it,
+                        style = MiuixTheme.typography.bodySmall,
+                        color = if (it.startsWith("连接正常")) colors.success else colors.error,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(spacing.groupGap))
 
-        // 模型：拉取 + 选择
-        MiuixSectionCard(
-            title = stringResource(R.string.ai_models),
-            subtitle = stringResource(R.string.ai_models_hint),
-        ) {
+        // 自定义请求头
+        MiuixSectionCard(title = stringResource(R.string.ai_headers)) {
             Column {
-                MiuixListItem(
-                    title = stringResource(R.string.ai_pull_models),
-                    subtitle = if (pulling) {
-                        stringResource(R.string.ai_pulling)
-                    } else {
-                        stringResource(R.string.ai_pull_desc, models.size)
-                    },
-                    leadingIcon = Icons.Outlined.Refresh,
-                    onClick = {
-                        if (pulling) return@MiuixListItem
-                        pulling = true
-                        scope.launch {
-                            persist()
-                            val cfg = AiConfigStore.config.value
-                            val result = AiChatClient.listModels(cfg)
-                            pulling = false
-                            result
-                                .onSuccess {
-                                    models = it
-                                    AiConfigStore.setCachedModels(context, it)
-                                    tip = null
-                                }
-                                .onFailure { tip = it.message }
+                cfg.customHeaders.forEach { (k, v) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            MiuixText(k, style = MiuixTheme.typography.bodyMedium)
+                            MiuixText(
+                                text = v,
+                                style = MiuixTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant,
+                            )
                         }
-                    },
-                )
-                models.forEach { name ->
-                    MiuixListItem(
-                        title = name,
-                        leadingIcon = if (name == model) Icons.Outlined.Check else null,
-                        trailing = if (name == model) {
-                            { MiuixTag(text = stringResource(R.string.ai_in_use)) }
-                        } else null,
-                        onClick = { model = name; persist() },
+                        MiuixIconButton(
+                            icon = Icons.Outlined.Delete,
+                            contentDescription = null,
+                            onClick = {
+                                persist { it.copy(customHeaders = it.customHeaders - k) }
+                            },
+                            buttonSize = 40.dp,
+                            iconSize = 18.dp,
+                            tint = colors.onSurfaceVariant,
+                        )
+                    }
+                    MiuixDivider()
+                }
+                Column(
+                    modifier = Modifier.padding(spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                ) {
+                    PlainField(headerKey, { headerKey = it }, stringResource(R.string.ai_header_key))
+                    PlainField(headerValue, { headerValue = it }, stringResource(R.string.ai_header_value))
+                    MiuixButton(
+                        text = stringResource(R.string.ai_header_add),
+                        onClick = {
+                            val k = headerKey.trim()
+                            if (k.isNotBlank()) {
+                                persist { it.copy(customHeaders = it.customHeaders + (k to headerValue.trim())) }
+                                headerKey = ""
+                                headerValue = ""
+                            }
+                        },
+                        enabled = headerKey.isNotBlank(),
+                        leadingIcon = Icons.Outlined.Add,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(spacing.groupGap))
+
+        // 模型管理入口
+        MiuixSectionCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenModels)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                MiuixIcon(Icons.Outlined.Tune, null, tint = colors.onSurfaceVariant, size = 20.dp)
+                Column(Modifier.weight(1f)) {
+                    MiuixText(stringResource(R.string.ai_models), style = MiuixTheme.typography.bodyLarge)
+                    MiuixText(
+                        text = stringResource(R.string.ai_models_count, cfg.models.size),
+                        style = MiuixTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
                     )
                 }
             }
@@ -449,4 +533,3 @@ fun AiProviderDetailScreen(
         Spacer(Modifier.height(32.dp))
     }
 }
-

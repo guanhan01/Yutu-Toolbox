@@ -52,13 +52,13 @@ object AiChatClient {
         context: Context,
         config: AiConfig,
         history: List<ChatMessage>,
-        systemPrompt: String? = null,
+        systemPrompt: String? = config.systemPrompt.takeIf { it.isNotBlank() },
         enableTools: Boolean = true,
         onToolCall: (name: String, arguments: String) -> Unit = { _, _ -> },
         onToolResult: (name: String, result: String) -> Unit = { _, _ -> },
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
-        when (config.provider) {
+        when (config.current) {
             AiProvider.ANTHROPIC -> return@withContext anthropicStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onDelta,
@@ -206,6 +206,7 @@ object AiChatClient {
                 url = AnthropicBackend.endpoint(config),
                 payload = payload.toString(),
                 headers = AnthropicBackend.headers(config),
+                config = config,
             )
             val text = StringBuilder()
             val acc = ToolCallAccumulator()
@@ -294,6 +295,7 @@ object AiChatClient {
                 url = GeminiBackend.withKey(GeminiBackend.endpoint(config), config),
                 payload = payload.toString(),
                 headers = GeminiBackend.headers(config),
+                config = config,
             )
             val text = StringBuilder()
             val acc = ToolCallAccumulator()
@@ -347,6 +349,7 @@ object AiChatClient {
         url: String,
         payload: String,
         headers: Map<String, String>,
+        config: AiConfig,
     ): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -354,8 +357,32 @@ object AiChatClient {
             readTimeout = TIMEOUT_MS
             doOutput = true
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            config.customHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
             outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
         }
+
+    /**
+     * 指定服务商与凭据拉取模型列表。
+     *
+     * 供设置页「测试连接」与模型页「拉取」使用：这两处可能还没保存当前输入。
+     */
+    suspend fun listModelsFor(
+        provider: AiProvider,
+        baseUrl: String,
+        apiKey: String,
+    ): Result<List<String>> {
+        val probe = AiConfig(
+            current = provider,
+            perProvider = mapOf(
+                provider to ProviderConfig(
+                    provider = provider,
+                    baseUrl = baseUrl,
+                    apiKey = apiKey,
+                ),
+            ),
+        )
+        return listModels(probe)
+    }
 
     /** 拉取该服务商可用模型列表（OpenAI 兼容的 GET /models）。 */
     suspend fun listModels(config: AiConfig): Result<List<String>> = withContext(Dispatchers.IO) {
@@ -388,6 +415,7 @@ object AiChatClient {
     // ---------- 请求 ----------
 
     private fun validate(config: AiConfig) {
+        require(config.enabled) { "该服务商已被停用" }
         require(config.baseUrl.isNotBlank()) { "未配置接口地址" }
         require(config.model.isNotBlank()) { "未配置模型" }
         require(config.apiKey.isNotBlank()) { "未配置 API Key" }
@@ -402,6 +430,8 @@ object AiChatClient {
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Authorization", "Bearer ${config.apiKey}")
             setRequestProperty("Accept", "text/event-stream")
+            // 用户自定义请求头，可覆盖上面的默认值
+            config.customHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
             outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
         }
 

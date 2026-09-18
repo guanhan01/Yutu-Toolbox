@@ -63,6 +63,7 @@ import com.mcp.toolbox.feature.decompile.DecompileScreen
 import com.mcp.toolbox.feature.home.HomeScreen
 import com.mcp.toolbox.ui.ai.AiSettingsScreen
 import com.mcp.toolbox.ui.ai.AiProviderListScreen
+import com.mcp.toolbox.ui.ai.AiModelScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
@@ -309,7 +310,13 @@ private fun ToolboxNavHost(
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_ai),
                         onOpenDrawer = onOpenDrawer)
-                    AiSettingsScreen(onOpenProviders = { onNavigate(Routes.AI_PROVIDERS) })
+                    AiSettingsScreen(
+                        onOpenProviders = { onNavigate(Routes.AI_PROVIDERS) },
+                        onOpenModels = {
+                            AiHub.pendingProvider = AiConfigStore.config.value.current.name
+                            onNavigate(Routes.AI_MODELS)
+                        },
+                    )
                 }
             }
             composable(Routes.AI_PROVIDERS) {
@@ -318,7 +325,6 @@ private fun ToolboxNavHost(
                         title = stringResource(R.string.ai_provider_pick),
                         onOpenDrawer = onOpenDrawer)
                     AiProviderListScreen(
-                        onBack = { navController.popBackStack() },
                         onOpenProvider = { provider ->
                             AiHub.pendingProvider = provider.name
                             onNavigate(Routes.AI_PROVIDER_DETAIL)
@@ -333,8 +339,19 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     AiProviderDetailScreen(
                         providerName = AiHub.pendingProvider
-                            ?: AiConfigStore.config.value.provider.name,
-                        onBack = { navController.popBackStack() },
+                            ?: AiConfigStore.config.value.current.name,
+                        onOpenModels = { onNavigate(Routes.AI_MODELS) },
+                    )
+                }
+            }
+            composable(Routes.AI_MODELS) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.ai_model_manage),
+                        onOpenDrawer = onOpenDrawer)
+                    AiModelScreen(
+                        providerName = AiHub.pendingProvider
+                            ?: AiConfigStore.config.value.current.name,
                     )
                 }
             }

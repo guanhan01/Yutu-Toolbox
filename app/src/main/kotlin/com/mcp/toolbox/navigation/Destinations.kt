@@ -48,6 +48,7 @@ object Routes {
     const val AI_SETTINGS = "settings/ai"
     const val AI_PROVIDERS = "settings/ai/providers"
     const val AI_PROVIDER_DETAIL = "settings/ai/provider"
+    const val AI_MODELS = "settings/ai/models"
     const val SETTINGS_THEME = "settings/theme"
     const val SETTINGS_PRIVILEGE = "settings/privilege"
     const val ABOUT = "about"

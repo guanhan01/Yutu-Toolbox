@@ -4,6 +4,28 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="ai_current">当前</string>
+    <string name="ai_model_cancel">取消</string>
+    <string name="ai_model_delete">删除模型</string>
+    <string name="ai_model_context">上下文窗口（tokens）</string>
+    <string name="ai_model_id">Model ID</string>
+    <string name="ai_model_name">显示名称</string>
+    <string name="ai_edit_model">编辑模型</string>
+    <string name="ai_supports_reasoning">支持思考</string>
+    <string name="ai_models_empty">还没有模型，先拉取或手动添加</string>
+    <string name="ai_models_total">共 %1$d 个</string>
+    <string name="ai_search_model">搜索模型</string>
+    <string name="ai_add_model">添加自定义模型</string>
+    <string name="ai_pull_from_remote">从服务商拉取可用列表</string>
+    <string name="ai_model_manage">模型管理</string>
+    <string name="ai_models_count">已配置 %1$d 个</string>
+    <string name="ai_header_add">添加请求头</string>
+    <string name="ai_header_value">请求头值</string>
+    <string name="ai_header_key">请求头名称</string>
+    <string name="ai_headers">自定义请求头</string>
+    <string name="ai_testing">正在测试…</string>
+    <string name="ai_test">测试连接</string>
+    <string name="ai_field_system">系统提示词</string>
     <string name="ai_err_network">请求失败：%1$s</string>
     <string name="ai_pull_desc">当前已缓存 %1$d 个</string>
     <string name="ai_pulling">正在拉取…</string>
