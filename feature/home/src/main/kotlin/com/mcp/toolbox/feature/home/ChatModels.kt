@@ -15,14 +15,21 @@ data class ChatMessage(
      * 避免把 base64 或失效的临时 URI 长期留在磁盘上。
      */
     val imageUris: List<String> = emptyList(),
+    /** 工具调用名称（role == TOOL 时有值）。 */
+    val toolName: String = "",
+    /** 工具调用参数（role == TOOL 时有值）。 */
+    val toolArguments: String = "",
 ) {
     enum class Role {
         USER,
         ASSISTANT,
         SYSTEM,
 
-        /** 深度思考过程：模型推理文本 + 期间的工具调用记录。 */
+        /** 深度思考过程：模型推理文本。 */
         REASONING,
+
+        /** 一次工具调用：content 为结果，toolName/toolArguments 为调用信息。 */
+        TOOL,
     }
 }
 

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
@@ -265,25 +266,30 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     items(session!!.messages, key = { it.id }) { message ->
-                        if (message.role == ChatMessage.Role.REASONING) {
-                            ReasoningBlock(message.content)
-                        } else {
-                            MessageBubble(message)
+                        when (message.role) {
+                            ChatMessage.Role.REASONING -> ReasoningBlock(message.content)
+                            ChatMessage.Role.TOOL -> ToolStepCard(
+                                name = message.toolName,
+                                arguments = message.toolArguments,
+                                result = message.content,
+                            )
+
+                            else -> MessageBubble(message)
                         }
                     }
                     if (sending) {
                         item(key = "pending") {
-                            val liveReasoning = buildString {
-                                if (!runningReasoning.isNullOrEmpty()) append(runningReasoning)
-                                if (runningTool != null) {
-                                    if (isNotEmpty()) append("\n\n")
-                                    append("\u00b7 \u8c03\u7528 ").append(runningTool)
-                                }
-                            }
                             when {
-                                liveReasoning.isNotBlank() -> ReasoningBlock(
-                                    text = liveReasoning,
+                                !runningReasoning.isNullOrEmpty() -> ReasoningBlock(
+                                    text = runningReasoning,
                                     live = true,
+                                )
+
+                                runningTool != null -> ToolStepCard(
+                                    name = runningTool,
+                                    arguments = "",
+                                    result = "",
+                                    running = true,
                                 )
 
                                 !runningText.isNullOrEmpty() -> MessageBubble(
@@ -424,32 +430,42 @@ private fun OverflowMenu(
     onDismiss: () -> Unit,
 ) {
     val colors = MiuixTheme.colors
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        // 贴底弹出的圆角面板
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
-                .background(colors.surface)
-                .padding(vertical = 12.dp),
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Bottom,
         ) {
-            MenuRow(Icons.Outlined.SwapHoriz, stringResource(R.string.chat_pick_model)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                    .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
+                    .background(colors.surface)
+                    .padding(vertical = 12.dp),
+            ) {
+                MenuRow(Icons.Outlined.SwapHoriz, stringResource(R.string.chat_pick_model)) {
                 onDismiss(); onPickModel()
             }
-            MenuRow(Icons.Outlined.Psychology, stringResource(R.string.chat_pick_reasoning)) {
+                MenuRow(Icons.Outlined.Psychology, stringResource(R.string.chat_pick_reasoning)) {
                 onDismiss(); onPickReasoning()
             }
-            MenuDivider()
-            MenuRow(Icons.Outlined.Image, stringResource(R.string.chat_attach_image)) {
+                MenuDivider()
+                MenuRow(Icons.Outlined.Image, stringResource(R.string.chat_attach_image)) {
                 onDismiss(); onPickImage()
             }
-            MenuRow(Icons.Outlined.Description, stringResource(R.string.chat_attach_file)) {
+                MenuRow(Icons.Outlined.Description, stringResource(R.string.chat_attach_file)) {
                 onDismiss(); onPickFile()
             }
-            MenuRow(Icons.Outlined.FolderOpen, stringResource(R.string.chat_attach_folder)) {
+                MenuRow(Icons.Outlined.FolderOpen, stringResource(R.string.chat_attach_folder)) {
                 onDismiss(); onPickFolder()
             }
-            MenuRow(Icons.Outlined.Edit, stringResource(R.string.chat_attach_path)) {
-                onDismiss(); onPickPath()
+                MenuRow(Icons.Outlined.Edit, stringResource(R.string.chat_attach_path)) {
+                    onDismiss(); onPickPath()
+                }
             }
         }
     }
@@ -998,6 +1014,90 @@ private fun ReasoningBlock(text: String, live: Boolean = false) {
             Spacer(Modifier.height(6.dp))
             MiuixText(
                 text = text,
+                style = MiuixTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * 工具调用步骤卡片。
+ *
+ * 与图二的形态一致：一行标题（扳手图标 + 工具名 + 状态），展开后是参数与结果。
+ */
+@Composable
+private fun ToolStepCard(
+    name: String,
+    arguments: String,
+    result: String,
+    running: Boolean = false,
+) {
+    val colors = MiuixTheme.colors
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(MiuixTheme.radius.md))
+            .background(colors.surfaceContainerLow)
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MiuixIcon(
+                Icons.Outlined.Build,
+                null,
+                tint = colors.onSurfaceVariant,
+                size = 16.dp,
+            )
+            MiuixText(
+                text = if (running) {
+                    stringResource(R.string.chat_tool_running_short, name)
+                } else {
+                    stringResource(R.string.chat_tool_done, name)
+                },
+                style = MiuixTheme.typography.labelMedium,
+                color = colors.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (!running) {
+                MiuixIcon(
+                    Icons.Outlined.Check,
+                    null,
+                    tint = colors.success,
+                    size = 14.dp,
+                )
+            }
+            MiuixIcon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                null,
+                tint = colors.onSurfaceVariant,
+                size = 16.dp,
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(6.dp))
+            if (arguments.isNotBlank() && arguments != "{}") {
+                MiuixText(
+                    text = stringResource(R.string.chat_tool_args),
+                    style = MiuixTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                )
+                MiuixText(
+                    text = arguments,
+                    style = MiuixTheme.typography.bodySmall,
+                    color = colors.onSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            MiuixText(
+                text = if (result.isBlank()) stringResource(R.string.chat_tool_pending)
+                else result,
                 style = MiuixTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )

@@ -32,7 +32,11 @@ object ChatRunner {
     )
 
     /** 一次工具调用记录。 */
-    data class ToolStep(val name: String, val result: String = "")
+    data class ToolStep(
+        val name: String,
+        val arguments: String = "",
+        val result: String = "",
+    )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -62,9 +66,11 @@ object ChatRunner {
                     history = history,
                     systemPrompt = null,
                     enableTools = true,
-                    onToolCall = { name, _ ->
+                    onToolCall = { name, args ->
                         val current = _running.value ?: return@completeStream
-                        _running.value = current.copy(tools = current.tools + ToolStep(name))
+                        _running.value = current.copy(
+                            tools = current.tools + ToolStep(name = name, arguments = args),
+                        )
                     },
                     onToolResult = { name, result ->
                         val current = _running.value ?: return@completeStream
@@ -93,12 +99,21 @@ object ChatRunner {
                 val finished = _running.value
                 val reasoning = finished?.reasoning.orEmpty()
                 val tools = finished?.tools.orEmpty()
-                if (reasoning.isNotBlank() || tools.isNotEmpty()) {
+                if (reasoning.isNotBlank()) {
+                    ChatStore.append(
+                        context, sessionId,
+                        ChatMessage(role = ChatMessage.Role.REASONING, content = reasoning.trim()),
+                    )
+                }
+                // 工具调用单独成一条，界面按「步骤」卡片展示
+                tools.forEach { step ->
                     ChatStore.append(
                         context, sessionId,
                         ChatMessage(
-                            role = ChatMessage.Role.REASONING,
-                            content = buildReasoningText(reasoning, tools),
+                            role = ChatMessage.Role.TOOL,
+                            content = step.result,
+                            toolName = step.name,
+                            toolArguments = step.arguments,
                         ),
                     )
                 }
@@ -133,15 +148,3 @@ object ChatRunner {
 
 }
 
-/** 把推理文本与工具调用拼成一条可折叠展示的内容。 */
-private fun buildReasoningText(reasoning: String, tools: List<ChatRunner.ToolStep>): String =
-    buildString {
-        if (reasoning.isNotBlank()) append(reasoning.trim())
-        tools.forEach { step ->
-            if (isNotEmpty()) append("\n\n")
-            append("\u00b7 \u8c03\u7528 ").append(step.name)
-            if (step.result.isNotBlank()) {
-                append("\n").append(step.result.lineSequence().take(4).joinToString("\n"))
-            }
-        }
-    }

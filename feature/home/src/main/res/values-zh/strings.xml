@@ -29,4 +29,8 @@
     <string name="chat_more">更多</string>
     <string name="chat_reasoning_live">深度思考中…</string>
     <string name="chat_reasoning_done">已深度思考</string>
+    <string name="chat_tool_running_short">正在调用 %1$s</string>
+    <string name="chat_tool_done">调用 %1$s</string>
+    <string name="chat_tool_args">参数</string>
+    <string name="chat_tool_pending">（无输出）</string>
 </resources>

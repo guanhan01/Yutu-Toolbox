@@ -29,4 +29,8 @@
     <string name="chat_more">More</string>
     <string name="chat_reasoning_live">Thinking…</string>
     <string name="chat_reasoning_done">Thought</string>
+    <string name="chat_tool_running_short">Calling %1$s</string>
+    <string name="chat_tool_done">Called %1$s</string>
+    <string name="chat_tool_args">Arguments</string>
+    <string name="chat_tool_pending">(no output)</string>
 </resources>

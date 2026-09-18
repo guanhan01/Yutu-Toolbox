@@ -472,10 +472,16 @@ object AiChatClient {
                             calls.optJSONObject(i)?.let { onChunk("", it, "") }
                         }
                     }
-                    // 深度思考增量：DeepSeek 等在此字段返回推理过程
-                    val reasoning = d.optString("reasoning_content")
-                        .ifBlank { d.optString("reasoning") }
-                    val content = d.optString("content")
+                    // 深度思考增量：DeepSeek 等在此字段返回推理过程。
+                    // 注意 optString 对 JSON null 会返回字符串 "null"，必须用 opt 判类型。
+                    val reasoning = (d.opt("reasoning_content") as? String)
+                        ?.takeIf { it.isNotBlank() && it != "null" }
+                        ?: (d.opt("reasoning") as? String)
+                            ?.takeIf { it.isNotBlank() && it != "null" }
+                        ?: ""
+                    val content = (d.opt("content") as? String)
+                        ?.takeIf { it != "null" }
+                        .orEmpty()
                     when {
                         content.isNotEmpty() -> onChunk(content, null, reasoning)
                         reasoning.isNotEmpty() -> onChunk("", null, reasoning)
@@ -520,8 +526,9 @@ object AiChatClient {
                 ChatMessage.Role.USER -> "user"
                 ChatMessage.Role.ASSISTANT -> "assistant"
                 ChatMessage.Role.SYSTEM -> "system"
-                // 思考过程不回传给模型
+                // 思考过程与工具卡片不回传给模型（工具结果已在循环内回填）
                 ChatMessage.Role.REASONING -> return@forEach
+                ChatMessage.Role.TOOL -> return@forEach
             }
             val images = m.imageUris.mapNotNull { encodeImage(context, it) }
             if (images.isEmpty()) {

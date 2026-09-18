@@ -95,7 +95,9 @@ object ChatStore {
                         .put("id", m.id)
                         .put("role", m.role.name)
                         .put("content", m.content)
-                        .put("time", m.time),
+                        .put("time", m.time)
+                        .put("toolName", m.toolName)
+                        .put("toolArgs", m.toolArguments),
                 )
             }
             arr.put(
@@ -125,6 +127,8 @@ object ChatStore {
                     }.getOrDefault(ChatMessage.Role.USER),
                     content = m.optString("content"),
                     time = m.optLong("time"),
+                    toolName = m.optString("toolName"),
+                    toolArguments = m.optString("toolArgs"),
                 )
             }
             ChatSession(
