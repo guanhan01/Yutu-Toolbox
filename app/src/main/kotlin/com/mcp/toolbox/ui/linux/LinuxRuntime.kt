@@ -35,24 +35,40 @@ object LinuxRuntime {
             }.ifBlank { "(无输出)" }
     }
 
-    /** 用 Root 模式时借系统自带的 chroot，不需要额外二进制。 */
-    private fun busyboxPath(): String? = listOf(
-        "/data/adb/ksu/bin/busybox",
-        "/data/adb/magisk/busybox",
-        "/data/adb/ap/bin/busybox",
-        "/system/bin/busybox",
-    ).firstOrNull { File(it).canExecute() }
-
-    /** 环境是否可用：rootfs 就位即可（命令走系统 chroot）。 */
-    fun isReady(context: Context, distro: LinuxDistro): Boolean {
-        if (!LinuxEnvStore.isInstalled(context, distro)) return false
-        // PRoot 兜底：rootfs + 自备 proot 也能跑
-        return LinuxEnvStore.prootBinary(context).isFile || busyboxPath() != null
-    }
+    /**
+     * 环境是否可用。
+     *
+     * 只要 rootfs 就位即可：命令走系统自带的 chroot（需 Root），
+     * 或在有自备 PRoot 时走 PRoot。是否需要 Root 由执行阶段判断，
+     * 这里不做探测——`/data/adb` 属于 root，应用进程看不到。
+     */
+    fun isReady(context: Context, distro: LinuxDistro): Boolean =
+        LinuxEnvStore.isInstalled(context, distro)
 
     /** 当前用的是哪种执行方式。 */
     fun modeOf(context: Context, distro: LinuxDistro): String =
         if (LinuxEnvStore.prootBinary(context).isFile) "PRoot" else "chroot"
+
+    /**
+     * 在 Root shell 里探测 busybox。
+     *
+     * 不能在 Java 侧用 File.canExecute 判断：/data/adb 是 root:root 700，
+     * 应用进程访问不到，探测结果恒为 false。
+     */
+    private fun probeBusybox(): String? {
+        val script = buildString {
+            append("for p in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox ")
+            append("/data/adb/apd/bin/busybox /data/adb/ap/bin/busybox ")
+            append("/system/bin/busybox /system/xbin/busybox; do ")
+            append("[ -x \"\$p\" ] && { echo \"\$p\"; exit 0; }; done; exit 1")
+        }
+        val process = ProcessBuilder("su", "-c", script)
+            .redirectErrorStream(true)
+            .start()
+        val out = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        process.waitFor()
+        return out.lineSequence().firstOrNull { it.startsWith("/") && it.endsWith("busybox") }
+    }
 
     /**
      * 组装执行命令行。
@@ -68,42 +84,45 @@ object LinuxRuntime {
     ): List<String> {
         val rootfs = LinuxEnvStore.rootfs(context, distro).absolutePath
 
-        // 有 Root：su + chroot，绑定挂载在 chroot 之前用 mount --bind 完成
-        val busybox = busyboxPath()
-        if (busybox != null) {
-            val script = buildString {
-                append("R=").append(rootfs).append("; ")
-                append("for d in dev proc sys; do ")
-                append("[ -d \"\$R/\$d\" ] || mkdir -p \"\$R/\$d\"; ")
-                // 已挂载就跳过，避免重复挂载
-                append("mountpoint -q \"\$R/\$d\" || mount --bind /\$d \"\$R/\$d\" 2>/dev/null; ")
-                append("done; ")
-                append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\"; ")
-                append("mountpoint -q \"\$R/sdcard\" || mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
-                append("[ -f \"\$R/etc/resolv.conf\" ] || { echo 'nameserver 8.8.8.8' > \"\$R/etc/resolv.conf\"; }; ")
-                append("cd \"\$R").append(workingDir).append("\" 2>/dev/null || cd \"\$R\"; ")
-                append("HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
-                append("TERM=xterm-256color LANG=C.UTF-8 ")
-                append("chroot \"\$R\" /bin/sh -c ").append(shellQuote(command))
-            }
-            return listOf(busybox, "sh", "-c", "su -c " + shellQuote(script))
+        // 自备 PRoot 优先（不需要 Root）
+        val proot = LinuxEnvStore.prootBinary(context)
+        if (proot.isFile && proot.canExecute()) {
+            return listOf(
+                proot.absolutePath,
+                "--link2symlink", "-0",
+                "-r", rootfs,
+                "-w", workingDir,
+                "-b", "/dev", "-b", "/proc", "-b", "/sys",
+                "-b", "/storage/emulated/0:/sdcard",
+                "/usr/bin/env", "-i",
+                "HOME=/root",
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "TERM=xterm-256color",
+                "/bin/sh", "-c", command,
+            )
         }
 
-        // 没有 Root：退回自备的 PRoot
-        val proot = LinuxEnvStore.prootBinary(context)
-        return listOf(
-            proot.absolutePath,
-            "--link2symlink", "-0",
-            "-r", rootfs,
-            "-w", workingDir,
-            "-b", "/dev", "-b", "/proc", "-b", "/sys",
-            "-b", "/storage/emulated/0:/sdcard",
-            "/usr/bin/env", "-i",
-            "HOME=/root",
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "TERM=xterm-256color",
-            "/bin/sh", "-c", command,
-        )
+        // 否则走系统 chroot（需 Root）。mount 与 chroot 都在 /system/bin，
+        // 不需要 busybox。
+        val script = buildString {
+            append("R=").append(shellQuote(rootfs)).append("; ")
+            append("for d in dev proc sys; do ")
+            append("[ -d \"\$R/\$d\" ] || mkdir -p \"\$R/\$d\" 2>/dev/null; ")
+            // 已挂载就跳过，避免重复挂载
+            append("grep -q \" \$R/\$d \" /proc/mounts || ")
+            append("mount --bind /\$d \"\$R/\$d\" 2>/dev/null; ")
+            append("done; ")
+            append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\" 2>/dev/null; ")
+            append("grep -q \" \$R/sdcard \" /proc/mounts || ")
+            append("mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
+            append("[ -f \"\$R/etc/resolv.conf\" ] || ")
+            append("printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > \"\$R/etc/resolv.conf\" 2>/dev/null; ")
+            append("cd \"\$R").append(workingDir).append("\" 2>/dev/null || cd \"\$R\" 2>/dev/null; ")
+            append("HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
+            append("TERM=xterm-256color LANG=C.UTF-8 ")
+            append("chroot \"\$R\" /bin/sh -c ").append(shellQuote(command))
+        }
+        return listOf("/system/bin/sh", "-c", "su -c " + shellQuote(script))
     }
 
     /** 单引号包裹，内部的单引号转义掉。 */

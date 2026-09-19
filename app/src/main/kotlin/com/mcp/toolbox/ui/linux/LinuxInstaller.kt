@@ -137,17 +137,32 @@ object LinuxInstaller {
         deb.delete()
     }
 
-    /** 在常见的 root 管理路径里找 busybox。 */
-    private fun findBusybox(): String? = listOf(
-        "/data/adb/ksu/bin/busybox",
-        "/data/adb/magisk/busybox",
-        "/data/adb/ap/bin/busybox",
-        "/system/bin/busybox",
-    ).firstOrNull { File(it).canExecute() }
+    /**
+     * 在 Root shell 里找 busybox。
+     *
+     * 不能在 Java 侧用 File.canExecute 判断：/data/adb 是 root:root 700，
+     * 应用进程访问不到，结果恒为 false。
+     */
+    private fun findBusybox(): String? {
+        val script = buildString {
+            append("for p in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox ")
+            append("/data/adb/apd/bin/busybox /data/adb/ap/bin/busybox ")
+            append("/system/bin/busybox /system/xbin/busybox; do ")
+            append("[ -x \"\$p\" ] && { echo \"\$p\"; exit 0; }; done; exit 1")
+        }
+        return runCatching {
+            val process = ProcessBuilder("su", "-c", script)
+                .redirectErrorStream(true)
+                .start()
+            val out = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            out.trim().lineSequence().firstOrNull { it.startsWith("/") && it.endsWith("busybox") }
+        }.getOrNull()
+    }
 
     /** 执行 shell 片段；失败时抛出带输出的异常。 */
     private fun sh(busybox: String, script: String) {
-        val process = ProcessBuilder("su", "-c", "$busybox sh -c '$script'")
+        val process = ProcessBuilder("su", "-c", "$busybox sh -c $script")
             .redirectErrorStream(true)
             .start()
         val out = process.inputStream.bufferedReader().use { it.readText() }
