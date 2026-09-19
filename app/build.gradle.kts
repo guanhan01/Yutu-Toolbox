@@ -33,8 +33,9 @@ android {
             // Beta 用独立 applicationId，才能与正式版同机共存。
             applicationId = "com.mcp.toolbox.beta"
             manifestPlaceholders["appLabel"] = "Yutu Toolbox Beta"
-            // 版本号带 -beta 后缀，关于页一眼区分
-            versionNameSuffix = "-beta"
+            // Beta 版本号独立推进，与正式版互不影响
+            versionCode = 5
+            versionName = "0.1.4"
             // 内测包不联网检查更新
             buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
         }
