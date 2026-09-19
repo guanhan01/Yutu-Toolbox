@@ -40,9 +40,10 @@ object UpdateChecker {
     /**
      * 是否启用联网检查更新。
      *
-     * 内测（Beta）包默认关闭：不向更新地址发起任何请求，关于页只显示当前版本。
+     * 由 flavor 决定：stable（正式版）开启，beta（内测）关闭——
+     * 不向更新地址发起任何请求，关于页只显示当前版本。
      */
-    const val ENABLED = true
+    val ENABLED: Boolean = com.mcp.toolbox.BuildConfig.UPDATE_CHECK_ENABLED
 
     /** 项目主页，供关于页展示与跳转。 */
     const val PROJECT_URL = "https://github.com/guanhan01/Yutu-Toolbox"
