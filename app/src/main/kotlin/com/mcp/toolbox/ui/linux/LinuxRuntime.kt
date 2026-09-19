@@ -120,7 +120,10 @@ object LinuxRuntime {
             append("cd \"\$R").append(workingDir).append("\" 2>/dev/null || cd \"\$R\" 2>/dev/null; ")
             append("HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
             append("TERM=xterm-256color LANG=C.UTF-8 ")
-            append("chroot \"\$R\" /bin/sh -c ").append(shellQuote(command))
+            // chroot 并不会改变工作目录，而宿主视角的 <rootfs>/root 在新根里并不存在，
+            // 结果 pwd 会落在 /。所以在 chroot 内部再 cd 一次。
+            val inner = "cd " + workingDir + " 2>/dev/null || cd /; " + command
+            append("chroot \"\$R\" /bin/sh -c ").append(shellQuote(inner))
         }
         return listOf("/system/bin/sh", "-c", "su -c " + shellQuote(script))
     }
