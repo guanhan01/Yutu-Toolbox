@@ -25,9 +25,9 @@ object LinuxInstaller {
      * 地址只在代码里维护，界面不显示。
      */
     private object Mirrors {
-        /** 清华 LXC 镜像的 Debian 目录（含 rootfs.tar.gz）。 */
+        /** 清华 LXC 镜像的 Debian 目录。trixie 即 Debian 13（当前稳定版）。 */
         const val DEBIAN_INDEX =
-            "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/bookworm/arm64/default/"
+            "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/trixie/arm64/default/"
 
         /** 清华 Alpine 镜像（aarch64 minirootfs）。 */
         const val ALPINE_INDEX =
