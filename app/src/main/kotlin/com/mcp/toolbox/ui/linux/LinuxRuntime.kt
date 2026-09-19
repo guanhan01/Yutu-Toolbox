@@ -139,6 +139,7 @@ object LinuxRuntime {
         distro: LinuxDistro,
         command: String,
         workingDir: String = "/root",
+        timeoutMs: Long = TIMEOUT_MS,
     ): Output = withContext(Dispatchers.IO) {
         val started = System.currentTimeMillis()
         if (!isReady(context, distro)) {
@@ -167,7 +168,7 @@ object LinuxRuntime {
             outThread.start()
             errThread.start()
 
-            val finished = process.waitFor(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
             if (!finished) {
                 process.destroyForcibly()
                 outThread.join(1000)
@@ -175,7 +176,7 @@ object LinuxRuntime {
                 return@runCatching Output(
                     command = command,
                     stdout = outText.toString(),
-                    stderr = "命令超时（${TIMEOUT_MS / 1000} 秒）已被终止",
+                    stderr = "命令超时（${timeoutMs / 1000} 秒）已被终止",
                     exitCode = -1,
                     elapsedMs = System.currentTimeMillis() - started,
                 )

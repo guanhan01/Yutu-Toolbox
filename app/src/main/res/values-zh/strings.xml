@@ -4,6 +4,9 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="linux_install_finished">已完成</string>
+    <string name="linux_install_done">安装</string>
+    <string name="linux_installing">正在安装…</string>
     <string name="linux_cmd_run">执行</string>
     <string name="linux_cmd_hint">输入命令，回车执行</string>
     <string name="linux_open_terminal">打开终端</string>

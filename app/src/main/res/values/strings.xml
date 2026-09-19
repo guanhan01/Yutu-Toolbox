@@ -4,6 +4,9 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="linux_install_finished">Finished</string>
+    <string name="linux_install_done">Install</string>
+    <string name="linux_installing">Installing…</string>
     <string name="linux_cmd_run">Run</string>
     <string name="linux_cmd_hint">Type a command</string>
     <string name="linux_open_terminal">Terminal</string>
