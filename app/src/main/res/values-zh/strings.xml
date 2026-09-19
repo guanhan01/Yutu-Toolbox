@@ -4,6 +4,9 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
+    <string name="linux_cmd_run">执行</string>
+    <string name="linux_cmd_hint">输入命令，回车执行</string>
+    <string name="linux_open_terminal">打开终端</string>
     <string name="linux_entry_desc">Debian / Alpine，按需下载安装</string>
     <string name="linux_section_title">开发环境</string>
     <string name="app_nav_linux">Linux 工具环境</string>

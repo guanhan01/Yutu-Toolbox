@@ -14,7 +14,7 @@ enum class LinuxDistro(
 }
 
 /** 运行方式。 */
-enum class LinuxRuntime(val title: String, val subtitle: String) {
+enum class LinuxRunMode(val title: String, val subtitle: String) {
     PROOT("普通模式 · PRoot", "无需 Root，使用独立的私有 Linux 环境"),
     CHROOT("Root 模式 · chroot", "使用 Root 与独立挂载空间，保留已有环境"),
 }
@@ -45,7 +45,7 @@ data class ComponentStatus(
 /** 整体环境状态。 */
 data class LinuxEnvStatus(
     val distro: LinuxDistro = LinuxDistro.DEBIAN,
-    val runtime: LinuxRuntime = LinuxRuntime.PROOT,
+    val runtime: LinuxRunMode = LinuxRunMode.PROOT,
     val installed: Boolean = false,
     val rootfsBytes: Long = 0,
     val busy: Boolean = false,

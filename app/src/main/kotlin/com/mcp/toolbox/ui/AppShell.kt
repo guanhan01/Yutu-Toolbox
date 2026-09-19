@@ -69,6 +69,7 @@ import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
 import com.mcp.toolbox.ui.linux.LinuxScreen
+import com.mcp.toolbox.ui.linux.LinuxTerminalScreen
 import com.mcp.toolbox.ui.linux.LinuxDistro
 import com.mcp.toolbox.ui.linux.LinuxCheckScreen
 import kotlinx.coroutines.launch
@@ -402,10 +403,19 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxScreen(
                         onOpenChecker = { onNavigate(Routes.LINUX_CHECK) },
+                        onOpenTerminal = { onNavigate(Routes.LINUX_TERMINAL) },
                         onOpenFiles = { toastState.show("Linux 文件浏览待接入") },
                         onOpenShared = { toastState.show("共享文件夹待接入") },
                         onOpenWorkspace = { toastState.show("工作区待接入") },
                     )
+                }
+            }
+            composable(Routes.LINUX_TERMINAL) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.linux_open_terminal),
+                        onOpenDrawer = onOpenDrawer)
+                    LinuxTerminalScreen(distro = LinuxDistro.DEBIAN)
                 }
             }
             composable(Routes.LINUX_CHECK) {

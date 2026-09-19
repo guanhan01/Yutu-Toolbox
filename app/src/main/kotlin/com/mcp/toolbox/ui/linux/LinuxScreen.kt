@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LinuxScreen(
     onOpenChecker: () -> Unit,
+    onOpenTerminal: () -> Unit = {},
     onOpenFiles: () -> Unit,
     onOpenShared: () -> Unit,
     onOpenWorkspace: () -> Unit,
@@ -65,7 +66,7 @@ fun LinuxScreen(
     val scope = rememberCoroutineScope()
 
     var distro by remember { mutableStateOf(LinuxDistro.DEBIAN) }
-    var runtime by remember { mutableStateOf(LinuxRuntime.PROOT) }
+    var runtime by remember { mutableStateOf(LinuxRunMode.PROOT) }
     var installed by remember { mutableStateOf(false) }
     var sizeText by remember { mutableStateOf("未安装") }
     var busy by remember { mutableStateOf(false) }
@@ -100,7 +101,7 @@ fun LinuxScreen(
 
         // 顶部状态卡
         MiuixSectionCard(
-            title = "${distro.title} ${if (runtime == LinuxRuntime.PROOT) "13" else ""}".trim(),
+            title = "${distro.title} ${if (runtime == LinuxRunMode.PROOT) "13" else ""}".trim(),
             subtitle = runtime.title,
         ) {
             Column(Modifier.padding(spacing.lg)) {
@@ -147,9 +148,15 @@ fun LinuxScreen(
                         loading = busy,
                     )
                     MiuixButton(
+                        text = stringResource(R.string.linux_open_terminal),
+                        onClick = onOpenTerminal,
+                        enabled = installed,
+                        variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
+                    )
+                    MiuixButton(
                         text = "环境检测",
                         onClick = onOpenChecker,
-                        variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
+                        variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TEXT,
                     )
                 }
             }
@@ -234,9 +241,9 @@ fun LinuxScreen(
     if (pickRuntime) {
         LinuxChoiceSheet(
             title = stringResource(R.string.linux_runtime),
-            options = LinuxRuntime.entries.map { it.title to it.subtitle },
-            selectedIndex = LinuxRuntime.entries.indexOf(runtime),
-            onPick = { runtime = LinuxRuntime.entries[it]; pickRuntime = false },
+            options = LinuxRunMode.entries.map { it.title to it.subtitle },
+            selectedIndex = LinuxRunMode.entries.indexOf(runtime),
+            onPick = { runtime = LinuxRunMode.entries[it]; pickRuntime = false },
             onDismiss = { pickRuntime = false },
         )
     }

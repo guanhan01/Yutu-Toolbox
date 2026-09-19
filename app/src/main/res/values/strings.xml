@@ -4,6 +4,9 @@
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">Chat</string>
+    <string name="linux_cmd_run">Run</string>
+    <string name="linux_cmd_hint">Type a command</string>
+    <string name="linux_open_terminal">Terminal</string>
     <string name="linux_entry_desc">Debian / Alpine, installed on demand</string>
     <string name="linux_section_title">Development</string>
     <string name="app_nav_linux">Linux tools</string>

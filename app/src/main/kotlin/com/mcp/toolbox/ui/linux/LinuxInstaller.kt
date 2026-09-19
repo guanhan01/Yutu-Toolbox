@@ -14,18 +14,18 @@ import java.util.zip.GZIPInputStream
 /**
  * 下载与安装 Linux 环境。
  *
- * 全部走国内镜像，界面上不展示任何下载地址。
+ * 全部走国内镜像，界面上不展示任何下载地址、也不做来源声明。
  */
 object LinuxInstaller {
 
     /**
-     * 各发行版的镜像地址。
+     * 镜像地址。
      *
      * 用国内镜像的原因：官方源在当前网络下经常连不上或极慢。
-     * 这些地址只在代码里维护，界面不显示，也不做任何来源声明。
+     * 地址只在代码里维护，界面不显示。
      */
     private object Mirrors {
-        /** 清华 LXC 镜像的 Debian 目录，取其中最新的 rootfs.tar.gz。 */
+        /** 清华 LXC 镜像的 Debian 目录（含 rootfs.tar.gz）。 */
         const val DEBIAN_INDEX =
             "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/bookworm/arm64/default/"
 
@@ -33,15 +33,23 @@ object LinuxInstaller {
         const val ALPINE_INDEX =
             "https://mirrors.tuna.tsinghua.edu.cn/alpine/latest-stable/releases/aarch64/"
 
-        /** PRoot 可执行文件（静态 aarch64），走 GitHub 国内加速。 */
-        const val PROOT =
-            "https://ghfast.top/https://github.com/termux/proot/releases/download/v5.1.107/proot-aarch64-static"
+        /**
+         * PRoot 取自 Termux 软件源里的 deb 包。
+         *
+         * 上游 releases 上的静态二进制地址已失效，而 Termux 源长期稳定、
+         * 且有国内镜像；包内是普通的 Linux 可执行文件，解开即可用。
+         */
+        const val PROOT_DEB_DIR =
+            "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main/pool/main/p/proot/"
+
+        /** 同一镜像站里 busybox 的 deb，用来解前一个包（xz/ar）。 */
+        const val BUSYBOX_DEB_DIR =
+            "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main/pool/main/b/busybox/"
     }
 
     private const val CONNECT_TIMEOUT = 20_000
-    private const val READ_TIMEOUT = 60_000
+    private const val READ_TIMEOUT = 120_000
 
-    /** 下载进度。 */
     data class Progress(
         val fileName: String,
         val received: Long,
@@ -53,7 +61,7 @@ object LinuxInstaller {
     }
 
     /**
-     * 安装一个发行版：下载 rootfs（+ PRoot 二进制）并解压，返回是否成功。
+     * 安装一个发行版：准备 PRoot（+ 解包工具）、下载 rootfs 并解压。
      */
     suspend fun install(
         context: Context,
@@ -61,14 +69,8 @@ object LinuxInstaller {
         onProgress: (Progress) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // 1) PRoot 二进制
-            val proot = LinuxEnvStore.prootBinary(context)
-            if (!proot.isFile || proot.length() < 100_000) {
-                downloadTo(Mirrors.PROOT, proot, "proot", onProgress)
-                proot.setExecutable(true, false)
-            }
+            ensureProot(context, onProgress)
 
-            // 2) rootfs 压缩包
             val indexUrl = when (distro) {
                 LinuxDistro.DEBIAN -> Mirrors.DEBIAN_INDEX
                 LinuxDistro.ALPINE -> Mirrors.ALPINE_INDEX
@@ -79,7 +81,6 @@ object LinuxInstaller {
                 downloadTo(archiveUrl, archive, archive.name, onProgress)
             }
 
-            // 3) 解压到 rootfs
             val rootfs = LinuxEnvStore.rootfs(context, distro)
             rootfs.mkdirs()
             extractTarGz(archive, rootfs) { done, total ->
@@ -90,7 +91,84 @@ object LinuxInstaller {
         }
     }
 
-    /** 从镜像目录页里挑出适合当前架构的压缩包。 */
+    // ---------- PRoot ----------
+
+    /**
+     * 准备 PRoot 可执行文件。
+     *
+     * 流程：下载 deb → 用 busybox 的 ar 取出 data.tar.xz → xz -d → tar -x 拿 bin/proot。
+     * busybox 取自 KernelSU/Magisk（已 root 才有），因此 PRoot 模式需要 root 权限。
+     */
+    private fun ensureProot(context: Context, onProgress: (Progress) -> Unit) {
+        val target = LinuxEnvStore.prootBinary(context)
+        if (target.isFile && target.length() > 100_000 && target.canExecute()) return
+
+        val busybox = findBusybox()
+            ?: throw IllegalStateException("需要 Root 才能准备 PRoot（未找到可用的 busybox）")
+
+        val downloads = LinuxEnvStore.downloads(context)
+
+        val debUrl = resolveDeb(Mirrors.PROOT_DEB_DIR, "proot_")
+        val deb = File(downloads, debUrl.substringAfterLast('/'))
+        if (!deb.isFile || deb.length() == 0L) downloadTo(debUrl, deb, deb.name, onProgress)
+
+        // ar x 解出 data.tar.xz
+        val work = File(downloads, "proot-work").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        sh(busybox, "cd ${work.absolutePath} && ar x ${deb.absolutePath}")
+
+        val dataXz = work.listFiles()?.firstOrNull { it.name.startsWith("data.tar") }
+            ?: throw IllegalStateException("deb 内未找到数据段")
+
+        // xz -d 解成 data.tar
+        sh(busybox, "xz -d -f ${dataXz.absolutePath}")
+        val dataTar = File(work, dataXz.name.removeSuffix(".xz"))
+
+        // tar -x 取出全部，再从 termux 的路径里挑出 proot
+        sh(busybox, "cd ${work.absolutePath} && tar -xf ${dataTar.absolutePath}")
+        val extracted = File(work, "data/data/com.termux/files/usr/bin/proot")
+        if (!extracted.isFile) throw IllegalStateException("deb 内未找到 proot 可执行文件")
+
+        extracted.copyTo(target, overwrite = true)
+        target.setExecutable(true, false)
+        work.deleteRecursively()
+        deb.delete()
+    }
+
+    /** 在常见的 root 管理路径里找 busybox。 */
+    private fun findBusybox(): String? = listOf(
+        "/data/adb/ksu/bin/busybox",
+        "/data/adb/magisk/busybox",
+        "/data/adb/ap/bin/busybox",
+        "/system/bin/busybox",
+    ).firstOrNull { File(it).canExecute() }
+
+    /** 执行 shell 片段；失败时抛出带输出的异常。 */
+    private fun sh(busybox: String, script: String) {
+        val process = ProcessBuilder("su", "-c", "$busybox sh -c '$script'")
+            .redirectErrorStream(true)
+            .start()
+        val out = process.inputStream.bufferedReader().use { it.readText() }
+        val code = process.waitFor()
+        if (code != 0) {
+            throw IllegalStateException("解包失败：${out.trim().take(200)}")
+        }
+    }
+
+    // ---------- 镜像目录解析 ----------
+
+    private fun resolveDeb(dirUrl: String, prefix: String): String {
+        val html = open(dirUrl).bufferedReader().use { it.readText() }
+        val hit = Regex("""href="(${Regex.escape(prefix)}[^"]*aarch64\.deb)"""")
+            .find(html)?.groupValues?.get(1)
+            ?: Regex("""href="(${Regex.escape(prefix)}[^"]*_all\.deb)"""")
+                .find(html)?.groupValues?.get(1)
+            ?: throw IllegalStateException("镜像站上找不到所需的包")
+        return if (hit.startsWith("http")) hit else dirUrl + hit
+    }
+
     private fun resolveArchive(indexUrl: String, distro: LinuxDistro): String {
         val html = open(indexUrl).bufferedReader().use { it.readText() }
         val pattern = when (distro) {
@@ -101,6 +179,8 @@ object LinuxInstaller {
             ?: throw IllegalStateException("镜像站上找不到适配当前架构的 rootfs")
         return if (hit.startsWith("http")) hit else indexUrl + hit.removePrefix("./")
     }
+
+    // ---------- 下载 ----------
 
     private fun open(url: String): InputStream {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -125,14 +205,13 @@ object LinuxInstaller {
         var received = 0L
         open(url).use { input ->
             FileOutputStream(tmp).use { out ->
-                val total = -1L
                 val buf = ByteArray(64 * 1024)
                 while (true) {
                     val n = input.read(buf)
                     if (n <= 0) break
                     out.write(buf, 0, n)
                     received += n
-                    onProgress(Progress(label, received, total))
+                    onProgress(Progress(label, received, -1L))
                 }
             }
         }
@@ -142,11 +221,13 @@ object LinuxInstaller {
         onProgress(Progress(label, received, received, done = true))
     }
 
+    // ---------- 解压 ----------
+
     /**
      * 解压 tar.gz。
      *
-     * 自己解 tar 而不用外部命令：Android 上没有 tar，rootfs 又必须在 Linux 启动前就位。
-     * tar 的 ustar 头是 512 字节定长结构，解析成本很低。
+     * 自己解 tar 而不用外部命令：rootfs 必须在 Linux 启动前就位，
+     * 而 ustar 头是 512 字节定长结构，解析成本很低、也没有依赖。
      */
     private fun extractTarGz(
         archive: File,
@@ -171,17 +252,16 @@ object LinuxInstaller {
                 val path = if (prefix.isEmpty()) name else "$prefix/$name"
 
                 val target = File(dest, path)
-                // 防目录穿越
                 if (!target.canonicalPath.startsWith(dest.canonicalPath)) {
                     skipFully(input, size)
-                    consumed += padded(size)
+                    val pad0 = padded(size)
+                    skipFully(input, pad0 - size)
+                    consumed += pad0
                     continue
                 }
 
                 when (typeFlag) {
-                    // 目录：没有内容
                     '5' -> target.mkdirs()
-                    // 普通文件：读出 size 字节
                     '0', '\u0000', '7' -> {
                         target.parentFile?.mkdirs()
                         FileOutputStream(target).use { out ->
@@ -195,11 +275,9 @@ object LinuxInstaller {
                             }
                         }
                     }
-                    // 其余类型（符号链接、设备节点等）跳过内容
                     else -> skipFully(input, size)
                 }
 
-                // 统一对齐到 512 字节边界
                 val aligned = padded(size)
                 skipFully(input, aligned - size)
                 consumed += aligned
@@ -231,7 +309,8 @@ object LinuxInstaller {
     }
 
     private fun readString(header: ByteArray, offset: Int, length: Int): String {
-        val end = (offset until offset + length).firstOrNull { header[it] == 0.toByte() } ?: (offset + length)
+        val end = (offset until offset + length).firstOrNull { header[it] == 0.toByte() }
+            ?: (offset + length)
         return String(header, offset, end - offset).trim()
     }
 }
