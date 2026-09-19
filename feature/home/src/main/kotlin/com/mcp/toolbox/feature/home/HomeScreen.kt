@@ -449,6 +449,8 @@ fun HomeScreen(
         // 加号在输入栏左侧、屏幕底部：贴底 + 左对齐
         alignStart = true,
         stickToBottom = true,
+        // 非焦点模式：不抢输入框焦点，输入法保持弹出
+        focusable = false,
     ) {
         MiuixMenuItem(
             text = stringResource(R.string.chat_pick_model),

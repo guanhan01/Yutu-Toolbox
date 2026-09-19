@@ -73,6 +73,11 @@ fun MiuixOverflowMenu(
      * 锚点矩形计算位置，直接贴底反而稳定准确。
      */
     stickToBottom: Boolean = false,
+    /**
+     * 菜单是否抢输入焦点。默认 true；聊天输入栏的附件菜单要传 false，
+     * 否则弹出时焦点离开输入框、输入法会被收起。
+     */
+    focusable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -125,7 +130,7 @@ fun MiuixOverflowMenu(
     Popup(
         onDismissRequest = onDismiss,
         popupPositionProvider = positionProvider,
-        properties = PopupProperties(focusable = true),
+        properties = PopupProperties(focusable = focusable),
     ) {
         val p = progress.value
         val clamped = p.coerceIn(0f, 1f)
