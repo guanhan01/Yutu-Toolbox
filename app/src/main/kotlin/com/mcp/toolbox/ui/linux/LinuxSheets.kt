@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import android.content.Context
 
 /** 二选一弹层：发行版 / 运行方式。 */
 @Composable
@@ -116,6 +117,17 @@ fun LinuxChoiceSheet(
  *
  * 检测在 rootfs 内查可执行文件，瞬时完成；缺失的组件给出安装入口。
  */
+/** 一次环境扫描：是否就绪、各组件状态、rootfs 体积。务必在 IO 线程调用。 */
+private fun scanEnv(
+    context: Context,
+    distro: LinuxDistro,
+): Triple<Boolean, List<ComponentStatus>, String> {
+    val ready = LinuxEnvStore.isInstalled(context, distro)
+    val statuses = LinuxChecker.check(context, distro)
+    val size = if (ready) LinuxChecker.humanSize(LinuxEnvStore.sizeOf(context, distro)) else "未安装"
+    return Triple(ready, statuses, size)
+}
+
 @Composable
 fun LinuxCheckScreen(
     distro: LinuxDistro,
@@ -129,11 +141,17 @@ fun LinuxCheckScreen(
     var scanning by remember { mutableStateOf(true) }
     var installing by remember { mutableStateOf<LinuxComponent?>(null) }
     var envReady by remember { mutableStateOf(LinuxEnvStore.isInstalled(context, distro)) }
+    var sizeText by remember { mutableStateOf("") }
     val installLog = remember { mutableStateListOf<String>() }
 
     suspend fun rescan() {
         scanning = true
-        statuses = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
+        // rootfs 有几万个文件，体积统计必须放 IO 线程：这个 Composable 会因为
+        // 安装日志每追加一行而重组，放在渲染表达式里等于反复遍历全盘，直接 ANR
+        val snapshot = withContext(Dispatchers.IO) { scanEnv(context, distro) }
+        envReady = snapshot.first
+        statuses = snapshot.second
+        sizeText = snapshot.third
         scanning = false
     }
 
@@ -155,16 +173,12 @@ fun LinuxCheckScreen(
                 },
             )
             installing = null
-            envReady = LinuxEnvStore.isInstalled(context, distro)
             rescan()
         }
     }
 
     LaunchedEffect(distro) {
-        envReady = LinuxEnvStore.isInstalled(context, distro)
-        scanning = true
-        statuses = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
-        scanning = false
+        rescan()
         // 从主页「安装」跳进来时，自动开装目标组件
         val pending = LinuxPendingInstall.component
         if (pending != null) {
@@ -198,7 +212,7 @@ fun LinuxCheckScreen(
                 )
                 Spacer(Modifier.height(4.dp))
                 MiuixText(
-                    text = "${distro.title} · ${LinuxChecker.humanSize(LinuxEnvStore.sizeOf(context, distro))}",
+                    text = "${distro.title} · $sizeText",
                     style = MiuixTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                 )

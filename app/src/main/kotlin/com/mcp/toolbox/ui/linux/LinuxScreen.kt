@@ -45,6 +45,8 @@ import com.mcp.toolbox.core.design.component.MiuixTag
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Linux 工具环境主页。
@@ -78,18 +80,19 @@ fun LinuxScreen(
     var pickRuntime by remember { mutableStateOf(false) }
     var components by remember { mutableStateOf<List<ComponentStatus>>(emptyList()) }
 
-    fun refresh() {
-        installed = LinuxEnvStore.isInstalled(context, distro)
-        sizeText = if (installed) {
-            LinuxChecker.humanSize(LinuxEnvStore.sizeOf(context, distro))
-        } else {
-            "未安装"
+    suspend fun refresh() {
+        // sizeOf 会遍历整个 rootfs（几万个文件），放主线程必卡
+        val snapshot = withContext(Dispatchers.IO) {
+            val ready = LinuxEnvStore.isInstalled(context, distro)
+            ready to if (ready) LinuxEnvStore.sizeOf(context, distro) else 0L
         }
+        installed = snapshot.first
+        sizeText = if (snapshot.first) LinuxChecker.humanSize(snapshot.second) else "未安装"
     }
 
     LaunchedEffect(distro) {
         refresh()
-        components = LinuxChecker.check(context, distro)
+        components = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
     }
 
     Column(
@@ -144,7 +147,9 @@ fun LinuxScreen(
                                     onFailure = { message = it.message ?: "安装失败" },
                                 )
                                 refresh()
-                                components = LinuxChecker.check(context, distro)
+                                components = withContext(Dispatchers.IO) {
+                                    LinuxChecker.check(context, distro)
+                                }
                             }
                         },
                         enabled = !busy,
