@@ -65,8 +65,9 @@ fun LinuxScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var distro by remember { mutableStateOf(LinuxDistro.DEBIAN) }
-    var runtime by remember { mutableStateOf(LinuxRunMode.PROOT) }
+    // 初值取自持久化；离开页面再回来不会重置
+    var distro by remember { mutableStateOf(LinuxPrefs.distro(context)) }
+    var runtime by remember { mutableStateOf(LinuxPrefs.runtime(context)) }
     var installed by remember { mutableStateOf(false) }
     var sizeText by remember { mutableStateOf("未安装") }
     var busy by remember { mutableStateOf(false) }
@@ -235,7 +236,11 @@ fun LinuxScreen(
             title = stringResource(R.string.linux_distro),
             options = LinuxDistro.entries.map { it.title to it.subtitle },
             selectedIndex = LinuxDistro.entries.indexOf(distro),
-            onPick = { distro = LinuxDistro.entries[it]; pickDistro = false },
+            onPick = {
+                distro = LinuxDistro.entries[it]
+                LinuxPrefs.save(context, distro, runtime)
+                pickDistro = false
+            },
             onDismiss = { pickDistro = false },
         )
     }
@@ -244,7 +249,11 @@ fun LinuxScreen(
             title = stringResource(R.string.linux_runtime),
             options = LinuxRunMode.entries.map { it.title to it.subtitle },
             selectedIndex = LinuxRunMode.entries.indexOf(runtime),
-            onPick = { runtime = LinuxRunMode.entries[it]; pickRuntime = false },
+            onPick = {
+                runtime = LinuxRunMode.entries[it]
+                LinuxPrefs.save(context, distro, runtime)
+                pickRuntime = false
+            },
             onDismiss = { pickRuntime = false },
         )
     }

@@ -112,13 +112,15 @@ object LinuxInstaller {
         val deb = File(downloads, debUrl.substringAfterLast('/'))
         if (!deb.isFile || deb.length() == 0L) downloadTo(debUrl, deb, deb.name, onProgress)
 
-        // ar x 解出 data.tar.xz
-        val work = File(downloads, "proot-work").apply {
-            deleteRecursively()
-            mkdirs()
-        }
-        // 一律用 busybox 的绝对路径调用，root 的 PATH 里没有这些工具
-        sh(busybox, "cd ${work.absolutePath} && $busybox ar x ${deb.absolutePath}")
+        // ar x 解出 data.tar.xz。
+        // 每次都用一个全新目录：ar 遇到同名文件会直接报 File exists，
+        // 上次失败留下的残留必须清掉。
+        val work = File(downloads, "proot-work-" + System.currentTimeMillis()).apply { mkdirs() }
+        sh(
+            busybox,
+            "rm -rf ${work.absolutePath} && mkdir -p ${work.absolutePath} && " +
+                "cd ${work.absolutePath} && $busybox ar x ${deb.absolutePath}",
+        )
 
         val dataXz = work.listFiles()?.firstOrNull { it.name.startsWith("data.tar") }
             ?: throw IllegalStateException("deb 内未找到数据段")
@@ -136,6 +138,10 @@ object LinuxInstaller {
         target.setExecutable(true, false)
         work.deleteRecursively()
         deb.delete()
+        // 顺手清掉历史遗留的临时目录
+        downloads.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("proot-work") }
+            ?.forEach { it.deleteRecursively() }
     }
 
     /**

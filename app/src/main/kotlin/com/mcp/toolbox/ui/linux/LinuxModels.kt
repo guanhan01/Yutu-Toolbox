@@ -57,6 +57,33 @@ data class LinuxEnvStatus(
     val readyCount: Int get() = components.count { it.installed }
 }
 
+/** 记住用户在环境页选过的发行版与运行方式（离开页面不重置）。 */
+object LinuxPrefs {
+
+    private const val PREFS = "linux-env-prefs"
+    private const val KEY_DISTRO = "distro"
+    private const val KEY_RUNTIME = "runtime"
+
+    fun distro(context: Context): LinuxDistro {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_DISTRO, null)
+        return LinuxDistro.entries.firstOrNull { it.name == raw } ?: LinuxDistro.DEBIAN
+    }
+
+    fun runtime(context: Context): LinuxRunMode {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_RUNTIME, null)
+        return LinuxRunMode.entries.firstOrNull { it.name == raw } ?: LinuxRunMode.PROOT
+    }
+
+    fun save(context: Context, distro: LinuxDistro, runtime: LinuxRunMode) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_DISTRO, distro.name)
+            .putString(KEY_RUNTIME, runtime.name)
+            .apply()
+    }
+}
+
 object LinuxEnvStore {
 
     private const val DIR = "linux-env"
