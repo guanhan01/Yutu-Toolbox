@@ -115,8 +115,12 @@ object LinuxRuntime {
             append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\" 2>/dev/null; ")
             append("grep -q \" \$R/sdcard \" /proc/mounts || ")
             append("mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
-            append("[ -f \"\$R/etc/resolv.conf\" ] || ")
-            append("printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > \"\$R/etc/resolv.conf\" 2>/dev/null; ")
+            // rootfs 里常已存在（可能是空文件或 systemd 的软链），必须无条件覆盖；
+            // 8.8.8.8 / 1.1.1.1 在境内基本不通，优先沿用系统当前 DNS
+            append("rm -f \"\$R/etc/resolv.conf\" 2>/dev/null; ")
+            append("D=\$(getprop net.dns1 2>/dev/null); ")
+            append("[ -n \"\$D\" ] || D=223.5.5.5; ")
+            append("printf 'nameserver %s\\nnameserver 223.5.5.5\\nnameserver 119.29.29.29\\n' \"\$D\" > \"\$R/etc/resolv.conf\" 2>/dev/null; ")
             append("cd \"\$R").append(workingDir).append("\" 2>/dev/null || cd \"\$R\" 2>/dev/null; ")
             append("HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
             append("TERM=xterm-256color LANG=C.UTF-8 ")

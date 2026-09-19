@@ -34,6 +34,9 @@ object LinuxToolchain {
             set -e
             export DEBIAN_FRONTEND=noninteractive
             export TMPDIR=/tmp
+            # chroot 内没有服务管理器，装包时禁止自动起服务
+            printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+            chmod +x /usr/sbin/policy-rc.d
             cat > /etc/apt/sources.list <<'SRC'
             $DEBIAN_SOURCES
             SRC
