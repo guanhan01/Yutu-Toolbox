@@ -178,4 +178,5 @@
     <string name="app_compliance_confirm">我已了解</string>
     <string name="app_compliance_message">本应用提供的抓包（含 HTTPS 解密）与反编译能力，仅限用于你自有或已获得明确授权的应用的学习与调试；禁止用于破解、篡改他人应用。所有数据仅保存在本机，应用默认不上传任何用户数据。</string>
     <string name="app_compliance_footer">继续即表示你同意上述使用范围。</string>
-    <string name="app_action_close">关闭</string></resources>
+    <string name="app_action_close">关闭</string>    <string name="chat_history_delete">删除</string>
+</resources>

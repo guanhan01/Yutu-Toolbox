@@ -70,6 +70,68 @@ object ChatStore {
         persist(context)
     }
 
+    /**
+     * 就地更新一条消息（用户长按编辑）。
+     * 编辑会刷新会话 updatedAt，会话因此在列表里上浮。
+     */
+    suspend fun updateMessage(
+        context: Context,
+        sessionId: String,
+        messageId: String,
+        content: String,
+        imageUris: List<String> = emptyList(),
+    ) {
+        _sessions.value = _sessions.value
+            .map { session ->
+                if (session.id != sessionId) session
+                else session.copy(
+                    messages = session.messages.map { message ->
+                        if (message.id != messageId) message
+                        else message.copy(
+                            content = content,
+                            imageUris = imageUris,
+                            edited = true,
+                            time = System.currentTimeMillis(),
+                        )
+                    },
+                    updatedAt = System.currentTimeMillis(),
+                )
+            }
+            .sortedByDescending { it.updatedAt }
+        persist(context)
+    }
+
+    /** 删除一条消息（用户长按删除 / AI 回复下方删除按钮）。 */
+    suspend fun deleteMessage(context: Context, sessionId: String, messageId: String) {
+        _sessions.value = _sessions.value
+            .map { session ->
+                if (session.id != sessionId) session
+                else session.copy(messages = session.messages.filterNot { it.id == messageId })
+            }
+        persist(context)
+    }
+
+    /**
+     * 删除 [messageId] 及其后的一切消息，用于「重说」：先截断该回复，
+     * 调用方再把截断后的历史交回模型重新生成。
+     */
+    suspend fun truncateAfter(context: Context, sessionId: String, messageId: String): List<ChatMessage> {
+        var kept: List<ChatMessage> = emptyList()
+        _sessions.value = _sessions.value
+            .map { session ->
+                if (session.id != sessionId) session
+                else {
+                    val index = session.messages.indexOfFirst { it.id == messageId }
+                    if (index < 0) session
+                    else session.copy(messages = session.messages.subList(0, index)).also {
+                        kept = it.messages
+                    }
+                }
+            }
+        persist(context)
+        return kept
+    }
+
     suspend fun delete(context: Context, id: String) {
         _sessions.value = _sessions.value.filterNot { it.id == id }
         if (_currentId.value == id) _currentId.value = _sessions.value.firstOrNull()?.id
@@ -97,7 +159,8 @@ object ChatStore {
                         .put("content", m.content)
                         .put("time", m.time)
                         .put("toolName", m.toolName)
-                        .put("toolArgs", m.toolArguments),
+                        .put("toolArgs", m.toolArguments)
+                        .put("edited", m.edited),
                 )
             }
             arr.put(
@@ -129,6 +192,7 @@ object ChatStore {
                     time = m.optLong("time"),
                     toolName = m.optString("toolName"),
                     toolArguments = m.optString("toolArgs"),
+                    edited = m.optBoolean("edited", false),
                 )
             }
             ChatSession(

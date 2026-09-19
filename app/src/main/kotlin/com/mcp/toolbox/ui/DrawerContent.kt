@@ -47,7 +47,10 @@ import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.core.design.component.MiuixBadge
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DeleteOutline
 import com.mcp.toolbox.core.design.component.MiuixIconButton
+import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
+import com.mcp.toolbox.core.design.component.MiuixMenuItem
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.component.miuixClickable
@@ -134,6 +137,7 @@ fun DrawerContent(
                     ) {
                         Column {
                             chatSessions.forEach { item ->
+                                val context = LocalContext.current
                                 ChatHistoryRow(
                                     title = item.displayTitle,
                                     selected = item.id == currentChatId,
@@ -142,6 +146,9 @@ fun DrawerContent(
                                             ChatStore.select(item.id)
                                             onClose()
                                         }
+                                    },
+                                    onDelete = {
+                                        scope.launch { ChatStore.delete(context, item.id) }
                                     },
                                 )
                             }
@@ -275,32 +282,50 @@ private fun DrawerFooterIcon(
     }
 }
 
-/** 抽屉里的一条历史对话。 */
+/** 抽屉里的一条历史对话：长按弹出删除。 */
 @Composable
 private fun ChatHistoryRow(
     title: String,
     selected: Boolean,
     onClick: () -> Unit,
+    onDelete: () -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val press = rememberMiuixPressState()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = spacing.xxl, end = spacing.md, top = 1.dp, bottom = 1.dp)
-            .clip(RoundedCornerShape(MiuixTheme.radius.inner))
-            .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
-            .miuixClickable(press, true, onClick = onClick)
-            .padding(horizontal = spacing.md, vertical = spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MiuixText(
-            text = title,
-            style = MiuixTheme.typography.bodyMedium,
-            color = if (selected) colors.primary else colors.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    var showMenu by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = spacing.xxl, end = spacing.md, top = 1.dp, bottom = 1.dp)
+                .clip(RoundedCornerShape(MiuixTheme.radius.inner))
+                .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
+                .miuixClickable(press, true, onLongClick = { showMenu = true }, onClick = onClick)
+                .padding(horizontal = spacing.md, vertical = spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MiuixText(
+                text = title,
+                style = MiuixTheme.typography.bodyMedium,
+                color = if (selected) colors.primary else colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (showMenu) {
+            MiuixOverflowMenu(
+                expanded = showMenu,
+                onDismiss = { showMenu = false },
+                alignStart = true,
+            ) {
+                MiuixMenuItem(
+                    text = stringResource(R.string.chat_history_delete),
+                    icon = Icons.Outlined.DeleteOutline,
+                    danger = true,
+                    onClick = { showMenu = false; onDelete() },
+                )
+            }
+        }
     }
 }

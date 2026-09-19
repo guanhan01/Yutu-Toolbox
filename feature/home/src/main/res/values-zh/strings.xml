@@ -33,4 +33,15 @@
     <string name="chat_tool_done">调用 %1$s</string>
     <string name="chat_tool_args">参数</string>
     <string name="chat_tool_pending">（无输出）</string>
+    <string name="chat_msg_copy">复制</string>
+    <string name="chat_msg_resend">重说</string>
+    <string name="chat_msg_delete">删除</string>
+    <string name="chat_msg_edit">编辑</string>
+    <string name="chat_msg_edited">已编辑</string>
+    <string name="chat_edit_title">编辑消息</string>
+    <string name="chat_edit_save">保存并重发</string>
+    <string name="chat_delete_confirm_title">删除这条消息？</string>
+    <string name="chat_delete_confirm_yes">删除</string>
+    <string name="chat_session_delete_confirm_title">删除这条对话？</string>
+    <string name="chat_cancel">取消</string>
 </resources>

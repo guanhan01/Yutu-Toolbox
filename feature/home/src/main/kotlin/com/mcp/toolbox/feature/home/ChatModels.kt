@@ -2,6 +2,7 @@ package com.mcp.toolbox.feature.home
 
 import java.util.UUID
 
+
 /** 一条对话消息。 */
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
@@ -19,6 +20,8 @@ data class ChatMessage(
     val toolName: String = "",
     /** 工具调用参数（role == TOOL 时有值）。 */
     val toolArguments: String = "",
+    /** 用户编辑过本条消息。 */
+    val edited: Boolean = false,
 ) {
     enum class Role {
         USER,

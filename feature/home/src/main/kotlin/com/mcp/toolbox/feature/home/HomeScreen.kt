@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,9 @@ import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Menu
@@ -74,9 +78,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalClipboardManager
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixButton
+import com.mcp.toolbox.core.design.component.MiuixButtonVariant
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixMenuDivider
 import com.mcp.toolbox.core.design.component.MiuixMenuGroupLabel
@@ -141,6 +147,11 @@ fun HomeScreen(
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
+    val clipboard = LocalClipboardManager.current
+    /** 长按弹出的消息操作菜单目标；编辑弹层复用同一个目标。 */
+    var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    /** 消息删除确认目标。 */
+    var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -227,6 +238,39 @@ fun HomeScreen(
         }
     }
 
+    /** 从某条用户消息重新生成：截断它之后的全部消息，把含它的历史交回模型。 */
+    fun regenerateFrom(userMessage: ChatMessage) {
+        val current = session ?: return
+        if (userMessage.role != ChatMessage.Role.USER) return
+        scope.launch {
+            val kept = ChatStore.truncateAfter(context, current.id, userMessage.id)
+            val history = kept
+                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
+            if (history.isNotEmpty()) onStart(current.id, history)
+        }
+    }
+
+    /** 应用用户编辑：更新消息文本与图片，并从这条消息重新生成回复。 */
+    fun applyEdit(message: ChatMessage, newText: String, newImages: List<String>) {
+        val current = session ?: return
+        scope.launch {
+            val kept = ChatStore.truncateAfter(context, current.id, message.id)
+            ChatStore.updateMessage(
+                context, current.id, message.id,
+                content = newText,
+                imageUris = newImages,
+            )
+            val updated = kept.dropLast(1) + kept.last().copy(
+                content = newText,
+                imageUris = newImages,
+                edited = true,
+            )
+            val history = updated
+                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
+            if (history.isNotEmpty()) onStart(current.id, history)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -274,7 +318,27 @@ fun HomeScreen(
                                 result = message.content,
                             )
 
-                            else -> MessageBubble(message)
+                            else -> MessageBubble(
+                                message = message,
+                                onCopy = {
+                                    clipboard.setText(
+                                        androidx.compose.ui.text.AnnotatedString(message.content),
+                                    )
+                                },
+                                onResend = {
+                                    if (!sending) scope.launch { regenerateFrom(message) }
+                                },
+                                onDelete = {
+                                    if (!sending) scope.launch {
+                                        ChatStore.deleteMessage(context, session!!.id, message.id)
+                                    }
+                                },
+                                onEdit = { newText, newImages ->
+                                    if (!sending) scope.launch {
+                                        applyEdit(message, newText, newImages)
+                                    }
+                                },
+                            )
                         }
                     }
                     if (sending) {
@@ -954,20 +1018,33 @@ private fun PendingBubble(text: String? = null) {
     }
 }
 
-/** 单条消息气泡：用户靠右、AI 靠左、系统提示居中浅色。 */
+/**
+ * 单条消息气泡：用户靠右、AI 靠左、系统提示居中浅色。
+ *
+ * AI 消息完成后在气泡下方显示 复制/重说/删除；用户消息长按弹出 复制/编辑/删除，
+ * 编辑时支持追加图片与文件附件，编辑后的消息带「已编辑」角标。
+ */
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(
+    message: ChatMessage,
+    onCopy: () -> Unit = {},
+    onResend: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onEdit: (String, List<String>) -> Unit = { _, _ -> },
+) {
     val colors = MiuixTheme.colors
     val radius = RoundedCornerShape(MiuixTheme.radius.md)
     val isUser = message.role == ChatMessage.Role.USER
     val isSystem = message.role == ChatMessage.Role.SYSTEM
+    var showActions by remember(message.id) { mutableStateOf(false) }
+    var showEdit by remember(message.id) { mutableStateOf(false) }
 
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = when {
-            isSystem -> Arrangement.Center
-            isUser -> Arrangement.End
-            else -> Arrangement.Start
+        horizontalAlignment = when {
+            isSystem -> Alignment.CenterHorizontally
+            isUser -> Alignment.End
+            else -> Alignment.Start
         },
     ) {
         Box(
@@ -981,6 +1058,10 @@ private fun MessageBubble(message: ChatMessage) {
                         else -> colors.surfaceContainer
                     },
                 )
+                .combinedClickable(
+                    onLongClick = if (isUser) ({ showActions = true }) else null,
+                    onClick = {},
+                )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             MiuixText(
@@ -992,6 +1073,186 @@ private fun MessageBubble(message: ChatMessage) {
                     else -> colors.onSurface
                 },
             )
+        }
+        if (isUser && message.edited) {
+            Spacer(Modifier.height(2.dp))
+            MiuixText(
+                text = stringResource(R.string.chat_msg_edited),
+                style = MiuixTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        }
+        // AI 完成的回答：气泡下方一排操作图标
+        if (message.role == ChatMessage.Role.ASSISTANT && message.content.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                MessageActionIcon(Icons.Outlined.ContentCopy, stringResource(R.string.chat_msg_copy), onCopy)
+                MessageActionIcon(Icons.Outlined.Refresh, stringResource(R.string.chat_msg_resend), onResend)
+                MessageActionIcon(Icons.Outlined.DeleteOutline, stringResource(R.string.chat_msg_delete), onDelete)
+            }
+        }
+    }
+
+    // 用户消息长按菜单：复制 / 编辑 / 删除
+    if (showActions && isUser) {
+        MiuixOverflowMenu(
+            expanded = showActions,
+            onDismiss = { showActions = false },
+            alignStart = true,
+        ) {
+            MiuixMenuItem(
+                text = stringResource(R.string.chat_msg_copy),
+                icon = Icons.Outlined.ContentCopy,
+                onClick = { showActions = false; onCopy() },
+            )
+            MiuixMenuItem(
+                text = stringResource(R.string.chat_msg_edit),
+                icon = Icons.Outlined.Edit,
+                onClick = { showActions = false; showEdit = true },
+            )
+            MiuixMenuItem(
+                text = stringResource(R.string.chat_msg_delete),
+                icon = Icons.Outlined.DeleteOutline,
+                danger = true,
+                onClick = { showActions = false; onDelete() },
+            )
+        }
+    }
+
+    if (showEdit && isUser) {
+        MessageEditDialog(
+            message = message,
+            onDismiss = { showEdit = false },
+            onConfirm = { text, images ->
+                showEdit = false
+                onEdit(text, images)
+            },
+        )
+    }
+}
+
+/** 消息气泡下的小操作图标（复制 / 重说 / 删除）。 */
+@Composable
+private fun MessageActionIcon(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiuixIcon(icon, label, tint = colors.onSurfaceVariant, size = 16.dp)
+    }
+}
+/** 编辑弹层：多行输入 + 追加图片/文件附件，保存后从该消息重新生成。 */
+@Composable
+private fun MessageEditDialog(
+    message: ChatMessage,
+    onDismiss: () -> Unit,
+    onConfirm: (String, List<String>) -> Unit,
+) {
+    val context = LocalContext.current
+    val colors = MiuixTheme.colors
+    val spacing = MiuixTheme.dimens.spacing
+    var text by remember(message.id) { mutableStateOf(message.content) }
+    val newImages = remember { mutableStateListOf<String>() }
+    val newFiles = remember { mutableStateListOf<ChatAttachment>() }
+
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        uri?.let {
+            newImages += it.toString()
+            newFiles += ChatAttachment.Image(
+                uri = it.toString(),
+                label = ChatAttachment.displayName(context, it),
+            )
+        }
+    }
+    val pickFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let {
+            newFiles += ChatAttachment.File(
+                uri = it.toString(),
+                label = ChatAttachment.displayName(context, it),
+            )
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
+                .background(colors.surface)
+                .padding(spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(spacing.md),
+        ) {
+            MiuixText(
+                text = stringResource(R.string.chat_edit_title),
+                style = MiuixTheme.typography.titleMedium,
+            )
+            MiuixTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = false,
+                minLines = 3,
+            )
+            if (newFiles.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                    newFiles.forEachIndexed { index, item ->
+                        AttachmentChip(
+                            label = item.label,
+                            onRemove = {
+                                newFiles.removeAt(index)
+                                if (item is ChatAttachment.Image) newImages.remove(item.uri)
+                            },
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                MiuixIconButton(
+                    icon = Icons.Outlined.Image,
+                    contentDescription = stringResource(R.string.chat_attach_image),
+                    onClick = {
+                        pickImage.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    buttonSize = 36.dp,
+                    iconSize = 18.dp,
+                )
+                MiuixIconButton(
+                    icon = Icons.Outlined.Description,
+                    contentDescription = stringResource(R.string.chat_attach_file),
+                    onClick = { pickFile.launch(arrayOf("*/*")) },
+                    buttonSize = 36.dp,
+                    iconSize = 18.dp,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MiuixButton(
+                    text = stringResource(R.string.chat_cancel),
+                    onClick = onDismiss,
+                    variant = MiuixButtonVariant.TEXT,
+                )
+                MiuixButton(
+                    text = stringResource(R.string.chat_edit_save),
+                    onClick = { onConfirm(text.trim(), newImages.toList()) },
+                    enabled = text.isNotBlank(),
+                )
+            }
         }
     }
 }

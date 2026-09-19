@@ -33,4 +33,15 @@
     <string name="chat_tool_done">Called %1$s</string>
     <string name="chat_tool_args">Arguments</string>
     <string name="chat_tool_pending">(no output)</string>
+    <string name="chat_msg_copy">Copy</string>
+    <string name="chat_msg_resend">Regenerate</string>
+    <string name="chat_msg_delete">Delete</string>
+    <string name="chat_msg_edit">Edit</string>
+    <string name="chat_msg_edited">Edited</string>
+    <string name="chat_edit_title">Edit message</string>
+    <string name="chat_edit_save">Save &amp; resend</string>
+    <string name="chat_delete_confirm_title">Delete this message?</string>
+    <string name="chat_delete_confirm_yes">Delete</string>
+    <string name="chat_session_delete_confirm_title">Delete this conversation?</string>
+    <string name="chat_cancel">Cancel</string>
 </resources>
