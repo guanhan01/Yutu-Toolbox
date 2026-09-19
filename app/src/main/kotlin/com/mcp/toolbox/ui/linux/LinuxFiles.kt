@@ -383,11 +383,13 @@ fun LinuxSharedScreen(
                             // /proc/mounts 给的是设备名（/dev/block/...），对用户没意义，
                             // 这里换成实际的 Android 来源路径
                             MiuixText(
-                                text = when (inner) {
-                                    "dev" -> "/dev"
-                                    "proc" -> "/proc"
-                                    "sys" -> "/sys"
-                                    "sdcard" -> "/storage/emulated/0"
+                                text = when {
+                                    inner == "dev" -> "/dev"
+                                    inner == "proc" -> "/proc"
+                                    inner == "sys" -> "/sys"
+                                    inner == "sdcard" -> "/storage/emulated/0"
+                                    inner.startsWith("mnt/android/") ->
+                                        "/" + inner.removePrefix("mnt/android/")
                                     else -> custom.firstOrNull { it.second == inner }?.first
                                         ?: "自定义目录"
                                 },

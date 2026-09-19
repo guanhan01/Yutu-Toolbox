@@ -33,6 +33,17 @@ data class ChatMessage(
     }
 }
 
+/**
+ * 正在进行的工具调用。
+ *
+ * 只用于实时展示：请求结束后这些会落成 Role.TOOL 的正式消息。
+ */
+data class RunningTool(
+    val name: String,
+    val arguments: String = "",
+    val result: String = "",
+)
+
 /** 一次对话（会话），包含其全部消息。 */
 data class ChatSession(
     val id: String = UUID.randomUUID().toString(),

@@ -106,6 +106,7 @@ import com.mcp.toolbox.ui.linux.LinuxPrefs
 import com.mcp.toolbox.ui.linux.LinuxBrowseTarget
 import com.mcp.toolbox.ui.linux.LinuxFilesScreen
 import com.mcp.toolbox.ui.linux.LinuxSharedScreen
+import com.mcp.toolbox.feature.home.RunningTool
 
 /** 应用外壳：自绘抽屉 + 底栏 + 顶部 Toast 宿主。 抽屉支持汉堡按钮打开、左侧边缘滑动打开、面板左滑关闭、点遮罩关闭。 */
 @Composable
@@ -317,7 +318,13 @@ private fun ToolboxNavHost(
                     providerIconRes = aiConfig.current.iconRes,
                     runningText = chatRunning?.streamed,
                     runningReasoning = chatRunning?.reasoning,
-                    runningTool = chatRunning?.tools?.lastOrNull()?.name,
+                    runningTools = chatRunning?.tools?.map {
+                        RunningTool(
+                            name = it.name,
+                            arguments = it.arguments,
+                            result = it.result,
+                        )
+                    }.orEmpty(),
                     running = chatRunning != null,
                     onStop = { ChatRunner.stop() },
                     currentModel = aiConfig.model,

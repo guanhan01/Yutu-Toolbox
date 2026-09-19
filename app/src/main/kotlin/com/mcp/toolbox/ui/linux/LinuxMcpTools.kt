@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import com.mcp.toolbox.core.common.PrivilegeManager
 
 /**
  * 把 Linux 环境的能力暴露成 MCP 工具，让 AI 能直接使用。
@@ -59,6 +60,7 @@ object LinuxMcpTools {
         mountList(context),
         mountAdd(context),
         mountRemove(context),
+        installApk(context),
     )
 
     private fun envStatus(context: Context) = ToolDef(
@@ -342,11 +344,12 @@ object LinuxMcpTools {
         },
     )
 
-    private fun androidPathOf(inner: String, custom: List<Pair<String, String>>): String = when (inner) {
-        "dev" -> "/dev"
-        "proc" -> "/proc"
-        "sys" -> "/sys"
-        "sdcard" -> "/storage/emulated/0"
+    private fun androidPathOf(inner: String, custom: List<Pair<String, String>>): String = when {
+        inner == "dev" -> "/dev"
+        inner == "proc" -> "/proc"
+        inner == "sys" -> "/sys"
+        inner == "sdcard" -> "/storage/emulated/0"
+        inner.startsWith("mnt/android/") -> "/" + inner.removePrefix("mnt/android/")
         else -> custom.firstOrNull { it.second == inner }?.first ?: "自定义目录"
     }
 
@@ -379,6 +382,54 @@ object LinuxMcpTools {
                 put("total", next.size)
             }
             ToolResult(structured, "已添加：$src → /$dst（下次进入 Linux 环境生效）")
+        },
+    )
+
+    private fun installApk(context: Context) = ToolDef(
+        name = "android.install_apk",
+        title = "安装 Android 应用",
+        description = "把一个 APK 安装到本机。需要在内置 Server 中开启「允许写入」，且需要 root。" +
+            "为绕开 SELinux 对共享存储的限制，会先把安装包复制到 /data/local/tmp 再安装。" +
+            "返回包名、版本与安装结果。",
+        schema = Schema.obj(
+            listOf(
+                "path" to Schema.string("APK 的绝对路径，如 /storage/emulated/0/Download/a.apk"),
+                "reinstall" to Schema.bool("覆盖安装（-r）", default = true),
+                "grant" to Schema.bool("安装时授予全部运行时权限（-g）", default = false),
+                "downgrade" to Schema.bool("允许版本降级（-d）", default = false),
+            ),
+            required = listOf("path"),
+        ),
+        readOnly = false,
+        dangerous = true,
+        requiresPrivilege = true,
+        handler = { ctx, args ->
+            if (!BuiltInMcpServer.config.value.allowWrite) {
+                throw IllegalStateException("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
+            }
+            val path = args.getString("path").trim()
+            val source = File(path)
+            if (!source.isFile) throw IllegalArgumentException("APK 不存在：$path")
+            val flags = buildString {
+                if (args.optBoolean("reinstall", true)) append(" -r")
+                if (args.optBoolean("grant")) append(" -g")
+                if (args.optBoolean("downgrade")) append(" -d")
+            }
+            val temp = "/data/local/tmp/eta-install-" + System.currentTimeMillis() + ".apk"
+            val command = "cp " + shellQuote(path) + " " + shellQuote(temp) +
+                " && pm install" + flags + " " + shellQuote(temp) +
+                " ; rm -f " + shellQuote(temp)
+            val result = runBlocking { PrivilegeManager.exec(command, 180000L) }
+            val output = result.stdout.ifBlank { result.output }
+            val ok = result.ok && !output.contains("Failure")
+            val structured = JSONObject().apply {
+                put("apk", path)
+                put("sizeBytes", source.length())
+                put("success", ok)
+                put("backend", result.backend.name)
+                put("output", output.take(2000))
+            }
+            ToolResult(structured, output.ifBlank { if (ok) "安装完成" else "安装失败" }, isError = !ok)
         },
     )
 

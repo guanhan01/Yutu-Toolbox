@@ -105,8 +105,8 @@ fun HomeScreen(
     onStart: (sessionId: String, history: List<ChatMessage>) -> Unit = { _, _ -> },
     /** 当前正在流式接收的文本；未进行时为 null。 */
     runningText: String? = null,
-    /** 当前正在调用的工具名；未进行时为 null。 */
-    runningTool: String? = null,
+    /** 本轮已发生的工具调用（实时更新，结束时才落盘成正式消息）。 */
+    runningTools: List<RunningTool> = emptyList(),
     /** 正在进行的深度思考文本。 */
     runningReasoning: String? = null,
     /** 是否已有请求在执行（可能刚发出、还没有增量）。 */
@@ -278,29 +278,39 @@ fun HomeScreen(
                         }
                     }
                     if (sending) {
-                        item(key = "pending") {
-                            when {
-                                !runningReasoning.isNullOrEmpty() -> ReasoningBlock(
-                                    text = runningReasoning,
-                                    live = true,
+                        // 思考、工具调用、流式文本会同时存在，必须各自成条按顺序渲染。
+                        // 之前是一个互斥的 when，思考一有内容就把工具卡片整个挡掉了，
+                        // 于是「调用 xxx」只能等思考结束、消息落盘后才出现。
+                        if (!runningReasoning.isNullOrEmpty()) {
+                            item(key = "pending-reasoning") {
+                                ReasoningBlock(text = runningReasoning, live = true)
+                            }
+                        }
+                        runningTools.forEachIndexed { index, step ->
+                            item(key = "pending-tool-$index") {
+                                ToolStepCard(
+                                    name = step.name,
+                                    arguments = step.arguments,
+                                    result = step.result,
+                                    running = step.result.isEmpty(),
                                 )
-
-                                runningTool != null -> ToolStepCard(
-                                    name = runningTool,
-                                    arguments = "",
-                                    result = "",
-                                    running = true,
-                                )
-
-                                !runningText.isNullOrEmpty() -> MessageBubble(
+                            }
+                        }
+                        if (!runningText.isNullOrEmpty()) {
+                            item(key = "pending-text") {
+                                MessageBubble(
                                     ChatMessage(
                                         role = ChatMessage.Role.ASSISTANT,
                                         content = runningText,
                                     ),
                                 )
-
-                                else -> PendingBubble()
                             }
+                        }
+                        if (runningReasoning.isNullOrEmpty() &&
+                            runningTools.isEmpty() &&
+                            runningText.isNullOrEmpty()
+                        ) {
+                            item(key = "pending") { PendingBubble() }
                         }
                     }
                 }

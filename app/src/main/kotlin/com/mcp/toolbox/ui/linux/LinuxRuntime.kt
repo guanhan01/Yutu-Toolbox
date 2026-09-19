@@ -103,6 +103,14 @@ object LinuxRuntime {
             append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\" 2>/dev/null; ")
             append("umount \"\$R/sdcard\" 2>/dev/null; ")
             append("mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
+            // Android 系统目录：只读挂进来，让 Linux 里也能翻系统文件
+            append("for p in system vendor product system_ext; do ")
+            append("[ -d \"/\$p\" ] || continue; ")
+            append("mkdir -p \"\$R/mnt/android/\$p\" 2>/dev/null; ")
+            append("umount \"\$R/mnt/android/\$p\" 2>/dev/null; ")
+            append("mount --bind \"/\$p\" \"\$R/mnt/android/\$p\" 2>/dev/null; ")
+            append("mount -o remount,ro,bind \"\$R/mnt/android/\$p\" 2>/dev/null; ")
+            append("done; ")
             // 自定义挂载：把用户指定的 Android 目录绑进 rootfs
             LinuxPrefs.customMounts(context).forEach { (src, dst) ->
                 val target = "\$R/" + dst.trim('/')
