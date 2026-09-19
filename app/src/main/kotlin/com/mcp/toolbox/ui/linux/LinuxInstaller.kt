@@ -117,17 +117,18 @@ object LinuxInstaller {
             deleteRecursively()
             mkdirs()
         }
-        sh(busybox, "cd ${work.absolutePath} && ar x ${deb.absolutePath}")
+        // 一律用 busybox 的绝对路径调用，root 的 PATH 里没有这些工具
+        sh(busybox, "cd ${work.absolutePath} && $busybox ar x ${deb.absolutePath}")
 
         val dataXz = work.listFiles()?.firstOrNull { it.name.startsWith("data.tar") }
             ?: throw IllegalStateException("deb 内未找到数据段")
 
         // xz -d 解成 data.tar
-        sh(busybox, "xz -d -f ${dataXz.absolutePath}")
+        sh(busybox, "$busybox xz -d -f ${dataXz.absolutePath}")
         val dataTar = File(work, dataXz.name.removeSuffix(".xz"))
 
         // tar -x 取出全部，再从 termux 的路径里挑出 proot
-        sh(busybox, "cd ${work.absolutePath} && tar -xf ${dataTar.absolutePath}")
+        sh(busybox, "cd ${work.absolutePath} && $busybox tar -xf ${dataTar.absolutePath}")
         val extracted = File(work, "data/data/com.termux/files/usr/bin/proot")
         if (!extracted.isFile) throw IllegalStateException("deb 内未找到 proot 可执行文件")
 
@@ -151,7 +152,7 @@ object LinuxInstaller {
             append("[ -x \"\$p\" ] && { echo \"\$p\"; exit 0; }; done; exit 1")
         }
         return runCatching {
-            val process = ProcessBuilder("su", "-c", script)
+            val process = ProcessBuilder("su", "-c", "'" + script.replace("'", "'\\''") + "'")
                 .redirectErrorStream(true)
                 .start()
             val out = process.inputStream.bufferedReader().use { it.readText() }
@@ -160,15 +161,21 @@ object LinuxInstaller {
         }.getOrNull()
     }
 
-    /** 执行 shell 片段；失败时抛出带输出的异常。 */
+    /**
+     * 以 root 执行 shell 片段。
+     *
+     * 脚本整体用单引号包住再交给 `su -c`，否则 `&&` 会被外层 shell 拆开，
+     * 后面的命令就跑到 root 的 PATH 里去找了（那里没有 ar / xz）。
+     */
     private fun sh(busybox: String, script: String) {
-        val process = ProcessBuilder("su", "-c", "$busybox sh -c $script")
+        val quoted = "'" + script.replace("'", "'\\''") + "'"
+        val process = ProcessBuilder("su", "-c", "$busybox sh -c $quoted")
             .redirectErrorStream(true)
             .start()
         val out = process.inputStream.bufferedReader().use { it.readText() }
         val code = process.waitFor()
         if (code != 0) {
-            throw IllegalStateException("解包失败：${out.trim().take(200)}")
+            throw IllegalStateException("解包失败：${out.trim().take(300)}")
         }
     }
 
