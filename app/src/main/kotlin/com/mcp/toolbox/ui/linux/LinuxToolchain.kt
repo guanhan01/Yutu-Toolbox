@@ -106,6 +106,8 @@ object LinuxToolchain {
             LinuxComponent.CODEX -> """
                 [ -x /usr/local/bin/npm ] || { echo "请先安装 Node.js 环境"; exit 1; }
                 npm config set registry https://registry.npmmirror.com
+                # 中断过的安装会残留半装目录，npm 重装时报 ENOTEMPTY 直接失败
+                rm -rf /usr/local/lib/node_modules/@openai
                 npm install -g @openai/codex
                 echo "codex: ${'$'}(/usr/local/bin/codex --version 2>&1 | head -n 1)"
             """.trimIndent()
@@ -113,6 +115,8 @@ object LinuxToolchain {
             LinuxComponent.CLAUDE -> """
                 [ -x /usr/local/bin/npm ] || { echo "请先安装 Node.js 环境"; exit 1; }
                 npm config set registry https://registry.npmmirror.com
+                # 中断过的安装会残留半装目录，npm 重装时报 ENOTEMPTY 直接失败
+                rm -rf /usr/local/lib/node_modules/@anthropic-ai
                 npm install -g @anthropic-ai/claude-code
                 echo "claude: ${'$'}(/usr/local/bin/claude --version 2>&1 | head -n 1)"
             """.trimIndent()
