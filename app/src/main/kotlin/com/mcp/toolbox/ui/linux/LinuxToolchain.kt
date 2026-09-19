@@ -96,6 +96,26 @@ object LinuxToolchain {
                 echo "jadx: ok"
                 echo "apktool: ok"
             """.trimIndent()
+
+            LinuxComponent.GIT -> """
+                apt-get install -y -qq --no-install-recommends git
+                echo "git: ${'$'}(git --version 2>&1)"
+            """.trimIndent()
+
+            // 这两个是 npm 全局包，必须先有 Node.js 环境
+            LinuxComponent.CODEX -> """
+                [ -x /usr/local/bin/npm ] || { echo "请先安装 Node.js 环境"; exit 1; }
+                npm config set registry https://registry.npmmirror.com
+                npm install -g @openai/codex
+                echo "codex: ${'$'}(/usr/local/bin/codex --version 2>&1 | head -n 1)"
+            """.trimIndent()
+
+            LinuxComponent.CLAUDE -> """
+                [ -x /usr/local/bin/npm ] || { echo "请先安装 Node.js 环境"; exit 1; }
+                npm config set registry https://registry.npmmirror.com
+                npm install -g @anthropic-ai/claude-code
+                echo "claude: ${'$'}(/usr/local/bin/claude --version 2>&1 | head -n 1)"
+            """.trimIndent()
         }
         return head + "\n" + body
     }

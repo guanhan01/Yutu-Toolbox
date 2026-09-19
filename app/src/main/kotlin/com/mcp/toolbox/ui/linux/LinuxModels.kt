@@ -34,6 +34,9 @@ enum class LinuxComponent(
     NODE("Node.js 环境", "Node.js 与 npm", "/usr/local/bin/node"),
     SSH("SSH 远程访问", "sshd、ssh-keygen 与 ssh-agent", "/usr/bin/ssh-keygen"),
     APK("APK 分析", "JADX、Apktool、smali 与 baksmali", "/opt/apktool/apktool"),
+    GIT("Git 版本控制", "git 命令行工具", "/usr/bin/git"),
+    CODEX("Codex CLI", "OpenAI 命令行助手（需先装 Node.js）", "/usr/local/bin/codex"),
+    CLAUDE("Claude Code", "Anthropic 命令行助手（需先装 Node.js）", "/usr/local/bin/claude"),
 }
 
 /** 一个组件的检测结果。 */

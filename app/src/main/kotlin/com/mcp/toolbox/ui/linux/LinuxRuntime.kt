@@ -221,6 +221,9 @@ object LinuxRuntime {
             LinuxComponent.NODE -> "node --version 2>/dev/null || true"
             LinuxComponent.SSH -> "ssh -V 2>&1 || ssh-keygen --help 2>/dev/null | head -1 || true"
             LinuxComponent.APK -> "apktool --version 2>/dev/null || true"
+            LinuxComponent.GIT -> "git --version 2>/dev/null || true"
+            LinuxComponent.CODEX -> "codex --version 2>/dev/null || true"
+            LinuxComponent.CLAUDE -> "claude --version 2>/dev/null || true"
         }
         val result = exec(context, distro, "[ -x $probe ] && { $args; } || true")
         val line = result.combined.lineSequence().firstOrNull { it.isNotBlank() } ?: return null

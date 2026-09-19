@@ -154,6 +154,9 @@ private suspend fun probeVersions(
         echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
         echo "SSH=${'$'}(ssh -V 2>&1 | head -n 1)"
         echo "APK=${'$'}(jadx --version 2>&1 | head -n 1)"
+        echo "GIT=${'$'}(git --version 2>&1 | head -n 1)"
+        echo "CODEX=${'$'}(codex --version 2>&1 | head -n 1)"
+        echo "CLAUDE=${'$'}(claude --version 2>&1 | head -n 1)"
     """.trimIndent()
     val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
     val versions = mutableMapOf<LinuxComponent, String>()
@@ -165,6 +168,9 @@ private suspend fun probeVersions(
             "NODE" -> LinuxComponent.NODE
             "SSH" -> LinuxComponent.SSH
             "APK" -> LinuxComponent.APK
+            "GIT" -> LinuxComponent.GIT
+            "CODEX" -> LinuxComponent.CODEX
+            "CLAUDE" -> LinuxComponent.CLAUDE
             else -> null
         }
         if (component != null && value.isNotBlank() && !value.contains("not found")) {

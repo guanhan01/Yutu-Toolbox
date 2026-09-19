@@ -47,6 +47,9 @@ import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.AutoAwesome
 
 /**
  * Linux 工具环境主页。
@@ -325,6 +328,9 @@ private fun ComponentRow(
                     LinuxComponent.NODE -> Icons.Outlined.Memory
                     LinuxComponent.SSH -> Icons.Outlined.Key
                     LinuxComponent.APK -> Icons.Outlined.Android
+                    LinuxComponent.GIT -> Icons.Outlined.Code
+                    LinuxComponent.CODEX -> Icons.Outlined.SmartToy
+                    LinuxComponent.CLAUDE -> Icons.Outlined.AutoAwesome
                 },
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,
