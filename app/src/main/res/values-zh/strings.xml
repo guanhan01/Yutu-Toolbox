@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Yutu Toolbox Beta</string>
+    <string name="app_name">Yutu Toolbox</string>
 
     <!-- 抽屉 / 底栏导航 -->
     <string name="app_nav_home">对话</string>
