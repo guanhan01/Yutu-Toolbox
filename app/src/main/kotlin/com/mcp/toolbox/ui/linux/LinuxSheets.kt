@@ -145,7 +145,7 @@ private suspend fun scanEnv(
  *
  * 合成一条命令一次拿全：每跑一次 chroot 都要重挂 dev/proc/sys，四次会明显变慢。
  */
-private suspend fun probeVersions(
+internal suspend fun probeVersions(
     context: Context,
     distro: LinuxDistro,
 ): Map<LinuxComponent, String> {

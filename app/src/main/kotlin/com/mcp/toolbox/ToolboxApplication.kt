@@ -6,6 +6,8 @@ import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.mcp.toolbox.feature.mcp.BuiltInToolSet
+import com.mcp.toolbox.ui.linux.LinuxMcpTools
 
 /**
  * 应用级容器。
@@ -26,6 +28,9 @@ class ToolboxApplication : Application() {
         // IMPL-NOTE: 尽早载入内置 Server 配置。token 的「固定文件」在 app 私有目录之外，
         // 清理数据 / 卸载重装后必须在这里恢复；不能等用户打开 MCP 页面（Server 服务可能自启）。
         runCatching { BuiltInMcpServer.load(this) }
+        // 把 Linux 环境的能力接进 MCP 工具集。LinuxRuntime 在 app 模块，
+        // 只能从这里注入，feature:mcp 不反向依赖。
+        runCatching { BuiltInToolSet.registerExtra { ctx -> LinuxMcpTools.all(ctx) } }
     }
 
     companion object {

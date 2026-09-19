@@ -19,6 +19,17 @@ import java.net.URL
  */
 object BuiltInToolSet {
 
+    /**
+     * app 模块注入的额外工具（目前是 Linux 环境）。
+     *
+     * LinuxRuntime 属于 app 模块，feature 反向依赖会成环，所以留这个注册点。
+     */
+    private val extras = mutableListOf<(Context) -> List<ToolDef>>()
+
+    fun registerExtra(provider: (Context) -> List<ToolDef>) {
+        extras += provider
+    }
+
     fun all(context: Context): List<ToolDef> = listOf(
         deviceInfo(context),
         fileList(context),
@@ -29,7 +40,7 @@ object BuiltInToolSet {
         appList(context),
         artifactList(context),
         captureRecords(),
-    ) + BuiltInToolSetExtra.all(context) + BuiltInToolSetApk.all(context) + BuiltInToolSetDex.all(context) + BuiltInToolSetSys.all(context) + BuiltInToolSetFs.all(context) + BuiltInToolSetApps.all(context) + BuiltInToolSetDb.all(context) + BuiltInToolSetCapture.all(context) + BuiltInToolSetReverse.all(context)
+    ) + BuiltInToolSetExtra.all(context) + BuiltInToolSetApk.all(context) + BuiltInToolSetDex.all(context) + BuiltInToolSetSys.all(context) + BuiltInToolSetFs.all(context) + BuiltInToolSetApps.all(context) + BuiltInToolSetDb.all(context) + BuiltInToolSetCapture.all(context) + BuiltInToolSetReverse.all(context) + extras.flatMap { it(context) }
 
     private fun deviceInfo(context: Context) = ToolDef(
         name = "device.info",

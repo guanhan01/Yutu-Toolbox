@@ -272,7 +272,7 @@ fun LinuxFilesScreen(
 }
 
 /** 读当前已生效的挂载。务必在 IO 线程调用。 */
-private fun readMounts(rootfs: File): List<Pair<String, String>> = runCatching {
+internal fun readMounts(rootfs: File): List<Pair<String, String>> = runCatching {
     File("/proc/self/mounts").readLines().mapNotNull { line ->
         val parts = line.split(" ")
         if (parts.size < 2) return@mapNotNull null
