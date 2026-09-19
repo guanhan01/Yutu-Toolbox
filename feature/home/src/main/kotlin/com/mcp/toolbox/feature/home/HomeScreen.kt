@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -150,8 +151,8 @@ fun HomeScreen(
     val clipboard = LocalClipboardManager.current
     /** 长按弹出的消息操作菜单目标；编辑弹层复用同一个目标。 */
     var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
-    /** 消息删除确认目标。 */
-    var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    /** 正在编辑的用户消息：非空时输入栏处于编辑态。 */
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -244,7 +245,7 @@ fun HomeScreen(
         if (userMessage.role != ChatMessage.Role.USER) return
         scope.launch {
             val kept = ChatStore.truncateAfter(context, current.id, userMessage.id)
-            val history = kept
+            val history = (kept + userMessage)
                 .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
             if (history.isNotEmpty()) onStart(current.id, history)
         }
@@ -260,7 +261,7 @@ fun HomeScreen(
                 content = newText,
                 imageUris = newImages,
             )
-            val updated = kept.dropLast(1) + kept.last().copy(
+            val updated = kept + message.copy(
                 content = newText,
                 imageUris = newImages,
                 edited = true,
@@ -269,6 +270,36 @@ fun HomeScreen(
                 .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
             if (history.isNotEmpty()) onStart(current.id, history)
         }
+    }
+
+    /** 进入编辑态：内容预填进输入栏，附件可经加号菜单追加，点发送确认。 */
+    fun beginEdit(message: ChatMessage) {
+        editingMessage = message
+        input = message.content
+        attachments.clear()
+    }
+
+    /** 确认编辑：输入栏内容 +（可选）附件写回消息并重新生成。 */
+    fun confirmEdit() {
+        val message = editingMessage ?: return
+        val content = input.trim()
+        if (content.isEmpty() || sending) return
+        val attached = attachments.toList()
+        input = ""
+        attachments.clear()
+        editingMessage = null
+        val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
+        val textAttachments = attached.filterNot { it is ChatAttachment.Image }
+        val finalContent = if (textAttachments.isEmpty()) content
+        else content + "\n\n" + attachContext + "\n" +
+            textAttachments.joinToString("\n\n") { it.toContext(context) }
+        scope.launch { applyEdit(message, finalContent, imageUris) }
+    }
+
+    fun cancelEdit() {
+        editingMessage = null
+        input = ""
+        attachments.clear()
     }
 
     Column(
@@ -333,11 +364,7 @@ fun HomeScreen(
                                         ChatStore.deleteMessage(context, session!!.id, message.id)
                                     }
                                 },
-                                onEdit = { newText, newImages ->
-                                    if (!sending) scope.launch {
-                                        applyEdit(message, newText, newImages)
-                                    }
-                                },
+                                onEdit = { if (!sending) beginEdit(message) },
                             )
                         }
                     }
@@ -402,7 +429,9 @@ fun HomeScreen(
             value = input,
             onValueChange = { input = it },
             sending = sending,
-            onSend = { submit(input) },
+            editing = editingMessage != null,
+            onCancelEdit = { cancelEdit() },
+            onSend = { if (editingMessage != null) confirmEdit() else submit(input) },
             onStop = onStop,
             onAttach = { showOverflow = true },
             onPickModel = { picker = PickerKind.MODEL },
@@ -642,6 +671,8 @@ private fun InputBar(
     value: String,
     onValueChange: (String) -> Unit,
     sending: Boolean,
+    editing: Boolean = false,
+    onCancelEdit: () -> Unit = {},
     onSend: () -> Unit,
     onStop: () -> Unit,
     onAttach: () -> Unit,
@@ -667,9 +698,45 @@ private fun InputBar(
                 bottom = spacing.sm,
             )
             .clip(RoundedCornerShape(MiuixTheme.radius.lg))
-            .background(if (active || sending) colors.surface else colors.surfaceContainerLow)
+            .background(colors.surface)
             .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 8.dp),
     ) {
+        // 编辑态横条：提示正在编辑，可取消
+        if (editing) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MiuixIcon(
+                    Icons.Outlined.Edit,
+                    null,
+                    tint = colors.primary,
+                    size = 16.dp,
+                )
+                Spacer(Modifier.width(6.dp))
+                MiuixText(
+                    text = stringResource(R.string.chat_editing_hint),
+                    style = MiuixTheme.typography.labelMedium,
+                    color = colors.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onCancelEdit),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixIcon(
+                        Icons.Outlined.Close,
+                        stringResource(R.string.chat_cancel),
+                        tint = colors.onSurfaceVariant,
+                        size = 16.dp,
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
         // 第一行：输入
         Box(
             modifier = Modifier
@@ -679,7 +746,7 @@ private fun InputBar(
         ) {
             if (value.isEmpty()) {
                 MiuixText(
-                    text = stringResource(R.string.chat_input_hint),
+                    text = stringResource(if (editing) R.string.chat_editing_hint else R.string.chat_input_hint),
                     style = MiuixTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                 )
@@ -1030,14 +1097,15 @@ private fun MessageBubble(
     onCopy: () -> Unit = {},
     onResend: () -> Unit = {},
     onDelete: () -> Unit = {},
-    onEdit: (String, List<String>) -> Unit = { _, _ -> },
+    onEdit: () -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val radius = RoundedCornerShape(MiuixTheme.radius.md)
     val isUser = message.role == ChatMessage.Role.USER
     val isSystem = message.role == ChatMessage.Role.SYSTEM
     var showActions by remember(message.id) { mutableStateOf(false) }
-    var showEdit by remember(message.id) { mutableStateOf(false) }
+    // 气泡在窗口中的位置，用作长按菜单的锚点
+    val bubbleAnchor = remember(message.id) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1062,6 +1130,7 @@ private fun MessageBubble(
                     onLongClick = if (isUser) ({ showActions = true }) else null,
                     onClick = {},
                 )
+                .onGloballyPositioned { bubbleAnchor.value = it.boundsInWindow() }
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             MiuixText(
@@ -1093,12 +1162,17 @@ private fun MessageBubble(
         }
     }
 
-    // 用户消息长按菜单：复制 / 编辑 / 删除
+    // 用户消息长按菜单：复制 / 编辑 / 删除；锚在气泡右缘、往右错开一点
     if (showActions && isUser) {
         MiuixOverflowMenu(
             expanded = showActions,
             onDismiss = { showActions = false },
-            alignStart = true,
+            anchor = bubbleAnchor.value?.let {
+                androidx.compose.ui.geometry.Rect(
+                    it.left + 24f, it.top, it.right + 24f, it.bottom,
+                )
+            },
+            alignStart = false,
         ) {
             MiuixMenuItem(
                 text = stringResource(R.string.chat_msg_copy),
@@ -1108,7 +1182,7 @@ private fun MessageBubble(
             MiuixMenuItem(
                 text = stringResource(R.string.chat_msg_edit),
                 icon = Icons.Outlined.Edit,
-                onClick = { showActions = false; showEdit = true },
+                onClick = { showActions = false; onEdit() },
             )
             MiuixMenuItem(
                 text = stringResource(R.string.chat_msg_delete),
@@ -1119,16 +1193,6 @@ private fun MessageBubble(
         }
     }
 
-    if (showEdit && isUser) {
-        MessageEditDialog(
-            message = message,
-            onDismiss = { showEdit = false },
-            onConfirm = { text, images ->
-                showEdit = false
-                onEdit(text, images)
-            },
-        )
-    }
 }
 
 /** 消息气泡下的小操作图标（复制 / 重说 / 删除）。 */
@@ -1147,112 +1211,5 @@ private fun MessageActionIcon(
         contentAlignment = Alignment.Center,
     ) {
         MiuixIcon(icon, label, tint = colors.onSurfaceVariant, size = 16.dp)
-    }
-}
-/** 编辑弹层：多行输入 + 追加图片/文件附件，保存后从该消息重新生成。 */
-@Composable
-private fun MessageEditDialog(
-    message: ChatMessage,
-    onDismiss: () -> Unit,
-    onConfirm: (String, List<String>) -> Unit,
-) {
-    val context = LocalContext.current
-    val colors = MiuixTheme.colors
-    val spacing = MiuixTheme.dimens.spacing
-    var text by remember(message.id) { mutableStateOf(message.content) }
-    val newImages = remember { mutableStateListOf<String>() }
-    val newFiles = remember { mutableStateListOf<ChatAttachment>() }
-
-    val pickImage = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        uri?.let {
-            newImages += it.toString()
-            newFiles += ChatAttachment.Image(
-                uri = it.toString(),
-                label = ChatAttachment.displayName(context, it),
-            )
-        }
-    }
-    val pickFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        uri?.let {
-            newFiles += ChatAttachment.File(
-                uri = it.toString(),
-                label = ChatAttachment.displayName(context, it),
-            )
-        }
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(MiuixTheme.radius.dialog))
-                .background(colors.surface)
-                .padding(spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(spacing.md),
-        ) {
-            MiuixText(
-                text = stringResource(R.string.chat_edit_title),
-                style = MiuixTheme.typography.titleMedium,
-            )
-            MiuixTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = false,
-                minLines = 3,
-            )
-            if (newFiles.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                    newFiles.forEachIndexed { index, item ->
-                        AttachmentChip(
-                            label = item.label,
-                            onRemove = {
-                                newFiles.removeAt(index)
-                                if (item is ChatAttachment.Image) newImages.remove(item.uri)
-                            },
-                        )
-                    }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
-                MiuixIconButton(
-                    icon = Icons.Outlined.Image,
-                    contentDescription = stringResource(R.string.chat_attach_image),
-                    onClick = {
-                        pickImage.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    },
-                    buttonSize = 36.dp,
-                    iconSize = 18.dp,
-                )
-                MiuixIconButton(
-                    icon = Icons.Outlined.Description,
-                    contentDescription = stringResource(R.string.chat_attach_file),
-                    onClick = { pickFile.launch(arrayOf("*/*")) },
-                    buttonSize = 36.dp,
-                    iconSize = 18.dp,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MiuixButton(
-                    text = stringResource(R.string.chat_cancel),
-                    onClick = onDismiss,
-                    variant = MiuixButtonVariant.TEXT,
-                )
-                MiuixButton(
-                    text = stringResource(R.string.chat_edit_save),
-                    onClick = { onConfirm(text.trim(), newImages.toList()) },
-                    enabled = text.isNotBlank(),
-                )
-            }
-        }
     }
 }

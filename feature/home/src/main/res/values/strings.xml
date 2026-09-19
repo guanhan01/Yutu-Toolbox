@@ -44,4 +44,5 @@
     <string name="chat_delete_confirm_yes">Delete</string>
     <string name="chat_session_delete_confirm_title">Delete this conversation?</string>
     <string name="chat_cancel">Cancel</string>
+    <string name="chat_editing_hint">Editing message — attachments via +, send to apply</string>
 </resources>

@@ -44,4 +44,5 @@
     <string name="chat_delete_confirm_yes">删除</string>
     <string name="chat_session_delete_confirm_title">删除这条对话？</string>
     <string name="chat_cancel">取消</string>
+    <string name="chat_editing_hint">正在编辑消息，可通过 + 追加图片或文件，点发送生效</string>
 </resources>
