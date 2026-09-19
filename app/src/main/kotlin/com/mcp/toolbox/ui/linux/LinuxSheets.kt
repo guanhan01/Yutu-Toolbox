@@ -117,15 +117,61 @@ fun LinuxChoiceSheet(
  *
  * 检测在 rootfs 内查可执行文件，瞬时完成；缺失的组件给出安装入口。
  */
-/** 一次环境扫描：是否就绪、各组件状态、rootfs 体积。务必在 IO 线程调用。 */
-private fun scanEnv(
+/**
+ * 一次环境扫描：是否就绪、各组件状态、rootfs 体积。务必在 IO 线程调用。
+ *
+ * [probe] 为 true 时真实执行各工具取版本号（比读缓存准得多）。
+ */
+private suspend fun scanEnv(
     context: Context,
     distro: LinuxDistro,
+    probe: Boolean = false,
 ): Triple<Boolean, List<ComponentStatus>, String> {
     val ready = LinuxEnvStore.isInstalled(context, distro)
-    val statuses = LinuxChecker.check(context, distro)
+    var statuses = LinuxChecker.check(context, distro)
+    if (probe && ready) {
+        val versions = probeVersions(context, distro)
+        statuses = statuses.map { status ->
+            val found = versions[status.component]
+            if (status.installed && !found.isNullOrBlank()) status.copy(version = found) else status
+        }
+    }
     val size = if (ready) LinuxChecker.humanSize(LinuxEnvStore.sizeOf(context, distro)) else "未安装"
     return Triple(ready, statuses, size)
+}
+
+/**
+ * 真实跑一遍各工具，取回版本号。
+ *
+ * 合成一条命令一次拿全：每跑一次 chroot 都要重挂 dev/proc/sys，四次会明显变慢。
+ */
+private suspend fun probeVersions(
+    context: Context,
+    distro: LinuxDistro,
+): Map<LinuxComponent, String> {
+    val script = """
+        echo "PYTHON=${'$'}(uv --version 2>&1 | head -n 1)"
+        echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
+        echo "SSH=${'$'}(ssh -V 2>&1 | head -n 1)"
+        echo "APK=${'$'}(jadx --version 2>&1 | head -n 1)"
+    """.trimIndent()
+    val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
+    val versions = mutableMapOf<LinuxComponent, String>()
+    out.combined.lineSequence().forEach { line ->
+        val key = line.substringBefore('=', "").trim()
+        val value = line.substringAfter('=', "").trim()
+        val component = when (key) {
+            "PYTHON" -> LinuxComponent.PYTHON
+            "NODE" -> LinuxComponent.NODE
+            "SSH" -> LinuxComponent.SSH
+            "APK" -> LinuxComponent.APK
+            else -> null
+        }
+        if (component != null && value.isNotBlank() && !value.contains("not found")) {
+            versions[component] = value.take(60)
+        }
+    }
+    return versions
 }
 
 @Composable
@@ -148,7 +194,7 @@ fun LinuxCheckScreen(
         scanning = true
         // rootfs 有几万个文件，体积统计必须放 IO 线程：这个 Composable 会因为
         // 安装日志每追加一行而重组，放在渲染表达式里等于反复遍历全盘，直接 ANR
-        val snapshot = withContext(Dispatchers.IO) { scanEnv(context, distro) }
+        val snapshot = withContext(Dispatchers.IO) { scanEnv(context, distro, probe = true) }
         envReady = snapshot.first
         statuses = snapshot.second
         sizeText = snapshot.third
