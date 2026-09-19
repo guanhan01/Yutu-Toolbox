@@ -94,11 +94,14 @@ object LinuxRuntime {
             append("for d in dev proc sys; do ")
             append("[ -d \"\$R/\$d\" ] || mkdir -p \"\$R/\$d\" 2>/dev/null; ")
             // 已挂载就跳过，避免重复挂载
-            append("grep -q \" \$R/\$d \" /proc/mounts || ")
+            // 先卸再挂：/proc/mounts 里记的是解析后的真实路径（/data/user/0/...），
+            // 与 $R（/data/data/...）对不上，原来的「已挂载就跳过」永远失效，
+            // 每执行一次就叠一层挂载
+            append("umount \"\$R/\$d\" 2>/dev/null; ")
             append("mount --bind /\$d \"\$R/\$d\" 2>/dev/null; ")
             append("done; ")
             append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\" 2>/dev/null; ")
-            append("grep -q \" \$R/sdcard \" /proc/mounts || ")
+            append("umount \"\$R/sdcard\" 2>/dev/null; ")
             append("mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
             // rootfs 里常已存在（可能是空文件或 systemd 的软链），必须无条件覆盖；
             // 8.8.8.8 / 1.1.1.1 在境内基本不通，优先沿用系统当前 DNS

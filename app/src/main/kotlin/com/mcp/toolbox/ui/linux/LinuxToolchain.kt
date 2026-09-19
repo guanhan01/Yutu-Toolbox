@@ -30,21 +30,26 @@ object LinuxToolchain {
      * 开头统一换源；`set -e` 保证任一步失败即中止，避免留下半装状态。
      */
     private fun scriptOf(component: LinuxComponent): String {
-        val head = """
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            export TMPDIR=/tmp
-            echo "[1/5] 已进入 Linux 环境"
-            # chroot 内没有服务管理器，装包时禁止自动起服务
-            printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
-            chmod +x /usr/sbin/policy-rc.d
-            cat > /etc/apt/sources.list <<'SRC'
-            $DEBIAN_SOURCES
-            SRC
-            echo "[2/5] 软件源已切换，更新索引"
-            apt-get update -qq
-            echo "[3/5] 索引更新完成"
-        """.trimIndent()
+        // 这里必须用 buildString，不能用带缩进的 raw string + trimIndent：
+        // DEBIAN_SOURCES 自身是多行字符串，插值后会把整个 raw string 的最小缩进
+        // 拉成 0，trimIndent 于是完全失效，连 heredoc 的结束标记 SRC 都带上缩进
+        // ⇒ heredoc 永不结束，后续所有命令全被写进 sources.list。
+        // 现象极具迷惑性：退出码 0、零输出，apt 只报 Malformed line。
+        val head = buildString {
+            append("set -e\n")
+            append("export DEBIAN_FRONTEND=noninteractive\n")
+            append("export TMPDIR=/tmp\n")
+            append("echo \"[1/5] 已进入 Linux 环境\"\n")
+            append("# chroot 里没有服务管理器，装包时禁止自动起服务\n")
+            append("printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d\n")
+            append("chmod +x /usr/sbin/policy-rc.d\n")
+            append("cat > /etc/apt/sources.list <<'SRC'\n")
+            append(DEBIAN_SOURCES).append('\n')
+            append("SRC\n")
+            append("echo \"[2/5] 软件源已切换，更新索引\"\n")
+            append("apt-get update -qq\n")
+            append("echo \"[3/5] 索引更新完成\"\n")
+        }
 
         val body = when (component) {
             LinuxComponent.PYTHON -> """
