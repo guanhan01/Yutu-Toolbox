@@ -52,6 +52,8 @@ object Routes {
     const val LINUX = "settings/ai/linux"
     const val LINUX_CHECK = "settings/ai/linux/check"
     const val LINUX_TERMINAL = "settings/ai/linux/terminal"
+    const val LINUX_FILES = "settings/ai/linux/files"
+    const val LINUX_SHARED = "settings/ai/linux/shared"
     const val SETTINGS_THEME = "settings/theme"
     const val SETTINGS_PRIVILEGE = "settings/privilege"
     const val ABOUT = "about"

@@ -103,6 +103,9 @@ import kotlinx.coroutines.withContext
 import com.mcp.toolbox.feature.decompile.engine.DecompileHub
 import com.mcp.toolbox.ui.linux.LinuxPendingInstall
 import com.mcp.toolbox.ui.linux.LinuxPrefs
+import com.mcp.toolbox.ui.linux.LinuxBrowseTarget
+import com.mcp.toolbox.ui.linux.LinuxFilesScreen
+import com.mcp.toolbox.ui.linux.LinuxSharedScreen
 
 /** 应用外壳：自绘抽屉 + 底栏 + 顶部 Toast 宿主。 抽屉支持汉堡按钮打开、左侧边缘滑动打开、面板左滑关闭、点遮罩关闭。 */
 @Composable
@@ -410,10 +413,32 @@ private fun ToolboxNavHost(
                             onNavigate(Routes.LINUX_CHECK)
                         },
                         onOpenTerminal = { onNavigate(Routes.LINUX_TERMINAL) },
-                        onOpenFiles = { toastState.show("Linux 文件浏览待接入") },
-                        onOpenShared = { toastState.show("共享文件夹待接入") },
-                        onOpenWorkspace = { toastState.show("工作区待接入") },
+                        onOpenWorkspace = {
+                            LinuxBrowseTarget.initialPath = "root"
+                            onNavigate(Routes.LINUX_FILES)
+                        },
+                        onOpenShared = { onNavigate(Routes.LINUX_SHARED) },
+                        onOpenFiles = {
+                            LinuxBrowseTarget.initialPath = ""
+                            onNavigate(Routes.LINUX_FILES)
+                        },
                     )
+                }
+            }
+            composable(Routes.LINUX_FILES) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.linux_browse),
+                        onOpenDrawer = onOpenDrawer)
+                    LinuxFilesScreen(distro = LinuxPrefs.distro(LocalContext.current))
+                }
+            }
+            composable(Routes.LINUX_SHARED) {
+                Column(Modifier.fillMaxSize()) {
+                    MiuixTopBarPlaceholder(
+                        title = stringResource(R.string.linux_shared),
+                        onOpenDrawer = onOpenDrawer)
+                    LinuxSharedScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
             }
             composable(Routes.LINUX_TERMINAL) {
