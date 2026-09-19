@@ -101,47 +101,66 @@ object LinuxInstaller {
      */
     private fun ensureProot(context: Context, onProgress: (Progress) -> Unit) {
         val target = LinuxEnvStore.prootBinary(context)
-        if (target.isFile && target.length() > 100_000 && target.canExecute()) return
+        if (target.isFile && target.length() > 100_000) return
 
         val busybox = findBusybox()
             ?: throw IllegalStateException("需要 Root 才能准备 PRoot（未找到可用的 busybox）")
 
         val downloads = LinuxEnvStore.downloads(context)
-
         val debUrl = resolveDeb(Mirrors.PROOT_DEB_DIR, "proot_")
         val deb = File(downloads, debUrl.substringAfterLast('/'))
         if (!deb.isFile || deb.length() == 0L) downloadTo(debUrl, deb, deb.name, onProgress)
 
-        // ar x 解出 data.tar.xz。
-        // 每次都用一个全新目录：ar 遇到同名文件会直接报 File exists，
-        // 上次失败留下的残留必须清掉。
-        val work = File(downloads, "proot-work-" + System.currentTimeMillis()).apply { mkdirs() }
-        sh(
-            busybox,
-            "rm -rf ${work.absolutePath} && mkdir -p ${work.absolutePath} && " +
-                "cd ${work.absolutePath} && $busybox ar x ${deb.absolutePath}",
-        )
-
-        val dataXz = work.listFiles()?.firstOrNull { it.name.startsWith("data.tar") }
-            ?: throw IllegalStateException("deb 内未找到数据段")
-
-        // xz -d 解成 data.tar
-        sh(busybox, "$busybox xz -d -f ${dataXz.absolutePath}")
-        val dataTar = File(work, dataXz.name.removeSuffix(".xz"))
-
-        // tar -x 取出全部，再从 termux 的路径里挑出 proot
-        sh(busybox, "cd ${work.absolutePath} && $busybox tar -xf ${dataTar.absolutePath}")
-        val extracted = File(work, "data/data/com.termux/files/usr/bin/proot")
-        if (!extracted.isFile) throw IllegalStateException("deb 内未找到 proot 可执行文件")
-
-        extracted.copyTo(target, overwrite = true)
+        // 全部步骤放在同一个 root shell 里完成。
+        // 不在 Java 侧列举 root 创建的中间目录：应用进程受 SELinux 与属主限制，
+        // 看到的内容未必与 root 一致，逐目录判断很容易误判。
+        val work = File(downloads, "proot-work-" + System.currentTimeMillis())
+        val script = buildString {
+            append("W=").append(shellArg(work.absolutePath)).append("; ")
+            append("D=").append(shellArg(deb.absolutePath)).append("; ")
+            append("T=").append(shellArg(target.absolutePath)).append("; ")
+            append("rm -rf \"\$W\" && mkdir -p \"\$W\" && cd \"\$W\" || exit 1; ")
+            // ar 不覆盖同名文件，所以目录先清空再解
+            append("$busybox ar x \"\$D\" || exit 2; ")
+            append("[ -f \"\$W/data.tar.xz\" ] || exit 3; ")
+            append("$busybox xz -d -f \"\$W/data.tar.xz\" || exit 4; ")
+            append("[ -f \"\$W/data.tar\" ] || exit 5; ")
+            append("$busybox tar -xf \"\$W/data.tar\" || exit 6; ")
+            append("P=\"\$W/data/data/com.termux/files/usr/bin/proot\"; ")
+            append("[ -f \"\$P\" ] || exit 7; ")
+            append("cp -f \"\$P\" \"\$T\" || exit 8; ")
+            append("chmod 755 \"\$T\" || exit 9; ")
+            append("rm -rf \"\$W\" \"\$D\" 2>/dev/null; echo INSTALLED")
+        }
+        val result = shRaw(busybox, script)
+        if (!result.first) {
+            throw IllegalStateException("PRoot 准备失败（步骤 ${result.second}）：${result.third.take(200)}")
+        }
+        if (!target.isFile || target.length() < 100_000) {
+            throw IllegalStateException("PRoot 复制后校验失败")
+        }
         target.setExecutable(true, false)
-        work.deleteRecursively()
-        deb.delete()
-        // 顺手清掉历史遗留的临时目录
+        // 清掉历史遗留的临时目录
         downloads.listFiles()
             ?.filter { it.isDirectory && it.name.startsWith("proot-work") }
-            ?.forEach { it.deleteRecursively() }
+            ?.forEach { runCatching { it.deleteRecursively() } }
+    }
+
+    /** 单引号包裹一个参数，供 shell 使用。 */
+    private fun shellArg(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+
+    /**
+     * 执行 root shell 片段，返回 (是否成功, 退出码, 输出)。
+     *
+     * 脚本里的 `exit N` 会作为退出码返回，便于定位是哪一步失败。
+     */
+    private fun shRaw(busybox: String, script: String): Triple<Boolean, Int, String> {
+        val process = ProcessBuilder("su", "-c", script)
+            .redirectErrorStream(true)
+            .start()
+        val out = process.inputStream.bufferedReader().use { it.readText() }
+        val code = process.waitFor()
+        return Triple(code == 0, code, out.trim())
     }
 
     /**
