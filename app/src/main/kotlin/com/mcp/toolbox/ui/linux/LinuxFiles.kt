@@ -45,6 +45,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
 
 /** 打开文件浏览时希望停在哪个目录（相对 rootfs，空表示根）。 */
 object LinuxBrowseTarget {
@@ -269,6 +271,58 @@ fun LinuxFilesScreen(
     }
 }
 
+/** 读当前已生效的挂载。务必在 IO 线程调用。 */
+private fun readMounts(rootfs: File): List<Pair<String, String>> = runCatching {
+    File("/proc/self/mounts").readLines().mapNotNull { line ->
+        val parts = line.split(" ")
+        if (parts.size < 2) return@mapNotNull null
+        val point = parts[1]
+        // /proc/mounts 记的是解析后的真实路径（/data/data/...），与
+        // rootfs.absolutePath（/data/user/0/...）前缀对不上，所以按特征匹配
+        if (!point.contains("files/linux-env")) return@mapNotNull null
+        val inner = point.substringAfter("/rootfs", "").trim('/')
+        if (inner.isEmpty()) null else inner to parts[0]
+    }.distinct()
+}.getOrDefault(emptyList())
+
+/** 一行输入框。 */
+@Composable
+private fun MountInput(
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(
+            color = colors.onSurface,
+            fontSize = MiuixTheme.typography.bodySmall.fontSize,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surfaceContainerHighest, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                if (value.isEmpty()) {
+                    MiuixText(
+                        text = placeholder,
+                        style = MiuixTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                } else {
+                    inner()
+                }
+            }
+        },
+    )
+}
+
 /** 共享文件夹：把 Android 目录挂进 Linux 环境。 */
 @Composable
 fun LinuxSharedScreen(
@@ -280,21 +334,18 @@ fun LinuxSharedScreen(
     val context = LocalContext.current
     val rootfs = remember(distro) { LinuxEnvStore.rootfs(context, distro) }
     var mounts by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var custom by remember { mutableStateOf(LinuxPrefs.customMounts(context)) }
+    var adding by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf("") }
 
     LaunchedEffect(distro) {
-        mounts = withContext(Dispatchers.IO) {
-            runCatching {
-                File("/proc/self/mounts").readLines().mapNotNull { line ->
-                    val parts = line.split(" ")
-                    if (parts.size < 2) return@mapNotNull null
-                    val point = parts[1]
-                    if (!point.startsWith(rootfs.absolutePath)) return@mapNotNull null
-                    val inner = point.removePrefix(rootfs.absolutePath).trim('/')
-                    if (inner.isEmpty()) null else inner to parts[0]
-                }.distinct()
-            }.getOrDefault(emptyList())
-        }
+        mounts = withContext(Dispatchers.IO) { readMounts(rootfs) }
+        custom = LinuxPrefs.customMounts(context)
+    }
+
+    fun save(next: List<Pair<String, String>>) {
+        LinuxPrefs.saveCustomMounts(context, next)
+        custom = next
     }
 
     Column(
@@ -318,7 +369,7 @@ fun LinuxSharedScreen(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
                     )
                 }
-                mounts.forEach { (inner, source) ->
+                mounts.forEach { (inner, _) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -327,19 +378,70 @@ fun LinuxSharedScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            MiuixText(
-                                text = "/$inner",
-                                style = MiuixTheme.typography.bodyMedium,
-                            )
+                            MiuixText(text = "/$inner", style = MiuixTheme.typography.bodyMedium)
                             Spacer(Modifier.height(2.dp))
+                            // /proc/mounts 给的是设备名（/dev/block/...），对用户没意义，
+                            // 这里换成实际的 Android 来源路径
                             MiuixText(
-                                text = source,
+                                text = when (inner) {
+                                    "dev" -> "/dev"
+                                    "proc" -> "/proc"
+                                    "sys" -> "/sys"
+                                    "sdcard" -> "/storage/emulated/0"
+                                    else -> custom.firstOrNull { it.second == inner }?.first
+                                        ?: "自定义目录"
+                                },
                                 style = MiuixTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                             )
                         }
                         MiuixTag(text = "双向", color = colors.success)
                     }
+                }
+            }
+        }
+        Spacer(Modifier.height(spacing.groupGap))
+
+        MiuixSectionCard(
+            title = "自定义挂载",
+            subtitle = "把任意 Android 目录挂进 Linux 环境",
+        ) {
+            Column(Modifier.padding(vertical = 6.dp)) {
+                if (custom.isEmpty()) {
+                    MiuixText(
+                        text = "还没有自定义目录。可以只共享 Download、Pictures 这类特定文件夹。",
+                        style = MiuixTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    )
+                }
+                custom.forEach { (src, dst) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            MiuixText(text = "/$dst", style = MiuixTheme.typography.bodyMedium)
+                            Spacer(Modifier.height(2.dp))
+                            MiuixText(
+                                text = src,
+                                style = MiuixTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant,
+                            )
+                        }
+                        MiuixButton(
+                            text = "删除",
+                            onClick = { save(custom.filterNot { it.second == dst }) },
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                ) {
+                    MiuixButton(text = "添加目录", onClick = { adding = true })
                 }
             }
         }
@@ -369,5 +471,57 @@ fun LinuxSharedScreen(
             }
         }
         Spacer(Modifier.height(32.dp))
+    }
+
+    if (adding) {
+        var src by remember { mutableStateOf("") }
+        var dst by remember { mutableStateOf("") }
+        Dialog(onDismissRequest = { adding = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.background, RoundedCornerShape(16.dp))
+                    .padding(16.dp),
+            ) {
+                MiuixText(text = "添加自定义挂载", style = MiuixTheme.typography.bodyLarge)
+                Spacer(Modifier.height(14.dp))
+                MiuixText(
+                    text = "Android 目录",
+                    style = MiuixTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                MountInput(src, "/storage/emulated/0/Download") { src = it }
+                Spacer(Modifier.height(12.dp))
+                MiuixText(
+                    text = "Linux 内的挂载点",
+                    style = MiuixTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                MountInput(dst, "mnt/download") { dst = it }
+                Spacer(Modifier.height(10.dp))
+                MiuixText(
+                    text = "保存后打开一次终端或环境检测即可生效。",
+                    style = MiuixTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MiuixButton(text = "取消", onClick = { adding = false })
+                    MiuixButton(
+                        text = "保存",
+                        onClick = {
+                            val s = src.trim()
+                            val d = dst.trim().trim('/')
+                            if (s.isNotEmpty() && d.isNotEmpty()) {
+                                save(custom.filterNot { it.second == d } + (s to d))
+                            }
+                            adding = false
+                        },
+                    )
+                }
+            }
+        }
     }
 }

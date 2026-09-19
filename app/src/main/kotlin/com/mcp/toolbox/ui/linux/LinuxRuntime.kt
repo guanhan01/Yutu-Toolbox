@@ -103,6 +103,14 @@ object LinuxRuntime {
             append("[ -d \"\$R/sdcard\" ] || mkdir -p \"\$R/sdcard\" 2>/dev/null; ")
             append("umount \"\$R/sdcard\" 2>/dev/null; ")
             append("mount --bind /storage/emulated/0 \"\$R/sdcard\" 2>/dev/null; ")
+            // 自定义挂载：把用户指定的 Android 目录绑进 rootfs
+            LinuxPrefs.customMounts(context).forEach { (src, dst) ->
+                val target = "\$R/" + dst.trim('/')
+                append("mkdir -p \"").append(target).append("\" 2>/dev/null; ")
+                append("umount \"").append(target).append("\" 2>/dev/null; ")
+                append("mount --bind ").append(shellQuote(src))
+                    .append(" \"").append(target).append("\" 2>/dev/null; ")
+            }
             // rootfs 里常已存在（可能是空文件或 systemd 的软链），必须无条件覆盖；
             // 8.8.8.8 / 1.1.1.1 在境内基本不通，优先沿用系统当前 DNS
             append("rm -f \"\$R/etc/resolv.conf\" 2>/dev/null; ")

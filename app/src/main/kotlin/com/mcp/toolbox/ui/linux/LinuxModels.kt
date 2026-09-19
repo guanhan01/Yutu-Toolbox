@@ -66,6 +66,7 @@ object LinuxPrefs {
     private const val PREFS = "linux-env-prefs"
     private const val KEY_DISTRO = "distro"
     private const val KEY_RUNTIME = "runtime"
+    private const val KEY_MOUNTS = "custom-mounts"
 
     fun distro(context: Context): LinuxDistro {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -83,6 +84,26 @@ object LinuxPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(KEY_DISTRO, distro.name)
             .putString(KEY_RUNTIME, runtime.name)
+            .apply()
+    }
+
+    /** 自定义挂载：Android 绝对路径 -> rootfs 内的相对路径。 */
+    fun customMounts(context: Context): List<Pair<String, String>> {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_MOUNTS, null) ?: return emptyList()
+        return raw.lineSequence().mapNotNull { line ->
+            val parts = line.split('|')
+            if (parts.size != 2) return@mapNotNull null
+            val src = parts[0].trim()
+            val dst = parts[1].trim().trim('/')
+            if (src.isEmpty() || dst.isEmpty()) null else src to dst
+        }.toList()
+    }
+
+    fun saveCustomMounts(context: Context, mounts: List<Pair<String, String>>) {
+        val raw = mounts.joinToString("\n") { "${it.first}|${it.second}" }
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_MOUNTS, raw)
             .apply()
     }
 }
