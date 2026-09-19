@@ -131,6 +131,21 @@ object LinuxMcpTools {
         },
     )
 
+    private fun shellQuote(raw: String): String = "'" + raw.replace("'", "'\\''") + "'"
+
+    private fun checkNotBlocked(rel: String) {
+        val first = rel.trim('/').substringBefore('/')
+        if (first.isNotEmpty() && first in BLOCKED) {
+            throw IllegalArgumentException("$first 是宿主的系统目录（bind mount），不允许访问")
+        }
+    }
+
+    /**
+     * 文件操作一律走 root 在 Linux 内执行。
+     *
+     * rootfs 里大量目录属主是 root（例如 /root 是 700），应用进程用 File API
+     * 连列目录都会被拒，所以这里统一让 root 去读。
+     */
     private fun fileList(context: Context) = ToolDef(
         name = "linux.file_list",
         title = "列出 Linux 目录",
@@ -140,26 +155,30 @@ object LinuxMcpTools {
             listOf("path" to Schema.string("相对 rootfs 的路径，空表示根目录", default = "")),
         ),
         readOnly = true,
+        requiresPrivilege = true,
         handler = { ctx, args ->
             val distro = distroOf(ctx)
             requireEnv(ctx, distro)
-            val dir = resolve(ctx, distro, args.optString("path"))
-            if (!dir.isDirectory) throw IllegalArgumentException("不是目录：${args.optString("path")}")
-            val files = dir.listFiles() ?: throw IllegalStateException("没有读取权限")
+            val rel = args.optString("path").trim().trim('/')
+            checkNotBlocked(rel)
+            val inner = if (rel.isEmpty()) "/" else "/$rel"
+            val out = runBlocking {
+                LinuxRuntime.exec(ctx, distro, "ls -1Ap " + shellQuote(inner), "/", 30000)
+            }
+            if (!out.ok) {
+                throw IllegalStateException(out.combined.ifBlank { "列目录失败：$inner" })
+            }
             val array = JSONArray()
-            files.sortedWith(compareByDescending<File> { it.isDirectory }.thenBy { it.name.lowercase() })
-                .forEach { file ->
-                    array.put(
-                        JSONObject().apply {
-                            put("name", file.name)
-                            put("dir", file.isDirectory)
-                            put("sizeBytes", if (file.isDirectory) 0L else file.length())
-                            put("readable", file.canRead())
-                        },
-                    )
-                }
+            out.stdout.lineSequence().filter { it.isNotBlank() }.forEach { line ->
+                array.put(
+                    JSONObject().apply {
+                        put("name", line.trimEnd('/'))
+                        put("dir", line.endsWith("/"))
+                    },
+                )
+            }
             val structured = JSONObject().apply {
-                put("path", "/" + args.optString("path").trim('/'))
+                put("path", inner)
                 put("count", array.length())
                 put("entries", array)
             }
@@ -180,29 +199,43 @@ object LinuxMcpTools {
             required = listOf("path"),
         ),
         readOnly = true,
+        requiresPrivilege = true,
         handler = { ctx, args ->
             val distro = distroOf(ctx)
             requireEnv(ctx, distro)
-            val file = resolve(ctx, distro, args.getString("path"))
-            if (!file.isFile) throw IllegalArgumentException("不是文件：${args.getString("path")}")
+            val rel = args.getString("path").trim().trim('/')
+            checkNotBlocked(rel)
             val max = args.optInt("maxBytes", 65536).coerceIn(1, 1048576)
-            val bytes = file.inputStream().use { input ->
-                val buffer = ByteArray(max)
-                val read = input.read(buffer)
-                if (read <= 0) ByteArray(0) else buffer.copyOf(read)
+            val out = runBlocking {
+                LinuxRuntime.exec(
+                    ctx,
+                    distro,
+                    "head -c $max " + shellQuote("/$rel") + " | base64 -w0",
+                    "/",
+                    60000,
+                )
             }
-            val wanted = args.optString("encoding", "auto")
+            if (!out.ok) {
+                throw IllegalStateException(out.combined.ifBlank { "读取失败：/$rel" })
+            }
+            val bytes = runCatching { Base64.decode(out.stdout.trim(), Base64.DEFAULT) }
+                .getOrDefault(ByteArray(0))
             val binary = bytes.any { it == 0.toByte() }
+            val wanted = args.optString("encoding", "auto")
             val asBase64 = wanted == "base64" || (wanted == "auto" && binary)
             val structured = JSONObject().apply {
-                put("path", file.absolutePath)
-                put("sizeBytes", file.length())
-                put("truncated", file.length() > bytes.size)
+                put("path", "/$rel")
+                put("bytesReturned", bytes.size)
+                put("truncated", bytes.size >= max)
                 put("binary", binary)
                 put("encoding", if (asBase64) "base64" else "text")
                 put(
                     "content",
-                    if (asBase64) Base64.encodeToString(bytes, Base64.NO_WRAP) else String(bytes, Charsets.UTF_8),
+                    if (asBase64) {
+                        Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    } else {
+                        String(bytes, Charsets.UTF_8)
+                    },
                 )
             }
             ToolResult(
@@ -227,25 +260,36 @@ object LinuxMcpTools {
         ),
         readOnly = false,
         dangerous = true,
+        requiresPrivilege = true,
         handler = { ctx, args ->
             if (!BuiltInMcpServer.config.value.allowWrite) {
                 throw IllegalStateException("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
             }
             val distro = distroOf(ctx)
             requireEnv(ctx, distro)
-            val file = resolve(ctx, distro, args.getString("path"))
+            val rel = args.getString("path").trim().trim('/')
+            checkNotBlocked(rel)
             val raw = args.getString("content")
             val bytes = if (args.optString("encoding") == "base64") {
                 Base64.decode(raw, Base64.DEFAULT)
             } else {
                 raw.toByteArray(Charsets.UTF_8)
             }
-            file.parentFile?.mkdirs()
-            if (args.optBoolean("append")) file.appendBytes(bytes) else file.writeBytes(bytes)
+            val parent = rel.substringBeforeLast('/', "")
+            val redirect = if (args.optBoolean("append")) ">>" else ">"
+            val script = buildString {
+                append("mkdir -p ").append(shellQuote("/$parent")).append(" 2>/dev/null; ")
+                append("printf '%s' ").append(shellQuote(Base64.encodeToString(bytes, Base64.NO_WRAP)))
+                append(" | base64 -d ").append(redirect).append(" ").append(shellQuote("/$rel"))
+            }
+            val out = runBlocking { LinuxRuntime.exec(ctx, distro, script, "/", 60000) }
+            if (!out.ok) {
+                throw IllegalStateException(out.combined.ifBlank { "写入失败：/$rel" })
+            }
             val structured = JSONObject().apply {
-                put("path", file.absolutePath)
+                put("path", "/$rel")
                 put("writtenBytes", bytes.size)
-                put("sizeBytes", file.length())
+                put("append", args.optBoolean("append"))
             }
             ToolResult(structured, structured.toString(2))
         },
