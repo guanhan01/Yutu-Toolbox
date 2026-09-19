@@ -112,6 +112,11 @@ object LinuxToolchain {
             timeoutMs = 30 * 60 * 1000L,
             onLine = { raw -> if (raw.isNotBlank()) main.post { onLine(raw.trim()) } },
         )
+        if (!result.ok) {
+            // 兜底分支（超时 / 启动异常）不会有流式输出，这里补上真实原因，
+            // 否则界面上只剩一个退出码，无法排查
+            result.stderr.lineSequence().forEach { if (it.isNotBlank()) onLine(it.trim()) }
+        }
         return if (result.ok) {
             LinuxRuntime.refreshVersion(context, distro, component)
             onLine("→ ${component.title} 完成")

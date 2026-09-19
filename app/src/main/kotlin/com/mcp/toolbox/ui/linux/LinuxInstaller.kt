@@ -69,7 +69,7 @@ object LinuxInstaller {
         onProgress: (Progress) -> Unit,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            ensureProot(context, onProgress)
+            // PRoot 路线已废弃（见 LinuxRuntime.commandLine），不再下载
 
             val indexUrl = when (distro) {
                 LinuxDistro.DEBIAN -> Mirrors.DEBIAN_INDEX

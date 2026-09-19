@@ -46,8 +46,7 @@ object LinuxRuntime {
         LinuxEnvStore.isInstalled(context, distro)
 
     /** 当前用的是哪种执行方式。 */
-    fun modeOf(context: Context, distro: LinuxDistro): String =
-        if (LinuxEnvStore.prootBinary(context).isFile) "PRoot" else "chroot"
+    fun modeOf(context: Context, distro: LinuxDistro): String = "chroot"
 
     /**
      * 在 Root shell 里探测 busybox。
@@ -84,26 +83,12 @@ object LinuxRuntime {
     ): List<String> {
         val rootfs = LinuxEnvStore.rootfs(context, distro).absolutePath
 
-        // 自备 PRoot 优先（不需要 Root）
-        val proot = LinuxEnvStore.prootBinary(context)
-        if (proot.isFile && proot.canExecute()) {
-            return listOf(
-                proot.absolutePath,
-                "--link2symlink", "-0",
-                "-r", rootfs,
-                "-w", workingDir,
-                "-b", "/dev", "-b", "/proc", "-b", "/sys",
-                "-b", "/storage/emulated/0:/sdcard",
-                "/usr/bin/env", "-i",
-                "HOME=/root",
-                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "TERM=xterm-256color",
-                "/bin/sh", "-c", command,
-            )
-        }
-
-        // 否则走系统 chroot（需 Root）。mount 与 chroot 都在 /system/bin，
-        // 不需要 busybox。
+        // 只走系统 chroot（需 Root）。
+        //
+        // 原本还有一条「自备 PRoot、免 Root」的路线，已废弃：Termux 源的 proot 是
+        // 动态链接，依赖 libtalloc / libandroid-shmem / libtermux-exec，而镜像里
+        // 没有这些库的独立包。直接执行会让 fork/exec 失败，最终只表现为一句
+        // 「退出码 -1」，极难定位。mount 与 chroot 都是系统自带，不需要额外二进制。
         val script = buildString {
             append("R=").append(shellQuote(rootfs)).append("; ")
             append("for d in dev proc sys; do ")
