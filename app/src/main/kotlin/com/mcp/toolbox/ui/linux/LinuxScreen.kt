@@ -101,7 +101,8 @@ fun LinuxScreen(
 
         // 顶部状态卡
         MiuixSectionCard(
-            title = "${distro.title} ${if (runtime == LinuxRunMode.PROOT) "13" else ""}".trim(),
+            // 标题只反映发行版；运行方式放在副标题，二者互不影响
+            title = distro.displayName,
             subtitle = runtime.title,
         ) {
             Column(Modifier.padding(spacing.lg)) {

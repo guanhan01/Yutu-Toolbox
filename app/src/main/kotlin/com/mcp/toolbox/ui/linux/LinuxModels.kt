@@ -5,12 +5,14 @@ import java.io.File
 
 /** Linux 发行版。 */
 enum class LinuxDistro(
+    /** 界面上显示的完整名称，含版本号。 */
+    val displayName: String,
     val title: String,
     val subtitle: String,
     val archiveName: String,
 ) {
-    ALPINE("Alpine", "轻量的 musl 环境", "alpine-minirootfs"),
-    DEBIAN("Debian", "软件兼容性更好的 glibc 环境", "debian-rootfs"),
+    ALPINE("Alpine", "Alpine", "轻量的 musl 环境", "alpine-minirootfs"),
+    DEBIAN("Debian 13", "Debian", "软件兼容性更好的 glibc 环境", "debian-rootfs"),
 }
 
 /** 运行方式。 */
