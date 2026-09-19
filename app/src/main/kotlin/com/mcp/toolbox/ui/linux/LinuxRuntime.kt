@@ -140,6 +140,7 @@ object LinuxRuntime {
         command: String,
         workingDir: String = "/root",
         timeoutMs: Long = TIMEOUT_MS,
+        onLine: ((String) -> Unit)? = null,
     ): Output = withContext(Dispatchers.IO) {
         val started = System.currentTimeMillis()
         if (!isReady(context, distro)) {
@@ -163,8 +164,22 @@ object LinuxRuntime {
             // 分开读，避免缓冲区写满导致互相阻塞
             val outText = StringBuilder()
             val errText = StringBuilder()
-            val outThread = Thread { process.inputStream.bufferedReader().use { outText.append(it.readText()) } }
-            val errThread = Thread { process.errorStream.bufferedReader().use { errText.append(it.readText()) } }
+            val outThread = Thread {
+                process.inputStream.bufferedReader().use { reader ->
+                    reader.forEachLine { line ->
+                        outText.append(line).append('\n')
+                        onLine?.invoke(line)
+                    }
+                }
+            }
+            val errThread = Thread {
+                process.errorStream.bufferedReader().use { reader ->
+                    reader.forEachLine { line ->
+                        errText.append(line).append('\n')
+                        onLine?.invoke(line)
+                    }
+                }
+            }
             outThread.start()
             errThread.start()
 

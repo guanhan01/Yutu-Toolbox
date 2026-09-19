@@ -101,6 +101,8 @@ import com.mcp.toolbox.navigation.Routes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.mcp.toolbox.feature.decompile.engine.DecompileHub
+import com.mcp.toolbox.ui.linux.LinuxPendingInstall
+import com.mcp.toolbox.ui.linux.LinuxPrefs
 
 /** 应用外壳：自绘抽屉 + 底栏 + 顶部 Toast 宿主。 抽屉支持汉堡按钮打开、左侧边缘滑动打开、面板左滑关闭、点遮罩关闭。 */
 @Composable
@@ -403,6 +405,10 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxScreen(
                         onOpenChecker = { onNavigate(Routes.LINUX_CHECK) },
+                        onInstallTool = { component ->
+                            LinuxPendingInstall.component = component
+                            onNavigate(Routes.LINUX_CHECK)
+                        },
                         onOpenTerminal = { onNavigate(Routes.LINUX_TERMINAL) },
                         onOpenFiles = { toastState.show("Linux 文件浏览待接入") },
                         onOpenShared = { toastState.show("共享文件夹待接入") },
@@ -415,7 +421,7 @@ private fun ToolboxNavHost(
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_open_terminal),
                         onOpenDrawer = onOpenDrawer)
-                    LinuxTerminalScreen(distro = LinuxDistro.DEBIAN)
+                    LinuxTerminalScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
             }
             composable(Routes.LINUX_CHECK) {
@@ -423,7 +429,7 @@ private fun ToolboxNavHost(
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_check_title),
                         onOpenDrawer = onOpenDrawer)
-                    LinuxCheckScreen(distro = LinuxDistro.DEBIAN)
+                    LinuxCheckScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
             }
             composable(Routes.AI_MODELS) {

@@ -41,6 +41,9 @@ import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /** 二选一弹层：发行版 / 运行方式。 */
 @Composable
@@ -121,16 +124,56 @@ fun LinuxCheckScreen(
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var statuses by remember { mutableStateOf<List<ComponentStatus>>(emptyList()) }
     var scanning by remember { mutableStateOf(true) }
+    var installing by remember { mutableStateOf<LinuxComponent?>(null) }
+    var envReady by remember { mutableStateOf(LinuxEnvStore.isInstalled(context, distro)) }
+    val installLog = remember { mutableStateListOf<String>() }
 
-    LaunchedEffect(distro) {
+    suspend fun rescan() {
         scanning = true
         statuses = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
         scanning = false
     }
 
-    val ready = statuses.count { it.installed }
+    fun startInstall(component: LinuxComponent) {
+        if (installing != null) return
+        installing = component
+        installLog.clear()
+        installLog.add("→ 开始安装 ${component.title}，请稍候")
+        scope.launch {
+            val result = LinuxToolchain.install(context, distro, component) { line ->
+                installLog.add(line)
+                if (installLog.size > 500) installLog.removeAt(0)
+            }
+            installLog.add(
+                if (result.isFailure) {
+                    "✗ ${result.exceptionOrNull()?.message ?: "安装失败"}"
+                } else {
+                    "✓ ${component.title} 安装完成"
+                },
+            )
+            installing = null
+            envReady = LinuxEnvStore.isInstalled(context, distro)
+            rescan()
+        }
+    }
+
+    LaunchedEffect(distro) {
+        envReady = LinuxEnvStore.isInstalled(context, distro)
+        scanning = true
+        statuses = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
+        scanning = false
+        // 从主页「安装」跳进来时，自动开装目标组件
+        val pending = LinuxPendingInstall.component
+        if (pending != null) {
+            LinuxPendingInstall.component = null
+            startInstall(pending)
+        }
+    }
+
+    val readyCount = statuses.count { it.installed }
 
     Column(
         modifier = modifier
@@ -149,7 +192,7 @@ fun LinuxCheckScreen(
                     text = if (scanning) {
                         stringResource(R.string.linux_checking)
                     } else {
-                        stringResource(R.string.linux_check_summary, ready, statuses.size)
+                        stringResource(R.string.linux_check_summary, readyCount, statuses.size)
                     },
                     style = MiuixTheme.typography.bodyMedium,
                 )
@@ -198,28 +241,33 @@ fun LinuxCheckScreen(
                                     style = MiuixTheme.typography.bodyLarge,
                                 )
                                 MiuixText(
-                                    text = status.component.subtitle,
+                                    text = if (status.version.isNotBlank()) {
+                                        status.version
+                                    } else {
+                                        status.component.subtitle
+                                    },
                                     style = MiuixTheme.typography.bodySmall,
                                     color = colors.onSurfaceVariant,
                                 )
                             }
-                            Column(horizontalAlignment = Alignment.End) {
-                                MiuixTag(
-                                    text = if (status.installed) {
-                                        stringResource(R.string.linux_status_ready)
-                                    } else {
-                                        stringResource(R.string.linux_status_missing)
-                                    },
-                                    color = if (status.installed) colors.success else colors.onSurfaceVariant,
+                            when {
+                                installing == status.component -> MiuixTag(
+                                    text = "安装中…",
+                                    color = colors.primary,
                                 )
-                                if (status.version.isNotBlank()) {
-                                    Spacer(Modifier.height(4.dp))
-                                    MiuixText(
-                                        text = status.version,
-                                        style = MiuixTheme.typography.labelSmall,
-                                        color = colors.onSurfaceVariant,
-                                    )
-                                }
+                                status.installed -> MiuixTag(
+                                    text = stringResource(R.string.linux_status_ready),
+                                    color = colors.success,
+                                )
+                                !envReady -> MiuixTag(
+                                    text = "需先安装环境",
+                                    color = colors.onSurfaceVariant,
+                                )
+                                else -> MiuixButton(
+                                    text = stringResource(R.string.linux_install),
+                                    onClick = { startInstall(status.component) },
+                                    variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
+                                )
                             }
                         }
                         if (index != statuses.lastIndex) {
@@ -240,6 +288,21 @@ fun LinuxCheckScreen(
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                     )
+                }
+            }
+        }
+
+        if (installLog.isNotEmpty()) {
+            Spacer(Modifier.height(spacing.groupGap))
+            MiuixSectionCard(title = "安装日志") {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    installLog.takeLast(80).forEach { line ->
+                        MiuixText(
+                            text = line,
+                            style = MiuixTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

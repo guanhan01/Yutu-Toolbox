@@ -1,6 +1,8 @@
 package com.mcp.toolbox.ui.linux
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 
 /**
  * 在 Linux 环境里装可选用工具。
@@ -8,6 +10,11 @@ import android.content.Context
  * 全部走国内源：apt 换成清华镜像，独立二进制走 GitHub 国内加速。
  * 脚本在 chroot 内以 root 执行，输出回传界面。
  */
+/** 主页点「安装」时暂存目标组件，跳转到检测页后自动开始安装。 */
+object LinuxPendingInstall {
+    var component: LinuxComponent? = null
+}
+
 object LinuxToolchain {
 
     /** apt 国内源（Debian 13 = trixie）。 */
@@ -93,15 +100,15 @@ object LinuxToolchain {
             return Result.failure(IllegalStateException("请先安装 Linux 环境"))
         }
         onLine("→ 开始安装 ${component.title}")
+        // 读取线程在后台，回传时切到主线程刷 UI
+        val main = Handler(Looper.getMainLooper())
         val result = LinuxRuntime.exec(
             context = context,
             distro = distro,
             command = scriptOf(component),
             timeoutMs = 30 * 60 * 1000L,
+            onLine = { raw -> if (raw.isNotBlank()) main.post { onLine(raw.trim()) } },
         )
-        result.combined.lineSequence().forEach { line ->
-            if (line.isNotBlank()) onLine(line.trim())
-        }
         return if (result.ok) {
             LinuxRuntime.refreshVersion(context, distro, component)
             onLine("→ ${component.title} 完成")

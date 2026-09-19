@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LinuxScreen(
     onOpenChecker: () -> Unit,
+    onInstallTool: (LinuxComponent) -> Unit = {},
     onOpenTerminal: () -> Unit = {},
     onOpenFiles: () -> Unit,
     onOpenShared: () -> Unit,
@@ -223,7 +224,7 @@ fun LinuxScreen(
                         status = status,
                         installed = installed,
                         showDivider = index != LinuxComponent.entries.lastIndex,
-                        onInstall = { onOpenChecker() },
+                        onInstall = { onInstallTool(component) },
                     )
                 }
             }
