@@ -509,6 +509,7 @@ fun HomeScreen(
         expanded = picker == PickerKind.MODEL,
         onDismiss = { picker = null },
         stickToBottom = true,
+        focusable = false,
     ) {
         if (modelOptions.isEmpty() && availableModels.isEmpty()) {
             MiuixMenuItem(
@@ -548,6 +549,7 @@ fun HomeScreen(
         onDismiss = { picker = null },
         alignStart = true,
         stickToBottom = true,
+        focusable = false,
     ) {
         availableReasoning.forEach { label ->
             MiuixMenuItem(
