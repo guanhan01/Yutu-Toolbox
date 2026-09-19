@@ -82,11 +82,26 @@ object LinuxInstaller {
             }
 
             val rootfs = LinuxEnvStore.rootfs(context, distro)
-            rootfs.mkdirs()
-            extractTarGz(archive, rootfs) { done, total ->
-                onProgress(Progress(archive.name, done, total))
+            // 解压交给 root 下的 busybox tar：它同时支持 gz 与 xz，
+            // 而 Java 侧只有 gzip，处理不了 Debian LXC 的 tar.xz。
+            val busybox = findBusybox()
+                ?: throw IllegalStateException("需要 Root 才能解压 rootfs")
+            val script = buildString {
+                append("mkdir -p ").append(shellArg(rootfs.absolutePath)).append(" || exit 1; ")
+                append("$busybox tar -xf ").append(shellArg(archive.absolutePath))
+                append(" -C ").append(shellArg(rootfs.absolutePath)).append(" || exit 2; ")
+                append("[ -d ").append(shellArg(rootfs.absolutePath + "/bin"))
+                append(" ] || [ -d ").append(shellArg(rootfs.absolutePath + "/usr"))
+                append(" ] || exit 3; ")
+                append("rm -f ").append(shellArg(archive.absolutePath)).append("; echo OK")
             }
-            archive.delete()
+            val result = shRaw(busybox, script)
+            if (!result.first) {
+                throw IllegalStateException(
+                    "rootfs 解压失败（步骤 ${result.second}）：${result.third.take(200)}",
+                )
+            }
+            onProgress(Progress(archive.name, archive.length(), archive.length(), done = true))
             Unit
         }
     }
@@ -216,15 +231,37 @@ object LinuxInstaller {
         return if (hit.startsWith("http")) hit else dirUrl + hit
     }
 
+    /**
+     * 从镜像目录页解析出 rootfs 压缩包地址。
+     *
+     * 两种镜像的目录结构不同：
+     * - Alpine：压缩包直接放在 releases/aarch64 下，`minirootfs-<版本>-aarch64.tar.gz`
+     * - Debian（LXC）：先是一层时间戳目录（如 `20260918_05:24/`），
+     *   其下才是 `rootfs.tar.xz`——所以要多进一层，且格式是 xz。
+     */
     private fun resolveArchive(indexUrl: String, distro: LinuxDistro): String {
         val html = open(indexUrl).bufferedReader().use { it.readText() }
-        val pattern = when (distro) {
-            LinuxDistro.DEBIAN -> Regex("""href="([^"]*rootfs\.tar\.gz)"""")
-            LinuxDistro.ALPINE -> Regex("""href="([^"]*minirootfs[^"]*\.tar\.gz)"""")
+        return when (distro) {
+            LinuxDistro.ALPINE -> {
+                val hit = Regex("""href="([^"]*minirootfs[^"]*\.tar\.(?:gz|xz))"""")
+                    .find(html)?.groupValues?.get(1)
+                    ?: throw IllegalStateException("镜像站上找不到适配当前架构的 rootfs")
+                if (hit.startsWith("http")) hit else indexUrl + hit.removePrefix("./")
+            }
+
+            LinuxDistro.DEBIAN -> {
+                // 取最后一个时间戳目录（列表按时间升序，末尾最新）
+                val sub = Regex("""href="(\d{8}_\d{2}:\d{2})/"""")
+                    .findAll(html).lastOrNull()?.groupValues?.get(1)
+                    ?: throw IllegalStateException("镜像站上没有可用的 Debian 构建")
+                val subUrl = indexUrl + sub + "/"
+                val subHtml = open(subUrl).bufferedReader().use { it.readText() }
+                val file = Regex("""href="(rootfs\.tar\.(?:gz|xz))"""")
+                    .find(subHtml)?.groupValues?.get(1)
+                    ?: throw IllegalStateException("该构建里没有 rootfs 压缩包")
+                subUrl + file
+            }
         }
-        val hit = pattern.find(html)?.groupValues?.get(1)
-            ?: throw IllegalStateException("镜像站上找不到适配当前架构的 rootfs")
-        return if (hit.startsWith("http")) hit else indexUrl + hit.removePrefix("./")
     }
 
     // ---------- 下载 ----------
