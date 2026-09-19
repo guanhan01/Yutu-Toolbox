@@ -152,7 +152,7 @@ object LinuxInstaller {
             append("[ -x \"\$p\" ] && { echo \"\$p\"; exit 0; }; done; exit 1")
         }
         return runCatching {
-            val process = ProcessBuilder("su", "-c", "'" + script.replace("'", "'\\''") + "'")
+            val process = ProcessBuilder("su", "-c", script)
                 .redirectErrorStream(true)
                 .start()
             val out = process.inputStream.bufferedReader().use { it.readText() }
