@@ -250,8 +250,10 @@ object LinuxInstaller {
             }
 
             LinuxDistro.DEBIAN -> {
-                // 取最后一个时间戳目录（列表按时间升序，末尾最新）
-                val sub = Regex("""href="(\d{8}_\d{2}:\d{2})/"""")
+                // 取最后一个时间戳目录（列表按时间升序，末尾最新）。
+                // 注意 href 里的冒号被 URL 编码成 %3A，正则要两种都容忍，
+                // 并直接把捕获到的原文拼进 URL。
+                val sub = Regex("""href="(\d{8}_\d{2}(?:%3A|:)\d{2})/"""")
                     .findAll(html).lastOrNull()?.groupValues?.get(1)
                     ?: throw IllegalStateException("镜像站上没有可用的 Debian 构建")
                 val subUrl = indexUrl + sub + "/"
