@@ -107,12 +107,24 @@ object LinuxEnvStore {
         return File(fs, "bin").isDirectory || File(fs, "usr").isDirectory
     }
 
-    /** 统计 rootfs 占用。 */
+    /** 遍历 rootfs 时要跳过的子目录。 */
+    private val SKIP_WALK = setOf("proc", "sys", "dev", "sdcard")
+
+    /**
+     * 统计 rootfs 占用。
+     *
+     * 必须跳过 proc / sys / dev / sdcard：这些是 commandLine 里 bind mount 进来的
+     * 宿主目录，不跳过就会去遍历整个宿主（几十万文件），既极慢又会抛异常被兜成 0，
+     * 界面于是显示成「未安装」。
+     */
     fun sizeOf(context: Context, distro: LinuxDistro): Long {
         val fs = rootfs(context, distro)
         if (!fs.isDirectory) return 0L
         return runCatching {
-            fs.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            fs.walkTopDown()
+                .onEnter { it.name !in SKIP_WALK }
+                .filter { it.isFile }
+                .sumOf { it.length() }
         }.getOrDefault(0L)
     }
 

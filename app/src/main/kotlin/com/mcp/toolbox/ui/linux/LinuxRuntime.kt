@@ -145,9 +145,10 @@ object LinuxRuntime {
         val args = commandLine(context, distro, workingDir, command)
 
         runCatching {
+            // 不要清空环境：清空后 PATH 一并消失，su / mount / chroot 这类
+            // 依赖 PATH 的命令可能静默不执行，脚本却返回 0，极难排查
             val process = ProcessBuilder(args)
                 .redirectErrorStream(false)
-                .apply { environment().clear() }
                 .start()
 
             // 分开读，避免缓冲区写满导致互相阻塞

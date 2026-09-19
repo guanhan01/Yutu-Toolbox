@@ -34,13 +34,16 @@ object LinuxToolchain {
             set -e
             export DEBIAN_FRONTEND=noninteractive
             export TMPDIR=/tmp
+            echo "[1/5] 已进入 Linux 环境"
             # chroot 内没有服务管理器，装包时禁止自动起服务
             printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
             chmod +x /usr/sbin/policy-rc.d
             cat > /etc/apt/sources.list <<'SRC'
             $DEBIAN_SOURCES
             SRC
+            echo "[2/5] 软件源已切换，更新索引"
             apt-get update -qq
+            echo "[3/5] 索引更新完成"
         """.trimIndent()
 
         val body = when (component) {
@@ -117,6 +120,8 @@ object LinuxToolchain {
             // 否则界面上只剩一个退出码，无法排查
             result.stderr.lineSequence().forEach { if (it.isNotBlank()) onLine(it.trim()) }
         }
+        // 无论成败都报耗时：脚本"秒回"就说明它根本没跑起来
+        onLine("→ 退出码 ${result.exitCode}，耗时 ${result.elapsedMs / 1000} 秒，输出 ${result.stdout.length} 字")
         return if (result.ok) {
             LinuxRuntime.refreshVersion(context, distro, component)
             onLine("→ ${component.title} 完成")
