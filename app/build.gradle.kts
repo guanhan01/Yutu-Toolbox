@@ -9,11 +9,29 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.mcp.toolbox"
+        // applicationId 交给 productFlavors 决定；这里不再写死，
+        // 避免 flavor 覆盖后出现「正式版变新应用」的坑。
         minSdk = 26
         targetSdk = 36
         versionCode = 4
         versionName = "0.1.3"
+
+        // 应用名：stable 走 @string/app_name（跟随语言），beta 写死带 Beta 后缀
+        manifestPlaceholders["appLabel"] = "@string/app_name"
+    }
+
+    flavorDimensions += "channel"
+    productFlavors {
+        create("stable") {
+            // 正式版永远保持 com.mcp.toolbox：以后发布正式版是覆盖更新，
+            // 而不是安装成另一个新应用。
+            applicationId = "com.mcp.toolbox"
+        }
+        create("beta") {
+            // Beta 用独立 applicationId，才能与正式版同机共存。
+            applicationId = "com.mcp.toolbox.beta"
+            manifestPlaceholders["appLabel"] = "Yutu Toolbox Beta"
+        }
     }
 
     buildTypes {

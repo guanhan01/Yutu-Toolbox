@@ -34,7 +34,7 @@ class McpServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (intent?.action == stopAction(packageName)) {
             BuiltInMcpServer.stop()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf(startId)
@@ -76,7 +76,7 @@ class McpServerService : Service() {
                 PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),
             )
         }
-        val stopIntent = Intent(this, McpServerService::class.java).setAction(ACTION_STOP)
+        val stopIntent = Intent(this, McpServerService::class.java).setAction(stopAction(packageName))
         builder.addAction(
             Notification.Action.Builder(
                 null,
@@ -88,13 +88,13 @@ class McpServerService : Service() {
     }
 
     companion object {
-        const val ACTION_START = "com.mcp.toolbox.action.MCP_SERVER_START"
-        const val ACTION_STOP = "com.mcp.toolbox.action.MCP_SERVER_STOP"
+        fun startAction(pkg: String) = "$pkg.action.MCP_SERVER_START"
+        fun stopAction(pkg: String) = "$pkg.action.MCP_SERVER_STOP"
         private const val CHANNEL_ID = "mcp-server"
         private const val NOTIFICATION_ID = 4713
 
         fun start(context: Context) {
-            val intent = Intent(context, McpServerService::class.java).setAction(ACTION_START)
+            val intent = Intent(context, McpServerService::class.java).setAction(startAction(context.packageName))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -103,7 +103,7 @@ class McpServerService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, McpServerService::class.java).setAction(ACTION_STOP))
+            context.startService(Intent(context, McpServerService::class.java).setAction(stopAction(context.packageName)))
         }
     }
 }

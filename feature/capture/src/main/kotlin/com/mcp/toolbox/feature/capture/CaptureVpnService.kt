@@ -26,10 +26,11 @@ import java.net.InetSocketAddress
  */
 class CaptureVpnService : VpnService() {
     companion object {
-        const val ACTION_START = "com.mcp.toolbox.capture.START"
-        const val ACTION_STOP = "com.mcp.toolbox.capture.STOP"
-        const val ACTION_PAUSE = "com.mcp.toolbox.capture.PAUSE"
-        const val ACTION_RESUME = "com.mcp.toolbox.capture.RESUME"
+        // action 用运行时 packageName（applicationId）拼，stable 与 beta 两个包名才能各自独立
+        fun startAction(pkg: String) = "$pkg.capture.START"
+        fun stopAction(pkg: String) = "$pkg.capture.STOP"
+        fun pauseAction(pkg: String) = "$pkg.capture.PAUSE"
+        fun resumeAction(pkg: String) = "$pkg.capture.RESUME"
         const val EXTRA_MODE = "mode"
         const val EXTRA_PACKAGES = "packages"
         const val EXTRA_DNS_ONLY = "dns_only"
@@ -41,7 +42,7 @@ class CaptureVpnService : VpnService() {
 
         fun start(context: Context, config: CaptureConfig) {
             val intent = Intent(context, CaptureVpnService::class.java).apply {
-                action = ACTION_START
+                action = startAction(context.packageName)
                 putExtra(EXTRA_MODE, config.mode.name)
                 putExtra(EXTRA_PACKAGES, config.packages.toTypedArray())
                 putExtra(EXTRA_DNS_ONLY, config.dnsOnly)
@@ -56,14 +57,14 @@ class CaptureVpnService : VpnService() {
 
         fun stop(context: Context) {
             context.startService(
-                Intent(context, CaptureVpnService::class.java).setAction(ACTION_STOP),
+                Intent(context, CaptureVpnService::class.java).setAction(stopAction(context.packageName)),
             )
         }
 
         fun setPaused(context: Context, paused: Boolean) {
             context.startService(
                 Intent(context, CaptureVpnService::class.java)
-                    .setAction(if (paused) ACTION_PAUSE else ACTION_RESUME),
+                    .setAction(if (paused) pauseAction(context.packageName) else resumeAction(context.packageName)),
             )
         }
     }
@@ -85,18 +86,18 @@ class CaptureVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> {
+            stopAction(packageName) -> {
                 shutdown("已停止")
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_PAUSE -> {
+            pauseAction(packageName) -> {
                 paused = true
                 CaptureStore.session(paused = true, statusText = "已暂停记录（转发继续）")
                 updateNotification()
                 return START_STICKY
             }
-            ACTION_RESUME -> {
+            resumeAction(packageName) -> {
                 paused = false
                 CaptureStore.session(paused = false, statusText = "抓包运行中")
                 updateNotification()
@@ -294,13 +295,13 @@ class CaptureVpnService : VpnService() {
             this,
             1,
             Intent(this, CaptureVpnService::class.java)
-                .setAction(if (paused) ACTION_RESUME else ACTION_PAUSE),
+                .setAction(if (paused) resumeAction(packageName) else pauseAction(packageName)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val stopIntent = PendingIntent.getService(
             this,
             2,
-            Intent(this, CaptureVpnService::class.java).setAction(ACTION_STOP),
+            Intent(this, CaptureVpnService::class.java).setAction(stopAction(packageName)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val openIntent = PendingIntent.getActivity(
