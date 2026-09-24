@@ -20,6 +20,7 @@ import com.mcp.toolbox.core.design.token.MiuixTypography
 import com.mcp.toolbox.core.design.token.MotionTokens
 import com.mcp.toolbox.core.design.token.RadiusTokens
 import top.yukonga.miuix.kmp.theme.MiuixTheme as OfficialMiuixTheme
+import top.yukonga.miuix.kmp.basic.Scaffold as OfficialScaffold
 import top.yukonga.miuix.kmp.theme.defaultTextStyles
 
 val LocalMiuixRadius = staticCompositionLocalOf { RadiusTokens() }
@@ -155,7 +156,16 @@ fun MiuixTheme(
         LocalUiStyle provides config.uiStyle,
     ) {
         OfficialMiuixTheme(officialColors, officialTextStyles) {
-            content()
+            // 官方弹层（ListPopup / Dialog / BottomSheet）靠官方 Scaffold 提供的
+            // LocalPopupStates / LocalDialogStates 渲染。项目没有官方 Scaffold，
+            // 这里补一个只当「弹层宿主」的 Scaffold：popupHost 默认就是 MiuixPopupHost()，
+            // 负责把所有官方弹层画到内容之上。容器色设为透明，不影响现有界面底色。
+            OfficialScaffold(
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+            ) { _ ->
+                content()
+            }
         }
     }
 }
