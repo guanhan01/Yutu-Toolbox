@@ -252,7 +252,7 @@ private fun ToolboxNavHost(
                 slideInHorizontally(
                     initialOffsetX = { it },
                     animationSpec = tween(500, easing = NavTransitionEasing.Default),
-                ) + fadeIn(tween(500, easing = NavTransitionEasing.Default))
+                )
             } else {
                 slideInHorizontally(
                     initialOffsetX = { it / 5 },
@@ -265,7 +265,7 @@ private fun ToolboxNavHost(
                 slideOutHorizontally(
                     targetOffsetX = { -it / 4 },
                     animationSpec = tween(500, easing = NavTransitionEasing.Default),
-                ) + fadeOut(tween(500, easing = NavTransitionEasing.Default))
+                )
             } else {
                 fadeOut(tween(140))
             }
@@ -275,7 +275,7 @@ private fun ToolboxNavHost(
                 slideInHorizontally(
                     initialOffsetX = { -it / 4 },
                     animationSpec = tween(500, easing = NavTransitionEasing.Default),
-                ) + fadeIn(tween(500, easing = NavTransitionEasing.Default))
+                )
             } else {
                 fadeIn(tween(200))
             }
@@ -285,7 +285,7 @@ private fun ToolboxNavHost(
                 slideOutHorizontally(
                     targetOffsetX = { it },
                     animationSpec = tween(500, easing = NavTransitionEasing.Default),
-                ) + fadeOut(tween(500, easing = NavTransitionEasing.Default))
+                )
             } else {
                 slideOutHorizontally(
                     targetOffsetX = { it / 5 },

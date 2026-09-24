@@ -1,6 +1,7 @@
 package com.mcp.toolbox.core.design.component
 
 import androidx.compose.animation.core.Animatable
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -305,72 +306,18 @@ private class OverflowMenuPositionProvider(
     }
 }
 
-// ---------------- Miuix（官方 OverlayListPopup） ----------------
+// ---------------- Miuix（官方动画参数 + 锚点跟随） ----------------
 
 /**
- * Miuix 风格实现：官方 [OfficialOverlayListPopup]。
+ * Miuix 风格实现。
  *
- * 动画完全交给官方：scale 0.15→1 + 按弹出方向展开的 clip-reveal + alpha 渐变，
- * 以及官方的遮罩与回弹曲线。锚点仍复用本文件既有的 [Rect]（窗口坐标）。
+ * 官方 [OfficialOverlayListPopup] 的动画起点由 Popup 父布局边界推算，要求菜单写在
+ * 锚点按钮的 Box 内；本项目的菜单都提升到页面顶层、用 [Rect] 传坐标，父布局是整页，
+ * 会导致动画永远从页面边缘长出。因此这里保留自绘 Popup（正确跟随锚点），
+ * 但动画参数完全采用官方 [OfficialListPopupDefaults]：
+ *   FractionAnimationSpec 弹簧驱动 0.15→1 缩放；Alpha 进 200ms / 出 150ms；
+ *   transformOrigin 落在锚点那一角，观感与官方一致。
  */
-@Composable
-private fun MiuixOverlayMenuBody(
-    anchor: Rect?,
-    alignStart: Boolean,
-    offset: IntOffset,
-    onDismiss: () -> Unit,
-    expanded: Boolean,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    // 官方 content 无接收者；包一层 Column 承载调用点的 ColumnScope 内容
-    Column { content() }
-}
-
-private fun officialPositionProvider(
-    anchor: Rect?,
-    alignStart: Boolean,
-    stickToBottom: Boolean,
-    offset: IntOffset,
-): OfficialPopupPositionProvider = object : OfficialPopupPositionProvider {
-    override fun getMargins(): PaddingValues = PaddingValues(0.dp)
-
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowBounds: IntRect,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-        popupMargin: IntRect,
-        alignment: OfficialPopupPositionProvider.Align,
-    ): IntOffset {
-        val anchorRect = anchor
-        val gapPx = 6
-        val gap = gapPx + popupMargin.bottom
-        val maxX = (windowBounds.width - popupContentSize.width).coerceAtLeast(0)
-        val maxY = (windowBounds.height - popupContentSize.height).coerceAtLeast(0)
-
-        val rawX = when {
-            anchorRect == null ->
-                if (alignStart) anchorBounds.left + offset.x
-                else anchorBounds.right - popupContentSize.width + offset.x
-            alignStart -> anchorRect.left.roundToInt() + offset.x
-            else -> anchorRect.right.roundToInt() - popupContentSize.width + offset.x
-        }
-        val anchorBottom = anchorRect?.bottom?.roundToInt() ?: anchorBounds.top
-        val below = anchorBottom + gap + offset.y
-        val above = anchorRect?.let {
-            it.top.roundToInt() - popupContentSize.height - gap + offset.y
-        }
-        val top = when {
-            // 贴底模式：底边固定在窗口底部上方
-            stickToBottom -> windowBounds.height - popupContentSize.height
-            below + popupContentSize.height <= windowBounds.height -> below
-            above != null -> above.coerceAtLeast(0)
-            else -> below
-        }
-        return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
-    }
-}
-
 @Composable
 private fun MiuixOverflowMenuOfficial(
     expanded: Boolean,
@@ -382,22 +329,73 @@ private fun MiuixOverflowMenuOfficial(
     offset: IntOffset,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val provider = remember(anchor, alignStart, stickToBottom, offset) {
-        officialPositionProvider(anchor, alignStart, stickToBottom, offset)
+    val colors = MiuixTheme.colors
+    val radius = MiuixTheme.radius
+    val gapPx = with(LocalDensity.current) { 6.dp.roundToPx() }
+    val boxWidthPx = with(LocalDensity.current) { (MenuContentWidth + MenuEdgePadding * 2).roundToPx() }
+
+    val expandToEnd = alignStart ||
+        (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
+    val growUpward = stickToBottom || (anchor != null && run {
+        val screenH = LocalConfiguration.current.screenHeightDp.dp
+        val anchorBottomDp = with(LocalDensity.current) { anchor.bottom.toDp() }
+        anchorBottomDp > screenH * 0.6f
+    })
+    val originX = if (expandToEnd) 0f else 1f
+
+    val positionProvider = remember(anchor, offset, gapPx, expandToEnd, stickToBottom) {
+        OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd, stickToBottom)
     }
-    OfficialOverlayListPopup(
-        show = expanded,
-        popupModifier = modifier,
-        popupPositionProvider = provider,
-        alignment = if (alignStart) OfficialPopupPositionProvider.Align.Start
-        else OfficialPopupPositionProvider.Align.End,
-        onDismissRequest = onDismiss,
-        // 菜单不压暗整屏（默认 true 会让整屏蒙黑）
-        enableWindowDim = false,
-        minWidth = 0.dp,
-    ) {
-        OfficialListPopupColumn {
-            Column { content() }
+
+    var mounted by remember { mutableStateOf(expanded) }
+    val fraction = remember { Animatable(if (expanded) 1f else 0f) }
+    val alphaAnim = remember { Animatable(if (expanded) 1f else 0f) }
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            mounted = true
+            withFrameNanos {}
+            launch { alphaAnim.animateTo(1f, tween(200)) }
+            fraction.animateTo(
+                1f,
+                spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f),
+            )
+        } else {
+            launch { alphaAnim.animateTo(0f, tween(150)) }
+            fraction.animateTo(0f, tween(170))
+            mounted = false
         }
+    }
+    if (!mounted) return
+
+    val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
+
+    Popup(
+        onDismissRequest = onDismiss,
+        popupPositionProvider = positionProvider,
+        properties = PopupProperties(focusable = true),
+    ) {
+        val f = fraction.value.coerceIn(0f, 1f)
+        Column(
+            modifier = modifier
+                .graphicsLayer {
+                    // 官方：scale = 0.15 + 0.85 * fraction
+                    val sc = 0.15f + 0.85f * f
+                    scaleX = sc
+                    scaleY = sc
+                    alpha = alphaAnim.value.coerceIn(0f, 1f)
+                    // 缩放原点落在锚点那一角：菜单像从图标处长出来
+                    transformOrigin = TransformOrigin(originX, if (growUpward) 1f else 0f)
+                }
+                .padding(8.dp)
+                .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(radius.field))
+                .clip(RoundedCornerShape(radius.field))
+                .background(colors.surfaceContainerHigh)
+                .padding(vertical = 6.dp)
+                .width(MenuContentWidth)
+                .heightIn(max = maxMenuHeight)
+                .verticalScroll(rememberScrollState()),
+            content = content,
+        )
     }
 }
