@@ -36,6 +36,7 @@ android {
             // Beta 版本号独立推进，与正式版互不影响
             versionCode = 5
             versionName = "0.1.4"
+            versionNameSuffix = "-beta"
             // 内测包不联网检查更新
             buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
         }
