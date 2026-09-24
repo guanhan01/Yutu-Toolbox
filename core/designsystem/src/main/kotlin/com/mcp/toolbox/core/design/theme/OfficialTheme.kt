@@ -15,12 +15,15 @@ import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 
 /** 我方色彩活力风格 → 官方调色板风格。 */
 fun PaletteStyleSetting.toOfficialStyle(): ThemePaletteStyle = when (this) {
-    PaletteStyleSetting.VIBRANT -> ThemePaletteStyle.Vibrant
     PaletteStyleSetting.TONAL -> ThemePaletteStyle.TonalSpot
-    PaletteStyleSetting.MUTED -> ThemePaletteStyle.Neutral
+    PaletteStyleSetting.VIBRANT -> ThemePaletteStyle.Vibrant
     PaletteStyleSetting.EXPRESSIVE -> ThemePaletteStyle.Expressive
     PaletteStyleSetting.NEUTRAL -> ThemePaletteStyle.Neutral
     PaletteStyleSetting.MONOCHROME -> ThemePaletteStyle.Monochrome
+    PaletteStyleSetting.FIDELITY -> ThemePaletteStyle.Fidelity
+    PaletteStyleSetting.CONTENT -> ThemePaletteStyle.Content
+    PaletteStyleSetting.RAINBOW -> ThemePaletteStyle.Rainbow
+    PaletteStyleSetting.FRUIT_SALAD -> ThemePaletteStyle.FruitSalad
 }
 
 /**

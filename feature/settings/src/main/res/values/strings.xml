@@ -34,7 +34,7 @@
     <string name="settings_contrast_medium">Medium</string>
     <string name="settings_contrast_high">High</string>
     <string name="settings_contrast_very_high">Very high</string>
-    <string name="settings_vibrancy">Color vibrancy</string>
+    <string name="settings_vibrancy">Theme style</string>
     <string name="settings_motion_scale">Motion duration: %1$s×</string>
     <string name="settings_font_scale">Font scale: %1$s×</string>
     <string name="settings_line_height">Line height: %1$s×</string>

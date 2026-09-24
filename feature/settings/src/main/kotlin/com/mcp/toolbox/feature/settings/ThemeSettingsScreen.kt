@@ -272,13 +272,21 @@ fun ThemeSettingsScreen(
                     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
                         MiuixText(text = stringResource(R.string.settings_vibrancy), style = MiuixTheme.typography.bodyMedium)
                         Spacer(Modifier.height(spacing.sm))
-                        MiuixSegmentedButton(
-                            options = PaletteStyleSetting.entries.toList(),
-                            selected = config.paletteStyle,
-                            onSelect = { style -> onConfigChange { it.copy(paletteStyle = style) } },
-                            label = { styleLabels[it.ordinal] },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        // 9 种风格横排会挤，改成可横向滚动的 chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                        ) {
+                            PaletteStyleSetting.entries.forEach { style ->
+                                MiuixFilterChip(
+                                    label = if (isZh) style.labelZh else style.labelEn,
+                                    selected = config.paletteStyle == style,
+                                    onClick = { onConfigChange { it.copy(paletteStyle = style) } },
+                                )
+                            }
+                        }
                     }
                     MiuixDivider(startIndent = spacing.lg)
                     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {

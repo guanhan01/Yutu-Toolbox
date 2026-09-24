@@ -34,7 +34,7 @@
     <string name="settings_contrast_medium">中</string>
     <string name="settings_contrast_high">高</string>
     <string name="settings_contrast_very_high">超高</string>
-    <string name="settings_vibrancy">色彩活力</string>
+    <string name="settings_vibrancy">主题风格</string>
     <string name="settings_motion_scale">动效时长 %1$s×</string>
     <string name="settings_font_scale">字号缩放 %1$s×</string>
     <string name="settings_line_height">行高倍率 %1$s×</string>

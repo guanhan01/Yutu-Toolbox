@@ -19,7 +19,7 @@ val PalettePresets: List<PalettePreset> = listOf(
     PalettePreset("graphite", "石墨", "Graphite", Color(0xFF5B6572), PaletteStyleSetting.NEUTRAL),
     PalettePreset("mint", "薄荷", "Mint", Color(0xFF2FB79A)),
     PalettePreset("sunset", "日落", "Sunset", Color(0xFFF0853C), PaletteStyleSetting.EXPRESSIVE),
-    PalettePreset("polar_night", "极夜", "Polar Night", Color(0xFF3A4C7A), PaletteStyleSetting.MUTED),
+    PalettePreset("polar_night", "极夜", "Polar Night", Color(0xFF3A4C7A), PaletteStyleSetting.CONTENT),
 )
 
 fun presetById(id: String): PalettePreset = PalettePresets.firstOrNull { it.id == id } ?: PalettePresets.first()

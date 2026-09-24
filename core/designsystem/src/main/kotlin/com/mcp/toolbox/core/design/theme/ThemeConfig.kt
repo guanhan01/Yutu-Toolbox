@@ -14,14 +14,20 @@ enum class ContrastSetting(val value: Double) {
     STANDARD(0.0), MEDIUM(0.5), HIGH(1.0), EXTRA_HIGH(1.33),
 }
 
-/** 饱和度/色彩活力：映射到不同的动态色彩方案变体。 */
+/**
+ * 色彩风格：与官方 Miuix `ThemePaletteStyle` 的 9 种风格一一对应，
+ * 决定同一颗 Seed 派生出的整套配色倾向。
+ */
 enum class PaletteStyleSetting(val labelZh: String, val labelEn: String) {
+    TONAL("标准", "Tonal"),
     VIBRANT("活力", "Vibrant"),
-    TONAL("色调", "Tonal"),
-    MUTED("低饱和", "Muted"),
     EXPRESSIVE("表现力", "Expressive"),
     NEUTRAL("中性", "Neutral"),
     MONOCHROME("单色", "Monochrome"),
+    FIDELITY("还原", "Fidelity"),
+    CONTENT("内容", "Content"),
+    RAINBOW("彩虹", "Rainbow"),
+    FRUIT_SALAD("果缤纷", "Fruit Salad"),
 }
 
 /**

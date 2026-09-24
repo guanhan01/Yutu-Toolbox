@@ -8,8 +8,11 @@ import com.materialkolor.palettes.TonalPalette
 import com.materialkolor.scheme.DynamicScheme
 import com.materialkolor.scheme.SchemeContent
 import com.materialkolor.scheme.SchemeExpressive
+import com.materialkolor.scheme.SchemeFidelity
+import com.materialkolor.scheme.SchemeFruitSalad
 import com.materialkolor.scheme.SchemeMonochrome
 import com.materialkolor.scheme.SchemeNeutral
+import com.materialkolor.scheme.SchemeRainbow
 import com.materialkolor.scheme.SchemeTonalSpot
 import com.materialkolor.scheme.SchemeVibrant
 
@@ -39,10 +42,13 @@ object MiuixColorSchemeFactory {
         return when (style) {
             PaletteStyleSetting.VIBRANT -> SchemeVibrant(hct, isDark, contrastLevel)
             PaletteStyleSetting.TONAL -> SchemeTonalSpot(hct, isDark, contrastLevel)
-            PaletteStyleSetting.MUTED -> SchemeContent(hct, isDark, contrastLevel)
             PaletteStyleSetting.EXPRESSIVE -> SchemeExpressive(hct, isDark, contrastLevel)
             PaletteStyleSetting.NEUTRAL -> SchemeNeutral(hct, isDark, contrastLevel)
             PaletteStyleSetting.MONOCHROME -> SchemeMonochrome(hct, isDark, contrastLevel)
+            PaletteStyleSetting.FIDELITY -> SchemeFidelity(hct, isDark, contrastLevel)
+            PaletteStyleSetting.CONTENT -> SchemeContent(hct, isDark, contrastLevel)
+            PaletteStyleSetting.RAINBOW -> SchemeRainbow(hct, isDark, contrastLevel)
+            PaletteStyleSetting.FRUIT_SALAD -> SchemeFruitSalad(hct, isDark, contrastLevel)
         }
     }
 
