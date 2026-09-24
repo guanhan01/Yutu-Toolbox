@@ -48,4 +48,5 @@
     <string name="settings_header_bg_clear">Restore default</string>
     <string name="settings_header_aurora_title">Flowing aurora</string>
     <string name="settings_header_aurora_desc">Aurora drifts randomly behind the header. Direction, speed and position differ each time; a custom image takes precedence</string>
+    <string name="settings_ui_style">UI style</string>
 </resources>

@@ -65,6 +65,7 @@ import com.mcp.toolbox.core.design.theme.LocalThemeRevealTrigger
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.core.design.theme.PalettePresets
 import com.mcp.toolbox.core.design.theme.PaletteStyleSetting
+import com.mcp.toolbox.core.design.theme.UiStyle
 import com.mcp.toolbox.core.design.theme.ThemeConfig
 import com.mcp.toolbox.core.design.theme.ThemeSource
 import com.mcp.toolbox.core.design.theme.presetById
@@ -200,6 +201,22 @@ fun ThemeSettingsScreen(
     item {
             MiuixSectionCard(title = stringResource(R.string.settings_appearance)) {
                 Column {
+                    // 界面风格：在「经典自绘」与「Miuix 官方库」两套实现之间切换
+                    Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
+                        MiuixText(
+                            text = stringResource(R.string.settings_ui_style),
+                            style = MiuixTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(spacing.sm))
+                        MiuixSegmentedButton(
+                            options = UiStyle.entries.toList(),
+                            selected = config.uiStyle,
+                            onSelect = { style -> onConfigChange { it.copy(uiStyle = style) } },
+                            label = { if (isZh) it.labelZh else it.labelEn },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    MiuixDivider(startIndent = spacing.lg)
                     // 圆形揭示：以「深浅模式」这一行为圆心扩散新主题背景
                     val revealTrigger = LocalThemeRevealTrigger.current
                     var darkToggleCenter by remember { mutableStateOf(Offset.Zero) }

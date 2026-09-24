@@ -152,6 +152,7 @@ fun MiuixTheme(
         LocalMiuixTypography provides typography,
         LocalMiuixMotion provides motion,
         LocalMiuixThemeConfig provides config,
+        LocalUiStyle provides config.uiStyle,
     ) {
         OfficialMiuixTheme(officialColors, officialTextStyles) {
             content()

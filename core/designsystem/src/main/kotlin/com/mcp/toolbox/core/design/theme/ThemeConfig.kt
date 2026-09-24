@@ -52,6 +52,8 @@ data class ThemeConfig(
     val lineHeightScale: Float = 1f,
     /** 动效时长倍率 0.5-1.5。 */
     val motionScale: Float = 1f,
+    /** 界面风格：经典（自绘）或 Miuix（官方库）。 */
+    val uiStyle: UiStyle = UiStyle.MIUIX,
 ) {
     companion object {
         const val BrandSeedArgb: Long = 0xFF6750A4

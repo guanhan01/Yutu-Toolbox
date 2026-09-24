@@ -45,6 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.foundation.layout.PaddingValues
+import com.mcp.toolbox.core.design.theme.UiStyle
+import top.yukonga.miuix.kmp.basic.ListPopupColumn as OfficialListPopupColumn
+import top.yukonga.miuix.kmp.basic.PopupPositionProvider as OfficialPopupPositionProvider
+import top.yukonga.miuix.kmp.overlay.OverlayListPopup as OfficialOverlayListPopup
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import top.yukonga.miuix.kmp.anim.folmeSpring
 import kotlin.math.roundToInt
@@ -81,6 +86,10 @@ fun MiuixOverflowMenu(
     focusable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
+        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, offset, content)
+        return
+    }
     val colors = MiuixTheme.colors
     val radius = MiuixTheme.radius
     val motion = MiuixTheme.motion
@@ -293,5 +302,96 @@ private class OverflowMenuPositionProvider(
                 else -> below
             }
         return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
+    }
+}
+
+// ---------------- Miuix（官方 OverlayListPopup） ----------------
+
+/**
+ * Miuix 风格实现：官方 [OfficialOverlayListPopup]。
+ *
+ * 动画完全交给官方：scale 0.15→1 + 按弹出方向展开的 clip-reveal + alpha 渐变，
+ * 以及官方的遮罩与回弹曲线。锚点仍复用本文件既有的 [Rect]（窗口坐标）。
+ */
+@Composable
+private fun MiuixOverlayMenuBody(
+    anchor: Rect?,
+    alignStart: Boolean,
+    offset: IntOffset,
+    onDismiss: () -> Unit,
+    expanded: Boolean,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    // 官方 content 无接收者；包一层 Column 承载调用点的 ColumnScope 内容
+    Column { content() }
+}
+
+private fun officialPositionProvider(
+    anchor: Rect?,
+    alignStart: Boolean,
+    offset: IntOffset,
+): OfficialPopupPositionProvider = object : OfficialPopupPositionProvider {
+    override fun getMargins(): PaddingValues = PaddingValues(0.dp)
+
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowBounds: IntRect,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+        popupMargin: IntRect,
+        alignment: OfficialPopupPositionProvider.Align,
+    ): IntOffset {
+        val anchorRect = anchor
+        val gapPx = 6
+        val gap = gapPx + popupMargin.bottom
+        val maxX = (windowBounds.width - popupContentSize.width).coerceAtLeast(0)
+        val maxY = (windowBounds.height - popupContentSize.height).coerceAtLeast(0)
+
+        val rawX = when {
+            anchorRect == null ->
+                if (alignStart) anchorBounds.left + offset.x
+                else anchorBounds.right - popupContentSize.width + offset.x
+            alignStart -> anchorRect.left.roundToInt() + offset.x
+            else -> anchorRect.right.roundToInt() - popupContentSize.width + offset.x
+        }
+        val anchorBottom = anchorRect?.bottom?.roundToInt() ?: anchorBounds.top
+        val below = anchorBottom + gap + offset.y
+        val above = anchorRect?.let {
+            it.top.roundToInt() - popupContentSize.height - gap + offset.y
+        }
+        val top = when {
+            below + popupContentSize.height <= windowBounds.height -> below
+            above != null -> above.coerceAtLeast(0)
+            else -> below
+        }
+        return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
+    }
+}
+
+@Composable
+private fun MiuixOverflowMenuOfficial(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier,
+    anchor: Rect?,
+    alignStart: Boolean,
+    offset: IntOffset,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val provider = remember(anchor, alignStart, offset) {
+        officialPositionProvider(anchor, alignStart, offset)
+    }
+    OfficialOverlayListPopup(
+        show = expanded,
+        popupModifier = modifier,
+        popupPositionProvider = provider,
+        alignment = if (alignStart) OfficialPopupPositionProvider.Align.Start
+        else OfficialPopupPositionProvider.Align.End,
+        onDismissRequest = onDismiss,
+        minWidth = 0.dp,
+    ) {
+        OfficialListPopupColumn {
+            Column { content() }
+        }
     }
 }

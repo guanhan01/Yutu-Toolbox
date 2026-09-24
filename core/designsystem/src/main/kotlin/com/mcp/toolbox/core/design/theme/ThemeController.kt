@@ -93,6 +93,7 @@ class ThemeController(
         fontScale = this[KeyFontScale] ?: 1f,
         lineHeightScale = this[KeyLineHeight] ?: 1f,
         motionScale = this[KeyMotion] ?: 1f,
+        uiStyle = enumOr(this[KeyUiStyle], UiStyle.MIUIX),
     )
 
     private fun MutablePreferences.write(config: ThemeConfig) {
@@ -110,6 +111,7 @@ class ThemeController(
         this[KeyFontScale] = config.fontScale
         this[KeyLineHeight] = config.lineHeightScale
         this[KeyMotion] = config.motionScale
+        this[KeyUiStyle] = config.uiStyle.name
     }
 
     private inline fun <reified T : Enum<T>> enumOr(raw: String?, fallback: T): T =
@@ -132,6 +134,7 @@ class ThemeController(
         private val KeyFontScale = floatPreferencesKey("font_scale")
         private val KeyLineHeight = floatPreferencesKey("line_height")
         private val KeyMotion = floatPreferencesKey("motion_scale")
+        private val KeyUiStyle = stringPreferencesKey("ui_style")
 
         fun create(context: Context, scope: CoroutineScope): ThemeController =
             ThemeController(context.applicationContext.themeDataStore, scope)

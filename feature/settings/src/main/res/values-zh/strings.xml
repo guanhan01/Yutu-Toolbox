@@ -48,4 +48,5 @@
     <string name="settings_header_bg_clear">恢复默认背景</string>
     <string name="settings_header_aurora_title">动态流光</string>
     <string name="settings_header_aurora_desc">大标题背景的极光随机漂移，方向、速度与位置每次都不同；已设置自定义图片时以图片为准</string>
+    <string name="settings_ui_style">界面风格</string>
 </resources>

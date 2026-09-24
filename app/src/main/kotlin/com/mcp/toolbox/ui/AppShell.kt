@@ -6,8 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import top.yukonga.miuix.kmp.anim.SinOutEasing
-import top.yukonga.miuix.kmp.anim.DecelerateEasing
+import com.mcp.toolbox.core.design.theme.NavTransitionEasing
+import com.mcp.toolbox.core.design.theme.UiStyle
+import com.mcp.toolbox.core.design.theme.LocalUiStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -219,6 +220,7 @@ private fun ToolboxNavHost(
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
+    val uiStyle = LocalUiStyle.current
     val notConfigured = stringResource(R.string.ai_not_configured)
     val errNetwork = stringResource(R.string.ai_err_network)
     val chatRunning by ChatRunner.running.collectAsState()
@@ -240,25 +242,56 @@ private fun ToolboxNavHost(
         startDestination = Routes.HOME,
         modifier = Modifier.fillMaxSize(),
         // 一级到二级的转场：轻微右进 + 淡入，返回时反向
-        // 二三级界面进入动画：位移曲线用官方 Miuix 的 SinOutEasing（先快后缓），
-        // 退场用 DecelerateEasing，与官方 overlay 的转场观感一致。
+        // 二三级界面进入动画。
+        // Miuix 风格：完全对齐官方 NavDisplay 的默认转场——
+        //   NavTransitionEasing(0.8, 0.95) + 500ms；
+        //   进入从右侧整屏滑入，旧页向左退 1/4；返回镜像。
+        // 经典风格：保留项目原有的轻量转场（右进 1/5 + 淡入，260ms）。
         enterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { it / 5 },
-                animationSpec = tween(320, easing = SinOutEasing),
-            ) + fadeIn(tween(260, easing = DecelerateEasing(1.6f)))
+            if (uiStyle == UiStyle.MIUIX) {
+                slideInHorizontally(
+                    initialOffsetX = { it },
+                    animationSpec = tween(500, easing = NavTransitionEasing.Default),
+                )
+            } else {
+                slideInHorizontally(
+                    initialOffsetX = { it / 5 },
+                    animationSpec = tween(260),
+                ) + fadeIn(tween(220))
+            }
         },
         exitTransition = {
-            fadeOut(tween(160, easing = DecelerateEasing(1.6f)))
+            if (uiStyle == UiStyle.MIUIX) {
+                slideOutHorizontally(
+                    targetOffsetX = { -it / 4 },
+                    animationSpec = tween(500, easing = NavTransitionEasing.Default),
+                )
+            } else {
+                fadeOut(tween(140))
+            }
         },
         popEnterTransition = {
-            fadeIn(tween(220, easing = DecelerateEasing(1.6f)))
+            if (uiStyle == UiStyle.MIUIX) {
+                slideInHorizontally(
+                    initialOffsetX = { -it / 4 },
+                    animationSpec = tween(500, easing = NavTransitionEasing.Default),
+                )
+            } else {
+                fadeIn(tween(200))
+            }
         },
         popExitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { it / 5 },
-                animationSpec = tween(320, easing = SinOutEasing),
-            ) + fadeOut(tween(240, easing = DecelerateEasing(1.6f)))
+            if (uiStyle == UiStyle.MIUIX) {
+                slideOutHorizontally(
+                    targetOffsetX = { it },
+                    animationSpec = tween(500, easing = NavTransitionEasing.Default),
+                )
+            } else {
+                slideOutHorizontally(
+                    targetOffsetX = { it / 5 },
+                    animationSpec = tween(260),
+                ) + fadeOut(tween(220))
+            }
         },
     ) {
             composable(Routes.HOME) {
