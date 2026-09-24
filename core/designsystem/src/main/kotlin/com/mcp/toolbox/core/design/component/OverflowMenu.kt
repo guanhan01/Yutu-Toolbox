@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -352,6 +353,21 @@ private fun MiuixOverflowMenuOfficial(
     val fraction = remember { Animatable(if (expanded) 1f else 0f) }
     val alphaAnim = remember { Animatable(if (expanded) 1f else 0f) }
 
+    // 「再点一次按钮」时序问题：点击时 Popup 先把这次点击当作「点外部」触发 onDismiss，
+    // 紧接着按钮的 onClick 又把 expanded 置回 true，于是菜单看起来是重新弹出而非收回。
+    // 记下最近一次关闭时刻，短时间内到达的 true 视为同一次点击，直接忽略。
+    val lastDismissAt = remember { longArrayOf(0L) }
+    val suppressed = remember(expanded) {
+        if (expanded) System.currentTimeMillis() - lastDismissAt[0] < 350L else false
+    }
+    val shown = expanded && !suppressed
+
+    // 页面被销毁（例如侧滑返回）时，若菜单还开着就主动收回，
+    // 否则弹层会跟着 Popup 残留在屏幕上。
+    DisposableEffect(Unit) {
+        onDispose { if (expanded) onDismiss() }
+    }
+
     LaunchedEffect(expanded) {
         if (expanded) {
             mounted = true
@@ -362,6 +378,7 @@ private fun MiuixOverflowMenuOfficial(
                 spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f),
             )
         } else {
+            if (expanded) lastDismissAt[0] = System.currentTimeMillis()
             launch { alphaAnim.animateTo(0f, tween(150)) }
             fraction.animateTo(0f, tween(170))
             mounted = false
@@ -372,7 +389,7 @@ private fun MiuixOverflowMenuOfficial(
     val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
 
     Popup(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
         popupPositionProvider = positionProvider,
         properties = PopupProperties(focusable = focusable),
     ) {

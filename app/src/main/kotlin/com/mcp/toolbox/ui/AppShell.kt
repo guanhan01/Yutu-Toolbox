@@ -147,7 +147,7 @@ fun AppShell(
                 if (wideScreen) {
                     MiuixNavRail(currentRoute = currentRoute, onNavigate = { navigate(it) })
                 }
-                Box(Modifier.weight(1f)) {
+                Box(Modifier.weight(1f).background(colors.background)) {
                     ToolboxNavHost(
                         navController = navController,
                         config = config,
