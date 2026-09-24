@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.fillMaxSize
 import com.mcp.toolbox.core.design.token.MiuixDimens
 import com.mcp.toolbox.core.design.token.MiuixTypography
 import com.mcp.toolbox.core.design.token.MotionTokens
@@ -161,7 +164,8 @@ fun MiuixTheme(
             // 这里补一个只当「弹层宿主」的 Scaffold：popupHost 默认就是 MiuixPopupHost()，
             // 负责把所有官方弹层画到内容之上。容器色设为透明，不影响现有界面底色。
             OfficialScaffold(
-                // 必须是不透明背景：透明会让页面在转场/叠加时透视到下层内容
+                // 不透明背景 + 裁边：避免页面在转场滑动时透视到相邻页内容
+                modifier = Modifier.fillMaxSize().clipToBounds(),
                 containerColor = colors.background,
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
             ) { _ ->

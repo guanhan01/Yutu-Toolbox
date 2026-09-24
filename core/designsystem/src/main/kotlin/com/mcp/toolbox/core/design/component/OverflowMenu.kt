@@ -88,7 +88,7 @@ fun MiuixOverflowMenu(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, offset, content)
+        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, content)
         return
     }
     val colors = MiuixTheme.colors
@@ -326,6 +326,7 @@ private fun MiuixOverflowMenuOfficial(
     anchor: Rect?,
     alignStart: Boolean,
     stickToBottom: Boolean,
+    focusable: Boolean,
     offset: IntOffset,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -373,7 +374,7 @@ private fun MiuixOverflowMenuOfficial(
     Popup(
         onDismissRequest = onDismiss,
         popupPositionProvider = positionProvider,
-        properties = PopupProperties(focusable = true),
+        properties = PopupProperties(focusable = focusable),
     ) {
         val f = fraction.value.coerceIn(0f, 1f)
         Column(
