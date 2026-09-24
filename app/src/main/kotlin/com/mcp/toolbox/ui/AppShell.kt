@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -147,7 +148,13 @@ fun AppShell(
                 if (wideScreen) {
                     MiuixNavRail(currentRoute = currentRoute, onNavigate = { navigate(it) })
                 }
-                Box(Modifier.weight(1f).background(colors.background)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .background(colors.background)
+                        // 裁切：转场滑动时页面内容（尤其顶栏 actions）不会溢出到相邻页
+                        .clipToBounds(),
+                ) {
                     ToolboxNavHost(
                         navController = navController,
                         config = config,
@@ -295,6 +302,7 @@ private fun ToolboxNavHost(
         },
     ) {
             composable(Routes.HOME) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 val homeContext = LocalContext.current
                 val mcpStates by McpRegistry.states.collectAsState()
                 val mcpCalls by McpRegistry.calls.collectAsState()
@@ -377,8 +385,9 @@ private fun ToolboxNavHost(
                             ?.let { AiConfigStore.selectReasoning(shellContext, it) }
                     },
                 )
-            }
+                            }}
             composable(Routes.SETTINGS_THEME) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_theme),
@@ -389,8 +398,9 @@ private fun ToolboxNavHost(
                         toastState = toastState,
                     )
                 }
-            }
+                            }}
             composable(Routes.SETTINGS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_settings),
@@ -404,8 +414,9 @@ private fun ToolboxNavHost(
                         privilegeUsable = privilege?.usable == true,
                     )
                 }
-            }
+                            }}
             composable(Routes.AI_SETTINGS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_ai),
@@ -419,8 +430,9 @@ private fun ToolboxNavHost(
                         onOpenLinux = { onNavigate(Routes.LINUX) },
                     )
                 }
-            }
+                            }}
             composable(Routes.AI_PROVIDERS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_provider_pick),
@@ -432,8 +444,9 @@ private fun ToolboxNavHost(
                         },
                     )
                 }
-            }
+                            }}
             composable(Routes.AI_PROVIDER_DETAIL) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_provider_title),
@@ -444,8 +457,9 @@ private fun ToolboxNavHost(
                         onOpenModels = { onNavigate(Routes.AI_MODELS) },
                     )
                 }
-            }
+                            }}
             composable(Routes.LINUX) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_nav_linux),
@@ -468,40 +482,45 @@ private fun ToolboxNavHost(
                         },
                     )
                 }
-            }
+                            }}
             composable(Routes.LINUX_FILES) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_browse),
                         onOpenDrawer = onOpenDrawer)
                     LinuxFilesScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-            }
+                            }}
             composable(Routes.LINUX_SHARED) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_shared),
                         onOpenDrawer = onOpenDrawer)
                     LinuxSharedScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-            }
+                            }}
             composable(Routes.LINUX_TERMINAL) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_open_terminal),
                         onOpenDrawer = onOpenDrawer)
                     LinuxTerminalScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-            }
+                            }}
             composable(Routes.LINUX_CHECK) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_check_title),
                         onOpenDrawer = onOpenDrawer)
                     LinuxCheckScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-            }
+                            }}
             composable(Routes.AI_MODELS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_model_manage),
@@ -511,77 +530,94 @@ private fun ToolboxNavHost(
                             ?: AiConfigStore.config.value.current.name,
                     )
                 }
-            }
+                            }}
             composable(Routes.SETTINGS_PRIVILEGE) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(title = "权限检测与申请", onOpenDrawer = onOpenDrawer)
                     PrivilegeScreen(onToast = { toastState.show(it) })
                 }
-            }
+                            }}
             composable(Routes.ABOUT) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_about),
                         onOpenDrawer = onOpenDrawer)
                     AboutScreen(toastState = toastState)
                 }
-            }
+                            }}
             composable(Routes.TOOLS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_drawer_group_tools),
                         onOpenDrawer = onOpenDrawer)
                     ToolsScreen(onOpenTool = onNavigate)
                 }
-            }
+                            }}
             composable(Routes.APPS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 AppsScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.CAPTURE) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 CaptureScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.DECOMPILE) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 DecompileScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.DATABASE) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 DatabaseScreen(onBack = onOpenDrawer, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.NETWORK) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 NetworkHubScreen(onOpenDrawer = onOpenDrawer, onOpenRoute = onNavigate)
-            }
+                            }}
             composable(Routes.NETWORK_HTTP) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 HttpRequestScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.NETWORK_PING) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 PingScreen(onBack = { navController.popBackStack() })
-            }
-            composable(Routes.NETWORK_DNS) { DnsScreen(onBack = { navController.popBackStack() }) }
+                            }}
+            composable(Routes.NETWORK_DNS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) { DnsScreen(onBack = { navController.popBackStack() })                 }}
             composable(Routes.WEB) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 WebScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.MCP) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 McpScreen(
                     onOpenDrawer = onOpenDrawer,
                     onToast = { toastState.show(it) },
                     onOpenArtifacts = { navController.navigate(Routes.ARTIFACTS) },
                 )
-            }
+                            }}
             composable(Routes.ARTIFACTS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 ArtifactsScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.NETWORK_PORT_SCAN) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 PortScanScreen(onBack = { navController.popBackStack() })
-            }
+                            }}
             composable(Routes.NETWORK_WHOIS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 WhoisScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-            }
+                            }}
             composable(Routes.NETWORK_ENV) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 NetworkEnvScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-            }
+                            }}
             // 尚未进入实现阶段的模块统一落到占位页
             val placeholders =
                 DrawerPrimary.filter {
