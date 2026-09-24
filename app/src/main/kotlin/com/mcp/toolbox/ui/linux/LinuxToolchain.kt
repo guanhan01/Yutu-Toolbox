@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** 主页点「安装」时暂存目标组件，跳转到检测页后自动开始安装。 */
 object LinuxPendingInstall {
@@ -308,8 +310,83 @@ object LinuxToolchain {
         }
     }
 
+    /**
+     * 归档是否可用。
+     *
+     * 删掉某个归档及其所有源的 `.part` 断点。
+     *
+     * 断点按地址区分（换源不会串内容），代价是换源后会留下旧源的残留；
+     * 归档已到手或已装好时，这些残留都不再需要。
+     */
+    private fun clearArchive(stage: File, name: String) {
+        runCatching { File(stage, name).delete() }
+        clearParts(stage, name)
+    }
+
+    /** 只清 `.part`，保留已下完的归档。 */
+    private fun clearParts(stage: File, name: String) {
+        val prefix = "$name."
+        runCatching {
+            stage.listFiles()?.forEach { f ->
+                if (f.name.startsWith(prefix) && f.name.endsWith(".part")) f.delete()
+            }
+        }
+    }
+
+    /**
+     * zip 只验证中央目录能否读出，不做全量解压：目的是把「下载坏了」与
+     * 「解包出错」分开——前者重下即可，后者才是脚本或环境的问题。
+     * 非 zip（tar.gz / tar.xz / jar）不做结构校验，交给 tar 自己报错。
+     */
+    private fun archiveValid(archive: Archive, file: File): Boolean {
+        if (!archive.name.endsWith(".zip")) return true
+        return runCatching { java.util.zip.ZipFile(file).use { it.size() > 0 } }.getOrDefault(false)
+    }
+
+    /**
+     * Node.js 是否已就绪。
+     *
+     * Codex / Claude 走 npm 全局安装，没有 Node 时脚本注定失败；这里只看
+     * 可执行文件是否存在，不做真实执行——真跑一次 chroot 代价太大。
+     */
+    private fun nodeReady(context: Context, distro: LinuxDistro): Boolean {
+        val rootfs = LinuxEnvStore.rootfs(context, distro)
+        // 查 node 本体与 npm 包本体，不查 /usr/local/bin/npm：
+        // 那是个软链接，应用进程 stat 它会被 SELinux 拒绝（lnk_file read），
+        // 会让装了 Node 的用户仍然被拦在「请先安装 Node.js 环境」。
+        return File(rootfs, "usr/local/bin/node").exists() &&
+            File(rootfs, "usr/local/lib/node_modules/npm/bin/npm-cli.js").exists()
+    }
+
     /** 安装一个组件；[onLine] 收到脚本输出行。 */
     suspend fun install(
+        context: Context,
+        distro: LinuxDistro,
+        component: LinuxComponent,
+        onProgress: (LinuxInstaller.Progress) -> Unit = {},
+        onLine: (String) -> Unit,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        // 回调此前直接改界面状态；切到 IO 后统一由 Handler 送回主线程，
+        // 否则 SnapshotStateList 会被跨线程写，日志与进度会丢更新。
+        val main = Handler(Looper.getMainLooper())
+        installBlocking(
+            context = context,
+            distro = distro,
+            component = component,
+            onProgress = { p -> main.post { onProgress(p) } },
+            onLine = { line -> main.post { onLine(line) } },
+        )
+    }
+
+    /**
+     * [install] 的实现体。
+     *
+     * 内含 Java 侧 HTTP 下载与 chroot 执行，必须在 IO 线程上跑。调用方
+     * （Compose 的 rememberCoroutineScope）默认在 Main 上，直接跑会抛
+     * NetworkOnMainThreadException——该异常不带 message，界面只会显示
+     * 一句「下载失败：null」，从现象看不出真正原因。
+     */
+    private suspend fun installBlocking(
         context: Context,
         distro: LinuxDistro,
         component: LinuxComponent,
@@ -318,6 +395,13 @@ object LinuxToolchain {
     ): Result<Unit> {
         if (!LinuxRuntime.isReady(context, distro)) {
             return Result.failure(IllegalStateException("请先安装 Linux 环境"))
+        }
+
+        // Codex / Claude 是 npm 全局包，缺 Node 时装不出任何东西。脚本里的
+        // 判空在 apt-get update 之后，会先白等一轮索引更新才报错，这里提前拦下。
+        if (component.requiresNode && !nodeReady(context, distro)) {
+            onLine("✗ 请先安装 Node.js 环境，再安装 ${component.title}")
+            return Result.failure(IllegalStateException("请先安装 Node.js 环境"))
         }
         onLine("→ 开始安装 ${component.title}")
 
@@ -328,9 +412,15 @@ object LinuxToolchain {
             stage.mkdirs()
             for (archive in archives) {
                 val target = File(stage, archive.name)
+                // 已下载的归档在复用前同样要验：旧版本会放过超长的坏包，留着它
+                // 就等于反复拿同一个坏文件去解压，只会得到一个退出码。
                 if (target.isFile && target.length() > 0) {
-                    onLine("→ ${archive.name} 已在本地，跳过下载")
-                    continue
+                    if (archiveValid(archive, target)) {
+                        onLine("→ ${archive.name} 已在本地，跳过下载")
+                        continue
+                    }
+                    onLine("→ ${archive.name} 本地副本不完整，重新下载")
+                    target.delete()
                 }
                 onLine("→ 下载 ${archive.name}（中断可从断点继续）")
                 LinuxInstaller.downloadAny(
@@ -338,34 +428,42 @@ object LinuxToolchain {
                     target = target,
                     onProgress = onProgress,
                 )
+                if (!archiveValid(archive, target)) {
+                    target.delete()
+                    onLine("✗ ${archive.name} 校验失败（压缩包不完整），已丢弃，请重试")
+                    return Result.failure(IllegalStateException("${archive.name} 校验失败"))
+                }
+                // 完整文件已到手，其它源留下的同包断点就是垃圾
+                clearParts(stage, archive.name)
                 onLine("→ ${archive.name} 下载完成（${LinuxChecker.humanSize(target.length())}）")
             }
         } catch (t: Throwable) {
-            onLine("✗ 下载失败：${t.message}")
+            onLine("✗ 下载失败：${t.message ?: t::class.simpleName ?: "未知错误"}")
             onLine("  已下载的部分已保留，重试会从断点继续")
             return Result.failure(t)
         }
 
-        // 读取线程在后台，回传时切到主线程刷 UI
-        val main = Handler(Looper.getMainLooper())
+        // 读取线程在后台；回调的线程切换由 [install] 统一处理
         val result = LinuxRuntime.exec(
             context = context,
             distro = distro,
             command = scriptOf(distro, component),
             timeoutMs = 30 * 60 * 1000L,
-            onLine = { raw -> if (raw.isNotBlank()) main.post { onLine(raw.trim()) } },
+            onLine = { raw -> if (raw.isNotBlank()) onLine(raw.trim()) },
         )
         if (!result.ok) {
             // 兜底分支（超时 / 启动异常）不会有流式输出，这里补上真实原因，
             // 否则界面上只剩一个退出码，无法排查
             result.stderr.lineSequence().forEach { if (it.isNotBlank()) onLine(it.trim()) }
-            onLine("→ 归档文件已保留，重按「安装」会跳过已下载部分")
+            // SSH / Git 这类没有归档的组件不该提示「已保留」，否则等于误导
+            if (archives.isNotEmpty()) onLine("→ 归档文件已保留，重按「安装」会跳过已下载部分")
         }
         // 无论成败都报耗时：脚本"秒回"就说明它根本没跑起来
         onLine("→ 退出码 ${result.exitCode}，耗时 ${result.elapsedMs / 1000} 秒，输出 ${result.stdout.length} 字")
         return if (result.ok) {
-            // 装完清掉归档，别白占几十上百 MB
-            archives.forEach { runCatching { File(stage, it.name).delete() } }
+            // 装完清掉归档，连 `.part` 一起清。换过源的组件会留下旧源的断点，
+            // 只删归档文件名会漏掉它们，白占几十上百 MB 且再也不会被用到。
+            archives.forEach { runCatching { clearArchive(stage, it.name) } }
             LinuxRuntime.refreshVersion(context, distro, component)
             onLine("→ ${component.title} 完成")
             Result.success(Unit)

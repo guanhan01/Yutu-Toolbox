@@ -133,7 +133,14 @@ private suspend fun scanEnv(
         val versions = probeVersions(context, distro)
         statuses = statuses.map { status ->
             val found = versions[status.component]
-            if (status.installed && !found.isNullOrBlank()) status.copy(version = found) else status
+            // probe 是在 chroot 内真跑出来的：拿到版本就说明确实装好了。
+            // 不能要求 status.installed 先为 true——rootfs 内的软链接在应用
+            // 进程里 stat 不到，会被误判成未安装（npm 全局包就是这种）。
+            if (!found.isNullOrBlank()) {
+                status.copy(installed = true, version = found)
+            } else {
+                status
+            }
         }
     }
     val size = if (ready) LinuxChecker.humanSize(LinuxEnvStore.sizeOf(context, distro)) else "未安装"

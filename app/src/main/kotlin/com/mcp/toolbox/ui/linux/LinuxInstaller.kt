@@ -162,8 +162,14 @@ object LinuxInstaller {
         }
         if (candidates.isEmpty()) throw IllegalStateException("没有可用的下载源，请检查网络后重试")
 
+        // 与 downloadAny 同样先测速：rootfs 也有 90 MB 上下，
+        // 选中慢源会让「正在测速」之后仍要等很久。
+        val names = candidates.toMap()
+        val orderedUrls = rankBySpeed(File(downloads, candidates.first().second), candidates.map { it.first })
+
         var lastError: Throwable? = null
-        for ((url, name) in candidates) {
+        for (url in orderedUrls) {
+            val name = names.getValue(url)
             val target = File(downloads, name)
             try {
                 val state = InstallState(sourceId, url, name, target.length(), InstallState.STAGE_DOWNLOAD)
@@ -414,7 +420,28 @@ object LinuxInstaller {
         }
         // 服务器忽略 Range 时返回 200 与完整内容，此时不能接着旧文件写
         val resuming = rangeFrom > 0 && code == HttpURLConnection.HTTP_PARTIAL
-        val length = conn.contentLengthLong.let { if (resuming) rangeFrom + it else it }
+
+        // 解析 `Content-Range: bytes 3192897-116173954/116173955`。
+        //
+        // 两件事都必须看这里，不能只看状态码与 Content-Length：
+        // - 起点：个别 CDN 回了 206，内容却是从 0 开始的。这时按「续传」追加，
+        //   文件会变成「已下载部分 + 整个包」，比真值多出一截；长度校验（只查
+        //   不够长）照样通过，直到解压才炸，界面只剩一句「退出码 1」。起点对不
+        //   上就当作续传失效，丢掉 .part 重新下。
+        // - 总长：206 缺 Content-Length 时 contentLengthLong 是 -1，
+        //   rangeFrom + (-1) 是个废值，之后的完整性校验会全部失效。
+        val contentRange = conn.getHeaderField("Content-Range")
+        val rangeParts = contentRange
+            ?.removePrefix("bytes ")
+            ?.trim()
+            ?.split('/', '-')
+        val rangeStart = rangeParts?.getOrNull(0)?.trim()?.toLongOrNull()
+        val rangeTotal = rangeParts?.getOrNull(2)?.trim()?.toLongOrNull()
+        if (resuming && rangeStart != null && rangeStart != rangeFrom) {
+            throw RangeNotSatisfiable()
+        }
+        val body = conn.contentLengthLong
+        val length = rangeTotal ?: if (resuming && body > 0) rangeFrom + body else body
         return Response(conn.inputStream, length, resuming)
     }
 
@@ -458,9 +485,14 @@ object LinuxInstaller {
                 }
             }
         }
-        if (tmp.length() == 0L) throw IllegalStateException("下载内容为空：$label")
-        if (total > 0 && tmp.length() < total) {
-            throw IllegalStateException("下载未完成（${tmp.length()}/$total），可继续安装补全")
+        val actual = tmp.length()
+        if (actual == 0L) throw IllegalStateException("下载内容为空：$label")
+        // 必须严格等于服务端声明的总长。只查「不够长」会放过被写坏的超长文件：
+        // 续传时若服务端多给了内容，文件会变成「已下载部分 + 整个包」，长度
+        // 校验照样通过，直到解压才失败，界面上只剩一句「退出码 1」。
+        if (total > 0 && actual != total) {
+            tmp.delete()
+            throw IllegalStateException("下载内容与声明大小不符（$actual / $total），已丢弃，请重试")
         }
         if (target.exists()) target.delete()
         tmp.renameTo(target)
@@ -473,15 +505,18 @@ object LinuxInstaller {
      * [candidates] 按顺序尝试，成功即把文件落到 [target] 并返回。中断留下的
      * `.part` 会被复用（按地址区分），因此下次接着下而不是从头来。
      */
-    fun downloadAny(
+    suspend fun downloadAny(
         candidates: List<String>,
         target: File,
         onProgress: (Progress) -> Unit,
         onTotal: (Long) -> Unit = {},
     ): File {
         target.parentFile?.mkdirs()
+        // 上百 MB 的包选中慢源要多等半小时以上，先实测吞吐再排序：
+        // 快的先下，已有可观进度的地址优先沿用，连不通的留作兜底。
+        val ordered = rankBySpeed(target, candidates)
         var lastError: Throwable? = null
-        for (url in candidates) {
+        for (url in ordered) {
             try {
                 downloadResumable(
                     url = url,
@@ -515,6 +550,86 @@ object LinuxInstaller {
     fun partFile(target: File, url: String): File =
         File(target.parentFile, "${target.name}.${Integer.toHexString(url.hashCode())}.part")
 
+    /**
+     * 测速探测的字节数。
+     *
+     * 太小会被连接建立时间掩盖，太大则白费流量；128 KB 在几 MB/s 的链路上
+     * 约 0.05 秒即可测完，在慢链路上也不会等太久。
+     */
+    private const val PROBE_BYTES = 128 * 1024
+
+    /** 单次测速的超时。测速只作参考，不值得一提等太久。 */
+    private const val PROBE_TIMEOUT = 8_000
+
+    /**
+     * 小于这个大小的断点不值得为它保留一个慢源：重新下更快，也不心疼。
+     */
+    private const val MIN_RESUME_BYTES = 1L * 1024 * 1024
+
+    /**
+     * 给候选地址并发测速，返回按实测吞吐从快到慢排列的列表。
+     *
+     * 各镜像与加速器的速度差异可以到十倍以上，而调用方原先只是「按声明顺序取
+     * 第一个能连通的地址」。上百 MB 的压缩包一旦选中慢源，就要多等半小时以上，
+     * 所以先让每个地址真实拉一小段比吞吐，再让快的先下。
+     *
+     * 已经下过可观进度的地址排在最前：换源等于把已下载的部分作废。
+     */
+    suspend fun rankBySpeed(
+        target: File,
+        candidates: List<String>,
+        probeBytes: Int = PROBE_BYTES,
+    ): List<String> {
+        if (candidates.size < 2) return candidates
+        val partial = candidates
+            .filter { url ->
+                val part = partFile(target, url)
+                part.isFile && part.length() >= MIN_RESUME_BYTES
+            }
+            .sortedByDescending { url -> partFile(target, url).length() }
+        val rest = candidates.filterNot { it in partial }
+        if (rest.isEmpty()) return partial
+        val measured = coroutineScope {
+            rest.map { url ->
+                async(Dispatchers.IO) {
+                    url to runCatching { measure(url, probeBytes) }.getOrDefault(0L)
+                }
+            }.awaitAll()
+        }
+        val (usable, dead) = measured.partition { it.second > 0L }
+        return partial +
+            usable.sortedByDescending { it.second }.map { it.first } +
+            dead.map { it.first }
+    }
+
+    /**
+     * 拉一小段真实数据测吞吐（字节/秒）。
+     *
+     * 返回 0 表示这个地址当前连不上或状态码异常，调用方会把它排到最后当兜底，
+     * 但仍保留在候选里——测速失败不代表稍后真的下不动。
+     */
+    private fun measure(url: String, probeBytes: Int): Long {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = CONNECT_TIMEOUT
+            readTimeout = PROBE_TIMEOUT
+            setRequestProperty("User-Agent", USER_AGENT)
+            instanceFollowRedirects = true
+            setRequestProperty("Range", "bytes=0-" + (probeBytes - 1))
+        }
+        if (conn.responseCode !in 200..299) return 0L
+        val started = System.currentTimeMillis()
+        var read = 0L
+        conn.inputStream.use { input ->
+            val buf = ByteArray(16 * 1024)
+            while (read < probeBytes) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                read += n
+            }
+        }
+        val elapsed = (System.currentTimeMillis() - started).coerceAtLeast(1L)
+        return read * 1000L / elapsed
+    }
     // ---------- Root shell ----------
 
     /** 单引号包裹一个参数，供 shell 使用。 */

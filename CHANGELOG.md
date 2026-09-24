@@ -1,5 +1,30 @@
 # 更新日志
 
+## v0.1.4
+
+### 修复
+
+- 修复 Linux 环境检测把 Android 系统分区算进占用：`sizeOf` 只按目录名跳过
+  `proc/sys/dev/sdcard`，漏了 bind mount 进来的 `mnt/android`（system、vendor、
+  product、system_ext），实测让「环境占用」虚高约 11 GB，21 GB 的显示即由此而来。
+  改为按文件系统设备号剪枝，只统计 rootfs 自身所在分区。
+- 修复 Node.js 已安装却仍拦住 Codex / Claude：`usr/local/bin` 下的 `npm`、`codex`
+  等是软链接，应用进程 stat 它们会被 SELinux 拒绝（`avc: denied { read } ...
+  tclass=lnk_file`），跟随链接的 `File.exists()` 因此返回 false，组件被误判成
+  「未安装」。改为在软链接场景回退到 `lstat`，并以 chroot 内实测出的版本号为准。
+- 修复下载完整性校验只查「不够长」：续传时若服务端多给了内容，文件会变成
+  「已下载部分 + 整个包」，长度校验照样通过，直到解压才失败，界面只剩一句
+  「退出码 1」。现改为严格比对 `Content-Range` 声明的总长，并校验起点一致。
+- 修复 zip 归档下载后未做完整性检查：损坏的包会反复拿去解压。现在下载完与复用
+  本地副本前都会先验 zip 中央目录，坏了立即丢弃重下。
+- 修复归档下载按声明顺序取第一个可用源：上百 MB 的包一旦选中慢源要多等很久。
+  改为并发实测吞吐后排序，已下载可观进度的地址优先沿用。
+- 修复换源后旧源的 `.part` 断点成为永不清理的残留。
+- 修复 linux 工具安装跑在主线程上：Compose 的 `rememberCoroutineScope` 默认在
+  Main，Java 侧 HTTP 下载会抛 `NetworkOnMainThreadException`，而该异常不带
+  message，界面只显示「下载失败：null」。现统一切到 IO 线程。
+- Codex / Claude 缺少 Node 时提前报错，不再白等一轮 `apt-get update`。
+
 ## v0.1.3
 
 ### 新增

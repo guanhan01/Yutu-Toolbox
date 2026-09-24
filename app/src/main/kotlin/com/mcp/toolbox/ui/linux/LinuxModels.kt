@@ -1,6 +1,8 @@
 package com.mcp.toolbox.ui.linux
 
 import android.content.Context
+import android.system.Os
+import android.system.OsConstants
 import java.io.File
 import java.util.Properties
 
@@ -176,14 +178,18 @@ enum class LinuxComponent(
     val probe: String,
     /** 取版本号用的参数。 */
     val versionArgs: List<String> = listOf("--version"),
+    /**
+     * 是否依赖 Node.js。Codex / Claude 都是 npm 全局包，缺 Node 时装不上。
+     */
+    val requiresNode: Boolean = false,
 ) {
     PYTHON("Python / uv 环境", "uv 与最新正式版 Python", "/usr/local/bin/uv"),
     NODE("Node.js 环境", "Node.js 与 npm", "/usr/local/bin/node"),
     SSH("SSH 远程访问", "sshd、ssh-keygen 与 ssh-agent", "/usr/bin/ssh-keygen"),
     APK("APK 分析", "JADX、Apktool、smali 与 baksmali", "/opt/apktool/apktool"),
     GIT("Git 版本控制", "git 命令行工具", "/usr/bin/git"),
-    CODEX("Codex CLI", "OpenAI 命令行助手（需先装 Node.js）", "/usr/local/bin/codex"),
-    CLAUDE("Claude Code", "Anthropic 命令行助手（需先装 Node.js）", "/usr/local/bin/claude"),
+    CODEX("Codex CLI", "OpenAI 命令行助手（需先装 Node.js）", "/usr/local/bin/codex", requiresNode = true),
+    CLAUDE("Claude Code", "Anthropic 命令行助手（需先装 Node.js）", "/usr/local/bin/claude", requiresNode = true),
 }
 
 /** 一个组件的检测结果。 */
@@ -365,16 +371,26 @@ object LinuxEnvStore {
     /**
      * 统计 rootfs 占用。
      *
-     * 必须跳过 proc / sys / dev / sdcard：这些是 commandLine 里 bind mount 进来的
-     * 宿主目录，不跳过就会去遍历整个宿主（几十万文件），既极慢又会抛异常被兜成 0，
-     * 界面于是显示成「未安装」。
+     * 按「设备号」剪枝，只累计 rootfs 所在文件系统里的文件：
+     * - proc / sys / dev / sdcard 在 commandLine 里被 bind mount 进来，不跳过就会
+     *   去遍历整个宿主（几十万文件），既极慢又会抛异常被兜成 0，界面显示成「未安装」。
+     * - mnt/android 下挂的是 Android 的系统分区（system、vendor、product、
+     *   system_ext）。它们同样属于别的文件系统，只按目录名跳是漏的：实测这四项
+     *   合计约 11 GB，会让「Linux 环境占用」虚高一个数量级。
+     *
+     * 用设备号而不是目录名，是因为自定义挂载点也可以指向任意宿主目录。
      */
     fun sizeOf(context: Context, distro: LinuxDistro): Long {
         val fs = rootfs(context, distro)
         if (!fs.isDirectory) return 0L
+        val baseDev = runCatching { Os.lstat(fs.absolutePath).st_dev }.getOrNull() ?: return 0L
         return runCatching {
             fs.walkTopDown()
-                .onEnter { it.name !in SKIP_WALK }
+                .onEnter { dir ->
+                    dir.name !in SKIP_WALK &&
+                        runCatching { Os.lstat(dir.absolutePath).st_dev == baseDev }
+                            .getOrDefault(false)
+                }
                 .filter { it.isFile }
                 .sumOf { it.length() }
         }.getOrDefault(0L)
@@ -392,12 +408,35 @@ object LinuxEnvStore {
  */
 object LinuxChecker {
 
+    /**
+     * 探测路径是否存在。
+     *
+     * 不能只用 [File.exists]：它会跟随软链接，而应用进程 stat rootfs 内的软链接会被
+     * SELinux 拒绝（`avc: denied { read } ... tclass=lnk_file`），于是 npm 全局安装
+     * 出来的 codex / claude 这类软链接一律被判成「未安装」，即使环境里跑得好好的。
+     * 退回 lstat 只看链接自身，不读链接内容，因此不会被拒。
+     */
+    private fun probeExists(file: File): Boolean =
+        file.exists() || runCatching { Os.lstat(file.absolutePath); true }.getOrDefault(false)
+
+    /**
+     * 探测是否可执行。
+     *
+     * 软链接走 [File.canExecute] 同样会因上面那条 SELinux 规则恒为 false。
+     * 链接自身就位即可视为可用：真正的执行发生在 chroot 内、由 root 完成，
+     * 那时链接会被正常解析（probeVersions 已证实这些命令能跑出版本号）。
+     */
+    private fun probeExecutable(file: File): Boolean {
+        if (file.canExecute()) return true
+        return runCatching { Os.lstat(file.absolutePath); true }.getOrDefault(false)
+    }
+
     fun check(context: Context, distro: LinuxDistro): List<ComponentStatus> =
         LinuxComponent.entries.map { component ->
             val path = File(LinuxEnvStore.rootfs(context, distro), component.probe.removePrefix("/"))
             when {
-                !path.exists() -> ComponentStatus(component, installed = false)
-                !path.canExecute() -> ComponentStatus(
+                !probeExists(path) -> ComponentStatus(component, installed = false)
+                !probeExecutable(path) -> ComponentStatus(
                     component,
                     installed = true,
                     version = "缺少执行权限",

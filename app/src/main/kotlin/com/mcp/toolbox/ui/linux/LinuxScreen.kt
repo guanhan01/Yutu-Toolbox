@@ -128,7 +128,12 @@ fun LinuxScreen(
             val versions = probeVersions(context, distro)
             val enriched = statuses.map { status ->
                 val found = versions[status.component]
-                if (status.installed && !found.isNullOrBlank()) status.copy(version = found) else status
+                // 同 scanEnv：chroot 内 probe 出结果即视为已安装，避免软链接误判
+                if (!found.isNullOrBlank()) {
+                    status.copy(installed = true, version = found)
+                } else {
+                    status
+                }
             }
             val partials = LinuxComponent.entries
                 .associateWith { LinuxToolchain.pendingBytes(context, distro, it) }
