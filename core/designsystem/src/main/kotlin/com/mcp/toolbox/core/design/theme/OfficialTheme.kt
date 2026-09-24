@@ -81,7 +81,9 @@ fun MiuixColors.toOfficial(): OfficialColors = OfficialColors(
     onSurfaceContainerHighest = onSurface,
     outline = outline,
     dividerLine = outlineVariant,
-    windowDimming = scrim,
+    // 官方 windowDimming 是带 alpha 的遮罩（浅色 0.3 / 深色 0.6）；
+    // scrim 本身不透明，直接用会把整屏盖黑。
+    windowDimming = Color.Black.copy(alpha = if (isDark) 0.6f else 0.3f),
     sliderKeyPoint = primary,
     sliderKeyPointForeground = onPrimary,
     sliderBackground = surfaceContainerHighest,
