@@ -25,9 +25,15 @@ object LinuxInstaller {
      * 地址只在代码里维护，界面不显示。
      */
     private object Mirrors {
-        /** 清华 LXC 镜像的 Debian 目录。trixie 即 Debian 13（当前稳定版）。 */
+        /**
+         * Debian 13（trixie）的 LXC rootfs 目录。
+         *
+         * 用上游官方源：清华的 lxc-images 已经不再提供目录文件列表
+         * （时间戳目录返回的是前端页面，解析不到 rootfs.tar.xz），
+         * 官方源仍返回标准目录列表，且下载会 302 到 CDN。
+         */
         const val DEBIAN_INDEX =
-            "https://mirrors.tuna.tsinghua.edu.cn/lxc-images/images/debian/trixie/arm64/default/"
+            "https://images.linuxcontainers.org/images/debian/trixie/arm64/default/"
 
         /** 清华 Alpine 镜像（aarch64 minirootfs）。 */
         const val ALPINE_INDEX =
@@ -273,6 +279,8 @@ object LinuxInstaller {
             connectTimeout = CONNECT_TIMEOUT
             readTimeout = READ_TIMEOUT
             setRequestProperty("User-Agent", "Mozilla/5.0 yutu-toolbox")
+            // 官方源对 rootfs.tar.xz 会 302 跳到 CDN，必须跟随
+            instanceFollowRedirects = true
         }
         if (conn.responseCode !in 200..299) {
             throw IllegalStateException("下载失败：HTTP ${conn.responseCode}")
