@@ -385,7 +385,8 @@ private fun ToolboxNavHost(
                             ?.let { AiConfigStore.selectReasoning(shellContext, it) }
                     },
                 )
-                            }}
+                }
+            }
             composable(Routes.SETTINGS_THEME) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -398,7 +399,8 @@ private fun ToolboxNavHost(
                         toastState = toastState,
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.SETTINGS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -414,7 +416,8 @@ private fun ToolboxNavHost(
                         privilegeUsable = privilege?.usable == true,
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.AI_SETTINGS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -430,7 +433,8 @@ private fun ToolboxNavHost(
                         onOpenLinux = { onNavigate(Routes.LINUX) },
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.AI_PROVIDERS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -444,7 +448,8 @@ private fun ToolboxNavHost(
                         },
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.AI_PROVIDER_DETAIL) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -457,7 +462,8 @@ private fun ToolboxNavHost(
                         onOpenModels = { onNavigate(Routes.AI_MODELS) },
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.LINUX) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -482,7 +488,8 @@ private fun ToolboxNavHost(
                         },
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.LINUX_FILES) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -491,7 +498,8 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxFilesScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-                            }}
+                }
+            }
             composable(Routes.LINUX_SHARED) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -500,7 +508,8 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxSharedScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-                            }}
+                }
+            }
             composable(Routes.LINUX_TERMINAL) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -509,7 +518,8 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxTerminalScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-                            }}
+                }
+            }
             composable(Routes.LINUX_CHECK) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -518,7 +528,8 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     LinuxCheckScreen(distro = LinuxPrefs.distro(LocalContext.current))
                 }
-                            }}
+                }
+            }
             composable(Routes.AI_MODELS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -530,14 +541,16 @@ private fun ToolboxNavHost(
                             ?: AiConfigStore.config.value.current.name,
                     )
                 }
-                            }}
+                }
+            }
             composable(Routes.SETTINGS_PRIVILEGE) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(title = "权限检测与申请", onOpenDrawer = onOpenDrawer)
                     PrivilegeScreen(onToast = { toastState.show(it) })
                 }
-                            }}
+                }
+            }
             composable(Routes.ABOUT) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -546,7 +559,8 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     AboutScreen(toastState = toastState)
                 }
-                            }}
+                }
+            }
             composable(Routes.TOOLS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
@@ -555,42 +569,51 @@ private fun ToolboxNavHost(
                         onOpenDrawer = onOpenDrawer)
                     ToolsScreen(onOpenTool = onNavigate)
                 }
-                            }}
+                }
+            }
             composable(Routes.APPS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 AppsScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.CAPTURE) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 CaptureScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.DECOMPILE) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 DecompileScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.DATABASE) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 DatabaseScreen(onBack = onOpenDrawer, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.NETWORK) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 NetworkHubScreen(onOpenDrawer = onOpenDrawer, onOpenRoute = onNavigate)
-                            }}
+                }
+            }
             composable(Routes.NETWORK_HTTP) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 HttpRequestScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.NETWORK_PING) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 PingScreen(onBack = { navController.popBackStack() })
-                            }}
+                }
+            }
             composable(Routes.NETWORK_DNS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) { DnsScreen(onBack = { navController.popBackStack() })                 }}
             composable(Routes.WEB) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 WebScreen(onOpenDrawer = onOpenDrawer, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.MCP) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 McpScreen(
@@ -598,26 +621,31 @@ private fun ToolboxNavHost(
                     onToast = { toastState.show(it) },
                     onOpenArtifacts = { navController.navigate(Routes.ARTIFACTS) },
                 )
-                            }}
+                }
+            }
             composable(Routes.ARTIFACTS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 ArtifactsScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.NETWORK_PORT_SCAN) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 PortScanScreen(onBack = { navController.popBackStack() })
-                            }}
+                }
+            }
             composable(Routes.NETWORK_WHOIS) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 WhoisScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             composable(Routes.NETWORK_ENV) {
                 Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
                 NetworkEnvScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
-                            }}
+                }
+            }
             // 尚未进入实现阶段的模块统一落到占位页
             val placeholders =
                 DrawerPrimary.filter {

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,6 +46,8 @@ fun MiuixTopAppBar(
             .fillMaxWidth()
             .height(56.dp)
             .background(background)
+            // 裁切：图标按钮的 48dp 触控区比视觉尺寸大，不裁切会在转场时溢出到相邻页
+            .clipToBounds()
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -99,7 +102,7 @@ fun MiuixCollapsingTopAppBar(
     )
     val titleSizeScale = 1f - 0.35f * progress
 
-    Column(modifier = modifier.fillMaxWidth().background(background)) {
+    Column(modifier = modifier.fillMaxWidth().background(background).clipToBounds()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
