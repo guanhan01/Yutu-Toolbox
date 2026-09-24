@@ -46,6 +46,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import top.yukonga.miuix.kmp.anim.folmeSpring
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -114,9 +115,11 @@ fun MiuixOverflowMenu(
         if (expanded) {
             mounted = true
             withFrameNanos {}
+            // 官方 Miuix 的弹出曲线：folmeSpring(damping = 0.5, response = 0.28)，
+            // 与官方 ListPopup 的「灵动回弹」一致
             progress.animateTo(
                 1f,
-                spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow),
+                folmeSpring(damping = 0.5f, response = 0.28f),
             )
         } else {
             progress.animateTo(0f, tween(exitMillis, easing = FastOutSlowInEasing))

@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import top.yukonga.miuix.kmp.anim.SinOutEasing
+import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -238,23 +240,25 @@ private fun ToolboxNavHost(
         startDestination = Routes.HOME,
         modifier = Modifier.fillMaxSize(),
         // 一级到二级的转场：轻微右进 + 淡入，返回时反向
+        // 二三级界面进入动画：位移曲线用官方 Miuix 的 SinOutEasing（先快后缓），
+        // 退场用 DecelerateEasing，与官方 overlay 的转场观感一致。
         enterTransition = {
             slideInHorizontally(
                 initialOffsetX = { it / 5 },
-                animationSpec = tween(260),
-            ) + fadeIn(tween(220))
+                animationSpec = tween(320, easing = SinOutEasing),
+            ) + fadeIn(tween(260, easing = DecelerateEasing(1.6f)))
         },
         exitTransition = {
-            fadeOut(tween(140))
+            fadeOut(tween(160, easing = DecelerateEasing(1.6f)))
         },
         popEnterTransition = {
-            fadeIn(tween(200))
+            fadeIn(tween(220, easing = DecelerateEasing(1.6f)))
         },
         popExitTransition = {
             slideOutHorizontally(
                 targetOffsetX = { it / 5 },
-                animationSpec = tween(260),
-            ) + fadeOut(tween(220))
+                animationSpec = tween(320, easing = SinOutEasing),
+            ) + fadeOut(tween(240, easing = DecelerateEasing(1.6f)))
         },
     ) {
             composable(Routes.HOME) {

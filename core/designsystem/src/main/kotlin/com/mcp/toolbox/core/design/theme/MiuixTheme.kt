@@ -19,6 +19,8 @@ import com.mcp.toolbox.core.design.token.MiuixDimens
 import com.mcp.toolbox.core.design.token.MiuixTypography
 import com.mcp.toolbox.core.design.token.MotionTokens
 import com.mcp.toolbox.core.design.token.RadiusTokens
+import top.yukonga.miuix.kmp.theme.MiuixTheme as OfficialMiuixTheme
+import top.yukonga.miuix.kmp.theme.defaultTextStyles
 
 val LocalMiuixRadius = staticCompositionLocalOf { RadiusTokens() }
 val LocalMiuixDimens = staticCompositionLocalOf { MiuixDimens() }
@@ -121,6 +123,28 @@ fun MiuixTheme(
     val spec: AnimationSpec<Color> = remember(motion.scale) { tween(durationMillis = motion.medium) }
     val colors = animateKeyColors(target, spec)
 
+    // 官方配色：用同一颗 Seed 生成，供官方组件（Button/Slider/Dialog/BottomSheet…）读取，
+    // 保证官方组件与自绘组件同屏颜色一致。
+    val officialColors = remember(target) { target.toOfficial() }
+    val officialTextStyles = remember(dimens, typography) {
+        defaultTextStyles().copy(
+            main = typography.bodyMedium,
+            paragraph = typography.bodyMedium,
+            body1 = typography.bodyLarge,
+            body2 = typography.bodyMedium,
+            button = typography.labelLarge,
+            subtitle = typography.labelMedium,
+            title1 = typography.headlineSmall,
+            title2 = typography.titleLarge,
+            title3 = typography.titleMedium,
+            title4 = typography.titleSmall,
+            headline1 = typography.displaySmall,
+            headline2 = typography.headlineSmall,
+            footnote1 = typography.labelMedium,
+            footnote2 = typography.labelSmall,
+        )
+    }
+
     CompositionLocalProvider(
         LocalMiuixColors provides colors,
         LocalMiuixRadius provides radius,
@@ -128,9 +152,13 @@ fun MiuixTheme(
         LocalMiuixTypography provides typography,
         LocalMiuixMotion provides motion,
         LocalMiuixThemeConfig provides config,
-        content = content,
-    )
+    ) {
+        OfficialMiuixTheme(officialColors, officialTextStyles) {
+            content()
+        }
+    }
 }
+
 
 /** 只对高频可见的颜色角色做插值：避免生硬跳变，也不因 40+ 个动画拖慢首帧。 */
 @Composable

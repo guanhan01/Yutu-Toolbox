@@ -69,6 +69,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:designsystem"))
+    implementation(libs.miuix.ui)
     implementation(project(":feature:home"))
     implementation(project(":feature:settings"))
 

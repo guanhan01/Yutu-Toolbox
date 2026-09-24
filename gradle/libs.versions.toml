@@ -22,6 +22,7 @@ jadx = "1.5.1"
 slf4j = "2.0.16"
 xerces = "2.12.2"
 shizuku = "13.1.5"
+miuix = "0.9.2"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -62,6 +63,10 @@ xerces-impl = { module = "xerces:xercesImpl", version.ref = "xerces" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose" }
 compose-ui-graphics = { module = "org.jetbrains.compose.ui:ui-graphics", version.ref = "compose" }
+
+# 官方 Miuix（compose-miuix-ui/miuix）：0.9.2 对齐 Compose 1.11.1 / Kotlin 2.4.x
+miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version.ref = "miuix" }
+miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons", version.ref = "miuix" }
 
 # 高权限后端（P1）：Shizuku 的 binder 通道
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }

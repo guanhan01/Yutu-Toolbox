@@ -34,4 +34,5 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.material.color.utilities)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.miuix.ui)
 }

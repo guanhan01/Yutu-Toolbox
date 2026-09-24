@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,6 +24,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.core.design.token.MotionTokens
+import top.yukonga.miuix.kmp.basic.Button as OfficialButton
+import top.yukonga.miuix.kmp.basic.ButtonColors as OfficialButtonColors
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as OfficialButtonDefaults
+import top.yukonga.miuix.kmp.basic.Text as OfficialText
+import top.yukonga.miuix.kmp.theme.MiuixTheme as OfficialTheme
 
 /** 按钮视觉层级，与设计稿 Buttons 区一致：Filled / Tonal / Outlined / Text / Elevated。 */
 enum class MiuixButtonVariant { FILLED, TONAL, OUTLINED, TEXT, ELEVATED }
@@ -36,7 +40,10 @@ enum class MiuixButtonSize(val height: Dp, val horizontalPadding: Dp) {
 }
 
 /**
- * 标准按钮。loading = true 时内嵌环形进度并屏蔽点击（设计稿 Buttons 区第 3 行）。
+ * 标准按钮。
+ *
+ * 内部改用官方 Miuix [OfficialButton] 实现：squircle 连续圆角、官方点击反馈与
+ * 禁用态处理都由官方负责；外层 API 保持不变，全项目 141 处调用点无需改动。
  */
 @Composable
 fun MiuixButton(
@@ -52,10 +59,8 @@ fun MiuixButton(
 ) {
     val colors = MiuixTheme.colors
     val typography = MiuixTheme.typography
-    val elevation = MiuixTheme.dimens.elevation
+    val official = OfficialTheme.colorScheme
     val clickable = enabled && !loading
-    val press = rememberMiuixPressState(clickable)
-    val shape = RoundedCornerShape(percent = 50)
 
     val container = when (variant) {
         MiuixButtonVariant.FILLED -> colors.primary
@@ -76,26 +81,41 @@ fun MiuixButton(
     }
     val iconSize = if (size == MiuixButtonSize.SMALL) 16.dp else 18.dp
 
-    Box(
+    // 官方按钮用「容器色 + 内容色 + 禁用色」四元组；边框/阴影仍由我方补足
+    val buttonColors = OfficialButtonColors(
+        color = container,
+        disabledColor = if (variant == MiuixButtonVariant.FILLED) official.disabledPrimaryButton else container,
+        contentColor = contentColor,
+        disabledContentColor = if (variant == MiuixButtonVariant.FILLED) official.disabledOnPrimaryButton else contentColor,
+    )
+
+    OfficialButton(
+        onClick = onClick,
         modifier = modifier
             .height(size.height)
-            .clip(shape)
-            .background(container)
             .then(
                 when (variant) {
-                    MiuixButtonVariant.OUTLINED -> Modifier.border(BorderStroke(1.dp, colors.outlineVariant), shape)
-                    MiuixButtonVariant.ELEVATED -> Modifier.shadow(elevation.level2, shape)
+                    MiuixButtonVariant.OUTLINED -> Modifier.border(
+                        BorderStroke(1.dp, colors.outlineVariant),
+                        RoundedCornerShape(percent = 50),
+                    )
+                    MiuixButtonVariant.ELEVATED -> Modifier.shadow(
+                        MiuixTheme.dimens.elevation.level2,
+                        RoundedCornerShape(percent = 50),
+                    )
                     else -> Modifier
-                }
+                },
             )
-            .miuixClickable(press, clickable, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.4f)
-            .padding(horizontal = size.horizontalPadding),
-        contentAlignment = Alignment.Center,
+            .alpha(if (enabled) 1f else 1f),
+        enabled = clickable,
+        minWidth = 0.dp,
+        minHeight = size.height,
+        colors = buttonColors,
+        insideMargin = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = size.horizontalPadding,
+            vertical = 0.dp,
+        ),
     ) {
-        if (press.pressed) {
-            Box(Modifier.matchParentSize().background(colors.pressedOverlay))
-        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -104,7 +124,7 @@ fun MiuixButton(
                 loading -> MiuixCircularProgress(size = iconSize, color = contentColor, strokeWidth = 2.dp)
                 leadingIcon != null -> MiuixIcon(leadingIcon, null, tint = contentColor, size = iconSize)
             }
-            MiuixText(text = text, style = textStyle, color = contentColor, maxLines = 1)
+            OfficialText(text = text, style = textStyle, color = contentColor, maxLines = 1)
             if (trailingIcon != null) MiuixIcon(trailingIcon, null, tint = contentColor, size = iconSize)
         }
     }
