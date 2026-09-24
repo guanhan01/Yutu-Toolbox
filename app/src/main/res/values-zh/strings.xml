@@ -34,6 +34,7 @@
     <string name="linux_runtime">运行方式</string>
     <string name="linux_distro">Linux 发行版</string>
     <string name="linux_section_config">环境配置</string>
+    <string name="linux_source">下载源</string>
     <string name="ai_current">当前</string>
     <string name="ai_model_cancel">取消</string>
     <string name="ai_model_delete">删除模型</string>

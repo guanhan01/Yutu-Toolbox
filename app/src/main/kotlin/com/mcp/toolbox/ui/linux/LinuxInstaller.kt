@@ -2,59 +2,37 @@ package com.mcp.toolbox.ui.linux
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.zip.GZIPInputStream
 
 /**
  * 下载与安装 Linux 环境。
  *
- * 全部走国内镜像，界面上不展示任何下载地址、也不做来源声明。
+ * 安装分成四步：选源 → 下载 → 解压 → 修补，每一步都会把进度写进
+ * [InstallState]。中途退出（切后台被回收、断网、手动返回）后再次进入时，
+ * 会从记录的那一步继续，而不是从头再来。
+ *
+ * 界面上不展示任何下载地址。
  */
 object LinuxInstaller {
 
-    /**
-     * 镜像地址。
-     *
-     * 用国内镜像的原因：官方源在当前网络下经常连不上或极慢。
-     * 地址只在代码里维护，界面不显示。
-     */
-    private object Mirrors {
-        /**
-         * Debian 13（trixie）的 LXC rootfs 目录。
-         *
-         * 用上游官方源：清华的 lxc-images 已经不再提供目录文件列表
-         * （时间戳目录返回的是前端页面，解析不到 rootfs.tar.xz），
-         * 官方源仍返回标准目录列表，且下载会 302 到 CDN。
-         */
-        const val DEBIAN_INDEX =
-            "https://images.linuxcontainers.org/images/debian/trixie/arm64/default/"
-
-        /** 清华 Alpine 镜像（aarch64 minirootfs）。 */
-        const val ALPINE_INDEX =
-            "https://mirrors.tuna.tsinghua.edu.cn/alpine/latest-stable/releases/aarch64/"
-
-        /**
-         * PRoot 取自 Termux 软件源里的 deb 包。
-         *
-         * 上游 releases 上的静态二进制地址已失效，而 Termux 源长期稳定、
-         * 且有国内镜像；包内是普通的 Linux 可执行文件，解开即可用。
-         */
-        const val PROOT_DEB_DIR =
-            "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main/pool/main/p/proot/"
-
-        /** 同一镜像站里 busybox 的 deb，用来解前一个包（xz/ar）。 */
-        const val BUSYBOX_DEB_DIR =
-            "https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main/pool/main/b/busybox/"
-    }
-
     private const val CONNECT_TIMEOUT = 20_000
     private const val READ_TIMEOUT = 120_000
+    /**
+     * 请求头里的 UA。
+     *
+     * 必须避开 Mozilla 开头：南大镜像对浏览器 UA 会回一个带 Set-Cookie 的
+     * 302 自指跳转，而 HttpURLConnection 不处理 Cookie，会一路 302 到
+     * 「redirected too many times」直接失败；换用普通客户端标识即返回 200。
+     */
+    private const val USER_AGENT = "yutu-toolbox/1.0"
 
     data class Progress(
         val fileName: String,
@@ -67,105 +45,477 @@ object LinuxInstaller {
     }
 
     /**
-     * 安装一个发行版：准备 PRoot（+ 解包工具）、下载 rootfs 并解压。
+     * 安装一个发行版：选源 → 下载 → 解压 → 修补。
+     *
+     * [sourceId] 为用户选定的源（[LinuxSources.AUTO] 表示自动）。无论哪种选择，
+     * 某个源失败都会自动换下一个，尽量避免因单点故障装不上。
      */
     suspend fun install(
         context: Context,
         distro: LinuxDistro,
+        sourceId: String = LinuxSources.AUTO,
         onProgress: (Progress) -> Unit,
+        onStatus: (String) -> Unit = {},
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // PRoot 路线已废弃（见 LinuxRuntime.commandLine），不再下载
-
-            val indexUrl = when (distro) {
-                LinuxDistro.DEBIAN -> Mirrors.DEBIAN_INDEX
-                LinuxDistro.ALPINE -> Mirrors.ALPINE_INDEX
-            }
-            val archiveUrl = resolveArchive(indexUrl, distro)
-            val archive = File(LinuxEnvStore.downloads(context), archiveUrl.substringAfterLast('/'))
-            if (!archive.isFile || archive.length() == 0L) {
-                downloadTo(archiveUrl, archive, archive.name, onProgress)
-            }
-
-            val rootfs = LinuxEnvStore.rootfs(context, distro)
-            // 解压交给 root 下的 busybox tar：它同时支持 gz 与 xz，
-            // 而 Java 侧只有 gzip，处理不了 Debian LXC 的 tar.xz。
             val busybox = findBusybox()
-                ?: throw IllegalStateException("需要 Root 才能解压 rootfs")
-            val script = buildString {
-                append("mkdir -p ").append(shellArg(rootfs.absolutePath)).append(" || exit 1; ")
-                append("$busybox tar -xf ").append(shellArg(archive.absolutePath))
-                append(" -C ").append(shellArg(rootfs.absolutePath)).append(" || exit 2; ")
-                append("[ -d ").append(shellArg(rootfs.absolutePath + "/bin"))
-                append(" ] || [ -d ").append(shellArg(rootfs.absolutePath + "/usr"))
-                append(" ] || exit 3; ")
-                append("rm -f ").append(shellArg(archive.absolutePath)).append("; echo OK")
-            }
-            val result = shRaw(busybox, script)
-            if (!result.first) {
-                throw IllegalStateException(
-                    "rootfs 解压失败（步骤 ${result.second}）：${result.third.take(200)}",
-                )
-            }
+                ?: throw IllegalStateException("需要 Root 才能安装 Linux 环境（未找到可用的 busybox）")
+
+            LinuxEnvStore.prepare(context, distro)
+            val archive = downloadPhase(context, distro, sourceId, onProgress, onStatus)
+            extractPhase(context, distro, busybox, archive, onStatus)
+            repairPhase(context, distro, onStatus)
+
+            InstallState.clear(context, distro)
+            // 包有 90 MB 上下，装完就删；留着既占空间，也容易让人误以为还要再用
+            runCatching { archive.delete() }
+            cleanupDownloads(context)
             onProgress(Progress(archive.name, archive.length(), archive.length(), done = true))
             Unit
         }
     }
 
-    // ---------- PRoot ----------
+    // ---------- 阶段一：选源 ----------
 
     /**
-     * 准备 PRoot 可执行文件。
+     * 候选源顺序。
      *
-     * 流程：下载 deb → 用 busybox 的 ar 取出 data.tar.xz → xz -d → tar -x 拿 bin/proot。
-     * busybox 取自 KernelSU/Magisk（已 root 才有），因此 PRoot 模式需要 root 权限。
+     * 自动：并发解析各源目录并计时，能解析的按快慢排序，解析失败的排到最后。
+     * 指定：先试用户选的那个，再按声明顺序兜底，尽量不让单点故障卡住安装。
      */
-    private fun ensureProot(context: Context, onProgress: (Progress) -> Unit) {
-        val target = LinuxEnvStore.prootBinary(context)
-        if (target.isFile && target.length() > 100_000) return
+    private suspend fun candidateOrder(
+        distro: LinuxDistro,
+        sourceId: String,
+        onStatus: (String) -> Unit,
+    ): List<LinuxSource> {
+        val all = LinuxSources.list(distro)
+        if (all.isEmpty()) return emptyList()
 
-        val busybox = findBusybox()
-            ?: throw IllegalStateException("需要 Root 才能准备 PRoot（未找到可用的 busybox）")
+        if (sourceId != LinuxSources.AUTO) {
+            val chosen = LinuxSources.byId(distro, sourceId)
+            return if (chosen == null) all else listOf(chosen) + all.filter { it.id != chosen.id }
+        }
 
-        val downloads = LinuxEnvStore.downloads(context)
-        val debUrl = resolveDeb(Mirrors.PROOT_DEB_DIR, "proot_")
-        val deb = File(downloads, debUrl.substringAfterLast('/'))
-        if (!deb.isFile || deb.length() == 0L) downloadTo(debUrl, deb, deb.name, onProgress)
-
-        // 全部步骤放在同一个 root shell 里完成。
-        // 不在 Java 侧列举 root 创建的中间目录：应用进程受 SELinux 与属主限制，
-        // 看到的内容未必与 root 一致，逐目录判断很容易误判。
-        val work = File(downloads, "proot-work-" + System.currentTimeMillis())
-        val script = buildString {
-            append("W=").append(shellArg(work.absolutePath)).append("; ")
-            append("D=").append(shellArg(deb.absolutePath)).append("; ")
-            append("T=").append(shellArg(target.absolutePath)).append("; ")
-            append("rm -rf \"\$W\" && mkdir -p \"\$W\" && cd \"\$W\" || exit 1; ")
-            // ar 不覆盖同名文件，所以目录先清空再解
-            append("$busybox ar x \"\$D\" || exit 2; ")
-            append("[ -f \"\$W/data.tar.xz\" ] || exit 3; ")
-            append("$busybox xz -d -f \"\$W/data.tar.xz\" || exit 4; ")
-            append("[ -f \"\$W/data.tar\" ] || exit 5; ")
-            append("$busybox tar -xf \"\$W/data.tar\" || exit 6; ")
-            append("P=\"\$W/data/data/com.termux/files/usr/bin/proot\"; ")
-            append("[ -f \"\$P\" ] || exit 7; ")
-            append("cp -f \"\$P\" \"\$T\" || exit 8; ")
-            append("chmod 755 \"\$T\" || exit 9; ")
-            append("rm -rf \"\$W\" \"\$D\" 2>/dev/null; echo INSTALLED")
+        onStatus("正在测速…")
+        val ranked = coroutineScope {
+            all.map { source ->
+                async(Dispatchers.IO) {
+                    val startedAt = System.currentTimeMillis()
+                    val ok = runCatching { resolveArchive(source) }.isSuccess
+                    source to if (ok) System.currentTimeMillis() - startedAt else Long.MAX_VALUE
+                }
+            }.awaitAll()
         }
-        val result = shRaw(busybox, script)
-        if (!result.first) {
-            throw IllegalStateException("PRoot 准备失败（步骤 ${result.second}）：${result.third.take(200)}")
-        }
-        if (!target.isFile || target.length() < 100_000) {
-            throw IllegalStateException("PRoot 复制后校验失败")
-        }
-        target.setExecutable(true, false)
-        // 清掉历史遗留的临时目录
-        downloads.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("proot-work") }
-            ?.forEach { runCatching { it.deleteRecursively() } }
+        val usable = ranked.filter { it.second != Long.MAX_VALUE }.sortedBy { it.second }
+        val ordered = usable.map { it.first } + all.filter { src -> usable.none { it.first.id == src.id } }
+        val fastest = usable.firstOrNull()?.first
+        if (fastest != null) onStatus("已选 ${fastest.name}")
+        return ordered
     }
+
+    // ---------- 阶段二：下载 ----------
+
+    /**
+     * 下载阶段：按候选顺序逐个下载，成功即返回压缩包文件。
+     *
+     * 有未完成的续装状态时优先沿用记录里的地址与已下载的部分——
+     * 此时重新解析目录可能得到另一个文件，会让已下载的进度作废。
+     */
+    private suspend fun downloadPhase(
+        context: Context,
+        distro: LinuxDistro,
+        sourceId: String,
+        onProgress: (Progress) -> Unit,
+        onStatus: (String) -> Unit,
+    ): File {
+        val downloads = LinuxEnvStore.downloads(context)
+        val saved = InstallState.load(context, distro)
+
+        // 上一轮已经下载完、只是没走到解压：直接复用，不再重新下载
+        if (saved != null && saved.stage != InstallState.STAGE_DOWNLOAD) {
+            val done = File(downloads, saved.fileName)
+            if (done.isFile && done.length() > 0) {
+                onStatus("压缩包已下载，继续解压")
+                return done
+            }
+        }
+
+        // 有断点记录且本地确有进度时，先只试记录里的地址，把续传做完；
+        // 免得为了换源白跑一轮测速，把「继续安装」拖慢。
+        val resuming = saved != null && (
+            partFile(File(downloads, saved.fileName), saved.url).isFile ||
+                File(downloads, saved.fileName).isFile
+            )
+        val candidates = mutableListOf<Pair<String, String>>()
+        if (saved != null) candidates += saved.url to saved.fileName
+        val fallbacks = if (resuming) {
+            LinuxSources.list(distro)
+        } else {
+            candidateOrder(distro, sourceId, onStatus)
+        }
+        for (source in fallbacks) {
+            val url = runCatching { resolveArchive(source) }.getOrNull() ?: continue
+            val name = url.substringAfterLast('/')
+            // 按地址去重：Debian 各源的压缩包同名（rootfs.tar.xz），按名字去重
+            // 会把备用源全部丢掉，一旦首选源不可用就没有兜底。
+            if (candidates.none { it.first == url }) candidates += url to name
+        }
+        if (candidates.isEmpty()) throw IllegalStateException("没有可用的下载源，请检查网络后重试")
+
+        var lastError: Throwable? = null
+        for ((url, name) in candidates) {
+            val target = File(downloads, name)
+            try {
+                val state = InstallState(sourceId, url, name, target.length(), InstallState.STAGE_DOWNLOAD)
+                state.save(context, distro)
+                downloadResumable(
+                    url = url,
+                    target = target,
+                    label = name,
+                    onProgress = onProgress,
+                    onTotal = { total -> state.copy(total = total).save(context, distro) },
+                )
+                InstallState(sourceId, url, name, target.length(), InstallState.STAGE_EXTRACT)
+                    .save(context, distro)
+                return target
+            } catch (t: Throwable) {
+                lastError = t
+                onStatus("该源不可用（${t.message?.take(60)}），正在换源…")
+            }
+        }
+        throw lastError ?: IllegalStateException("下载失败")
+    }
+
+    /**
+     * 解压阶段：把 rootfs 解到私有目录。
+     *
+     * 交给 root 下的 busybox tar：它同时支持 gz 与 xz，而 Java 侧只有 gzip，
+     * 处理不了 Debian LXC 的 tar.xz。tar 会原地覆盖，所以解压被打断后重跑
+     * 同一个脚本即可补齐，不需要先清空目录。
+     */
+    private fun extractPhase(
+        context: Context,
+        distro: LinuxDistro,
+        busybox: String,
+        archive: File,
+        onStatus: (String) -> Unit,
+    ) {
+        if (!archive.isFile || archive.length() == 0L) {
+            throw IllegalStateException("安装包不存在，请重新下载")
+        }
+        onStatus("正在解压 ${archive.name}")
+        val rootfs = LinuxEnvStore.rootfs(context, distro)
+        val envRoot = LinuxEnvStore.root(context)
+        val downloads = LinuxEnvStore.downloads(context)
+        val script = buildString {
+            append("mkdir -p ").append(shellArg(rootfs.absolutePath)).append(" || exit 1; ")
+            append("$busybox tar -xf ").append(shellArg(archive.absolutePath))
+            append(" -C ").append(shellArg(rootfs.absolutePath)).append(" || exit 2; ")
+            append("[ -d ").append(shellArg(rootfs.absolutePath + "/bin"))
+            append(" ] || [ -d ").append(shellArg(rootfs.absolutePath + "/usr"))
+            append(" ] || exit 3; ")
+            // 解压由 root 执行，会把 linux-env 及子目录留成 root 所有；应用进程
+            // 之后既写不了续装状态、也建不了下载目录，必须交还应用属主并刷新标签。
+            append("chown -R ").append(context.applicationInfo.uid)
+            append(":").append(context.applicationInfo.uid).append(" ")
+            append(shellArg(envRoot.absolutePath)).append(" ").append(shellArg(downloads.absolutePath))
+            append(" 2>/dev/null; ")
+            append("restorecon -R ").append(shellArg(envRoot.absolutePath)).append(" 2>/dev/null; ")
+            append("echo OK")
+        }
+        val result = shRaw(script)
+        if (!result.first) {
+            throw IllegalStateException(
+                "rootfs 解压失败（步骤 ${result.second}）：${result.third.take(200)}",
+            )
+        }
+    }
+
+    /**
+     * 修补阶段：补齐解压后仍缺失的部分。
+     *
+     * 解压中断过一次的 rootfs 常在细节上有缺口：缺挂载点、缺 CA 证书的
+     * hash 软链（https 镜像会整链校验失败）、缺运行目录。这里逐项补上，
+     * 全部是幂等操作，重复执行不会破坏已有内容。
+     *
+     * 修补失败不判定安装失败：主体已经就位，细节留给组件安装时再补。
+     */
+    private fun repairPhase(
+        context: Context,
+        distro: LinuxDistro,
+        onStatus: (String) -> Unit,
+    ) {
+        onStatus("正在修补环境")
+        val rootfs = LinuxEnvStore.rootfs(context, distro)
+        if (!File(rootfs, "bin").isDirectory && !File(rootfs, "usr").isDirectory) {
+            throw IllegalStateException("rootfs 结构不完整，请重新安装")
+        }
+
+        // 用 raw string 拼：脚本里到处是 $ 与引号，按普通字符串转义极易写错。
+        val d = '$'
+        val script = """
+            R=${d}{shellArg(rootfs.absolutePath)}
+            for dir in dev proc sys tmp run root etc; do mkdir -p "${d}R/${d}dir" 2>/dev/null; done
+            chmod 1777 "${d}R/tmp" 2>/dev/null
+            chmod 700 "${d}R/root" 2>/dev/null
+            # Debian 13 的 LXC rootfs 里 ca-certificates 没在构建阶段跑完：
+            # /etc/ssl/certs 缺部分根证书的 PEM 与 hash 软链，CApath 校验找不到
+            # 签发者就会整链 certificate verify failed，https 中文镜像全部不可用。
+            if [ -d "${d}R/etc/ssl/certs" ]; then
+              chroot "${d}R" update-ca-certificates --fresh >/dev/null 2>&1 || true
+            fi
+            echo OK
+        """.trimIndent()
+        val result = shRaw(script)
+        if (!result.first) {
+            onStatus("环境修补未完成（步骤 ${result.second}），可继续使用")
+        }
+    }
+
+    /** 安装成功后清掉断点临时文件与历史遗留的临时目录。 */
+    private fun cleanupDownloads(context: Context) {
+        val downloads = LinuxEnvStore.downloads(context)
+        downloads.listFiles()?.forEach { file ->
+            when {
+                file.isDirectory && file.name.startsWith("proot-work") ->
+                    runCatching { file.deleteRecursively() }
+
+                file.isFile && file.name.endsWith(".part") ->
+                    runCatching { file.delete() }
+            }
+        }
+    }
+
+    /** Range 起点超出文件长度（HTTP 416），需要丢掉 .part 重下。 */
+    private class RangeNotSatisfiable : Exception("断点已失效，重新下载")
+
+    /**
+     * 把目录页里的 href 拼成绝对地址。
+     *
+     * 各镜像站的写法不统一：有的给相对文件名，有的给以 / 开头的站内绝对路径，
+     * 有的直接给完整 URL。
+     */
+    private fun absoluteUrl(base: String, href: String): String = when {
+        href.startsWith("http") -> href
+        href.startsWith("/") -> run {
+            val b = URL(base)
+            val port = if (b.port > 0) ":${b.port}" else ""
+            "${b.protocol}://${b.host}$port$href"
+        }
+
+        else -> base + href.removePrefix("./")
+    }
+
+    // ---------- 镜像目录解析 ----------
+
+    /** 目录页里某类文件的候选相对路径。 */
+    private fun hrefs(html: String, pattern: String): List<String> =
+        Regex(pattern).findAll(html).map { it.groupValues[1] }.toList()
+
+    /**
+     * 探测一个地址是否真能下载到内容。
+     *
+     * 各镜像站同步进度不一：目录索引里列着某个构建，文件却还没落盘（或已被清理），
+     * 只看目录就会挑到一个必然失败的地址。这里用 Range 只取 1 字节，代价极小。
+     */
+    private fun reachable(url: String): Boolean = runCatching {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = CONNECT_TIMEOUT
+            readTimeout = CONNECT_TIMEOUT
+            setRequestProperty("User-Agent", USER_AGENT)
+            instanceFollowRedirects = true
+            setRequestProperty("Range", "bytes=0-0")
+        }
+        conn.responseCode in 200..299
+    }.getOrDefault(false)
+
+    /**
+     * 从镜像目录页解析出 rootfs 压缩包地址。
+     *
+     * 两种镜像的目录结构不同：
+     * - Alpine：压缩包直接放在 releases/aarch64 下，`alpine-minirootfs-<版本>-aarch64.tar.gz`
+     * - Debian（LXC）：先是一层时间戳目录（如 `20260918_05:24/`），
+     *   其下才是 `rootfs.tar.xz`——所以要多进一层，且格式是 xz。
+     */
+    private fun resolveArchive(source: LinuxSource): String {
+        val indexUrl = source.indexUrl
+        val html = open(indexUrl).stream.bufferedReader().use { it.readText() }
+        return when (source.distro) {
+            LinuxDistro.ALPINE -> resolveAlpine(indexUrl, html)
+            LinuxDistro.DEBIAN -> resolveDebian(indexUrl, html)
+        }
+    }
+
+    /**
+     * Alpine：取正式版压缩包（排除 rc / 预览版）。
+     *
+     * 目录页里 `3.24.0` 与 `3.24.0_rc1`、`3.24.0_rc2` 混排，且版本号不保证递增
+     * （镜像可能同时留着旧版），所以先按版本号排序再取最高，而不是取第一个。
+     */
+    private fun resolveAlpine(indexUrl: String, html: String): String {
+        val pattern = """href="([^"]*alpine-minirootfs-(\d+)\.(\d+)\.(\d+)-aarch64\.tar\.gz)""""
+        val best = Regex(pattern).findAll(html).maxByOrNull { hit ->
+            val g = hit.groupValues
+            listOf(g[2].toInt(), g[3].toInt(), g[4].toInt())
+                .fold(0L) { acc, part -> acc * 1000 + part }
+        } ?: throw IllegalStateException("镜像站上找不到适配当前架构的 rootfs")
+        return absoluteUrl(indexUrl, best.groupValues[1])
+    }
+
+    /**
+     * Debian（LXC）：时间戳目录从新到旧找第一个真正能下的压缩包。
+     *
+     * 不能只取最新目录：镜像同步有延迟，最新的那层目录常常已经列出但文件还是 404，
+     * 越靠前的站越明显。因此逐个回退（最多 8 层），并用 [reachable] 实测。
+     */
+    private fun resolveDebian(indexUrl: String, html: String): String {
+        val subdirs = hrefs(html, """href="(\d{8}_\d{2}(?:%3A|:)\d{2})/"""")
+            .reversed()
+            .take(8)
+        if (subdirs.isEmpty()) throw IllegalStateException("镜像站上没有可用的 Debian 构建")
+
+        var lastError: String? = null
+        for (sub in subdirs) {
+            val subUrl = indexUrl + sub + "/"
+            val subHtml = runCatching {
+                open(subUrl).stream.bufferedReader().use { it.readText() }
+            }.getOrElse { continue }
+            val file = hrefs(subHtml, """href="(rootfs\.tar\.(?:xz|gz))"""")
+                .firstOrNull() ?: continue
+            val url = subUrl + file
+            if (reachable(url)) return url
+            lastError = "该构建尚未同步完成"
+        }
+        throw IllegalStateException(lastError ?: "该镜像上没有可下载的 rootfs")
+    }
+
+    // ---------- 下载 ----------
+
+    /** 一次 HTTP 响应：流、最终总长度（含已下载部分），以及服务端是否接受了 Range。 */
+    private class Response(val stream: InputStream, val length: Long, val resuming: Boolean)
+
+    private fun open(url: String, rangeFrom: Long = 0L): Response {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = CONNECT_TIMEOUT
+            readTimeout = READ_TIMEOUT
+            setRequestProperty("User-Agent", USER_AGENT)
+            // 官方源对 rootfs.tar.xz 会 302 跳到 CDN，必须跟随
+            instanceFollowRedirects = true
+            if (rangeFrom > 0) setRequestProperty("Range", "bytes=$rangeFrom-")
+        }
+        val code = conn.responseCode
+        // 416：Range 起点超出了文件长度（镜像更新后新包比 .part 短）。
+        // 交给调用方丢掉 .part 重下，而不是当作源不可用。
+        if (code == 416) {
+            throw RangeNotSatisfiable()
+        }
+        if (code !in 200..299) {
+            throw IllegalStateException("下载失败：HTTP $code")
+        }
+        // 服务器忽略 Range 时返回 200 与完整内容，此时不能接着旧文件写
+        val resuming = rangeFrom > 0 && code == HttpURLConnection.HTTP_PARTIAL
+        val length = conn.contentLengthLong.let { if (resuming) rangeFrom + it else it }
+        return Response(conn.inputStream, length, resuming)
+    }
+
+    /**
+     * 下载到 `<名称>.part`，再从 `.part` 改名到目标。
+     *
+     * 支持断点续传：.part 已存在的部分会带 Range 请求补齐。这样中断一次
+     * 不必把几十 MB 重新下一遍——镜像站普遍支持 Range，只有个别 CDN 会忽略，
+     * 那种情况下按提示从 0 重来。
+     */
+    private fun downloadResumable(
+        url: String,
+        target: File,
+        label: String,
+        onProgress: (Progress) -> Unit,
+        onTotal: (Long) -> Unit = {},
+    ) {
+        target.parentFile?.mkdirs()
+        val tmp = partFile(target, url)
+        val already = if (tmp.isFile) tmp.length() else 0L
+        val resp = try {
+            open(url, already)
+        } catch (e: RangeNotSatisfiable) {
+            if (tmp.isFile) tmp.delete()
+            open(url, 0L)
+        }
+        onTotal(resp.length)
+        val start = if (resp.resuming) already else 0L
+        if (start == 0L && tmp.isFile) tmp.delete()
+        var received = start
+        val total = resp.length
+        resp.stream.use { input ->
+            FileOutputStream(tmp, start > 0L).use { out ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                    received += n
+                    onProgress(Progress(label, received, total))
+                }
+            }
+        }
+        if (tmp.length() == 0L) throw IllegalStateException("下载内容为空：$label")
+        if (total > 0 && tmp.length() < total) {
+            throw IllegalStateException("下载未完成（${tmp.length()}/$total），可继续安装补全")
+        }
+        if (target.exists()) target.delete()
+        tmp.renameTo(target)
+        onProgress(Progress(label, received, received, done = true))
+    }
+
+    /**
+     * 通用多源断点续传下载，供工具安装复用。
+     *
+     * [candidates] 按顺序尝试，成功即把文件落到 [target] 并返回。中断留下的
+     * `.part` 会被复用（按地址区分），因此下次接着下而不是从头来。
+     */
+    fun downloadAny(
+        candidates: List<String>,
+        target: File,
+        onProgress: (Progress) -> Unit,
+        onTotal: (Long) -> Unit = {},
+    ): File {
+        target.parentFile?.mkdirs()
+        var lastError: Throwable? = null
+        for (url in candidates) {
+            try {
+                downloadResumable(
+                    url = url,
+                    target = target,
+                    label = target.name,
+                    onProgress = onProgress,
+                    onTotal = onTotal,
+                )
+                return target
+            } catch (t: Throwable) {
+                lastError = t
+            }
+        }
+        throw lastError ?: IllegalStateException("所有下载源均不可用")
+    }
+
+    /** 某个下载目标已存在的断点字节数（用于界面提示「可继续下载」）。 */
+    fun partialBytes(target: File, candidates: List<String>): Long =
+        candidates.maxOfOrNull { url ->
+            val part = partFile(target, url)
+            if (part.isFile) part.length() else 0L
+        } ?: 0L
+
+    /**
+     * 断点临时文件名。
+     *
+     * 必须带上地址：Debian 各源的压缩包都叫 `rootfs.tar.xz`，若共用一个
+     * `.part`，换源后就会拿 A 源的半个文件去向 B 源要 Range，续出错误的内容。
+     * 按地址区分后，只有同一个地址才会续传。
+     */
+    fun partFile(target: File, url: String): File =
+        File(target.parentFile, "${target.name}.${Integer.toHexString(url.hashCode())}.part")
+
+    // ---------- Root shell ----------
 
     /** 单引号包裹一个参数，供 shell 使用。 */
     private fun shellArg(value: String): String = "'" + value.replace("'", "'\\''") + "'"
@@ -175,7 +525,7 @@ object LinuxInstaller {
      *
      * 脚本里的 `exit N` 会作为退出码返回，便于定位是哪一步失败。
      */
-    private fun shRaw(busybox: String, script: String): Triple<Boolean, Int, String> {
+    private fun shRaw(script: String): Triple<Boolean, Int, String> {
         val process = ProcessBuilder("su", "-c", script)
             .redirectErrorStream(true)
             .start()
@@ -205,206 +555,5 @@ object LinuxInstaller {
             process.waitFor()
             out.trim().lineSequence().firstOrNull { it.startsWith("/") && it.endsWith("busybox") }
         }.getOrNull()
-    }
-
-    /**
-     * 以 root 执行 shell 片段。
-     *
-     * 脚本整体用单引号包住再交给 `su -c`，否则 `&&` 会被外层 shell 拆开，
-     * 后面的命令就跑到 root 的 PATH 里去找了（那里没有 ar / xz）。
-     */
-    private fun sh(busybox: String, script: String) {
-        val quoted = "'" + script.replace("'", "'\\''") + "'"
-        val process = ProcessBuilder("su", "-c", "$busybox sh -c $quoted")
-            .redirectErrorStream(true)
-            .start()
-        val out = process.inputStream.bufferedReader().use { it.readText() }
-        val code = process.waitFor()
-        if (code != 0) {
-            throw IllegalStateException("解包失败：${out.trim().take(300)}")
-        }
-    }
-
-    // ---------- 镜像目录解析 ----------
-
-    private fun resolveDeb(dirUrl: String, prefix: String): String {
-        val html = open(dirUrl).bufferedReader().use { it.readText() }
-        val hit = Regex("""href="(${Regex.escape(prefix)}[^"]*aarch64\.deb)"""")
-            .find(html)?.groupValues?.get(1)
-            ?: Regex("""href="(${Regex.escape(prefix)}[^"]*_all\.deb)"""")
-                .find(html)?.groupValues?.get(1)
-            ?: throw IllegalStateException("镜像站上找不到所需的包")
-        return if (hit.startsWith("http")) hit else dirUrl + hit
-    }
-
-    /**
-     * 从镜像目录页解析出 rootfs 压缩包地址。
-     *
-     * 两种镜像的目录结构不同：
-     * - Alpine：压缩包直接放在 releases/aarch64 下，`minirootfs-<版本>-aarch64.tar.gz`
-     * - Debian（LXC）：先是一层时间戳目录（如 `20260918_05:24/`），
-     *   其下才是 `rootfs.tar.xz`——所以要多进一层，且格式是 xz。
-     */
-    private fun resolveArchive(indexUrl: String, distro: LinuxDistro): String {
-        val html = open(indexUrl).bufferedReader().use { it.readText() }
-        return when (distro) {
-            LinuxDistro.ALPINE -> {
-                val hit = Regex("""href="([^"]*minirootfs[^"]*\.tar\.(?:gz|xz))"""")
-                    .find(html)?.groupValues?.get(1)
-                    ?: throw IllegalStateException("镜像站上找不到适配当前架构的 rootfs")
-                if (hit.startsWith("http")) hit else indexUrl + hit.removePrefix("./")
-            }
-
-            LinuxDistro.DEBIAN -> {
-                // 取最后一个时间戳目录（列表按时间升序，末尾最新）。
-                // 注意 href 里的冒号被 URL 编码成 %3A，正则要两种都容忍，
-                // 并直接把捕获到的原文拼进 URL。
-                val sub = Regex("""href="(\d{8}_\d{2}(?:%3A|:)\d{2})/"""")
-                    .findAll(html).lastOrNull()?.groupValues?.get(1)
-                    ?: throw IllegalStateException("镜像站上没有可用的 Debian 构建")
-                val subUrl = indexUrl + sub + "/"
-                val subHtml = open(subUrl).bufferedReader().use { it.readText() }
-                val file = Regex("""href="(rootfs\.tar\.(?:gz|xz))"""")
-                    .find(subHtml)?.groupValues?.get(1)
-                    ?: throw IllegalStateException("该构建里没有 rootfs 压缩包")
-                subUrl + file
-            }
-        }
-    }
-
-    // ---------- 下载 ----------
-
-    private fun open(url: String): InputStream {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT
-            readTimeout = READ_TIMEOUT
-            setRequestProperty("User-Agent", "Mozilla/5.0 yutu-toolbox")
-            // 官方源对 rootfs.tar.xz 会 302 跳到 CDN，必须跟随
-            instanceFollowRedirects = true
-        }
-        if (conn.responseCode !in 200..299) {
-            throw IllegalStateException("下载失败：HTTP ${conn.responseCode}")
-        }
-        return conn.inputStream
-    }
-
-    private fun downloadTo(
-        url: String,
-        target: File,
-        label: String,
-        onProgress: (Progress) -> Unit,
-    ) {
-        target.parentFile?.mkdirs()
-        val tmp = File(target.parentFile, target.name + ".part")
-        var received = 0L
-        open(url).use { input ->
-            FileOutputStream(tmp).use { out ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n <= 0) break
-                    out.write(buf, 0, n)
-                    received += n
-                    onProgress(Progress(label, received, -1L))
-                }
-            }
-        }
-        if (tmp.length() == 0L) throw IllegalStateException("下载内容为空：$label")
-        if (target.exists()) target.delete()
-        tmp.renameTo(target)
-        onProgress(Progress(label, received, received, done = true))
-    }
-
-    // ---------- 解压 ----------
-
-    /**
-     * 解压 tar.gz。
-     *
-     * 自己解 tar 而不用外部命令：rootfs 必须在 Linux 启动前就位，
-     * 而 ustar 头是 512 字节定长结构，解析成本很低、也没有依赖。
-     */
-    private fun extractTarGz(
-        archive: File,
-        dest: File,
-        onProgress: (done: Long, total: Long) -> Unit,
-    ) {
-        val total = archive.length()
-        var consumed = 0L
-        BufferedInputStream(GZIPInputStream(archive.inputStream().buffered(64 * 1024))).use { input ->
-            val header = ByteArray(512)
-            while (true) {
-                if (!readFully(input, header)) break
-                if (header.all { it == 0.toByte() }) break
-                consumed += 512
-
-                val name = readString(header, 0, 100)
-                if (name.isEmpty()) break
-                val sizeField = readString(header, 124, 12).trim().trim('\u0000')
-                val size = sizeField.toLongOrNull(8) ?: 0L
-                val typeFlag = header[156].toInt().toChar()
-                val prefix = readString(header, 345, 155)
-                val path = if (prefix.isEmpty()) name else "$prefix/$name"
-
-                val target = File(dest, path)
-                if (!target.canonicalPath.startsWith(dest.canonicalPath)) {
-                    skipFully(input, size)
-                    val pad0 = padded(size)
-                    skipFully(input, pad0 - size)
-                    consumed += pad0
-                    continue
-                }
-
-                when (typeFlag) {
-                    '5' -> target.mkdirs()
-                    '0', '\u0000', '7' -> {
-                        target.parentFile?.mkdirs()
-                        FileOutputStream(target).use { out ->
-                            var left = size
-                            val buf = ByteArray(64 * 1024)
-                            while (left > 0) {
-                                val n = input.read(buf, 0, minOf(left, buf.size.toLong()).toInt())
-                                if (n <= 0) break
-                                out.write(buf, 0, n)
-                                left -= n
-                            }
-                        }
-                    }
-                    else -> skipFully(input, size)
-                }
-
-                val aligned = padded(size)
-                skipFully(input, aligned - size)
-                consumed += aligned
-                onProgress(consumed.coerceAtMost(total), total)
-            }
-        }
-    }
-
-    private fun padded(size: Long): Long = ((size + 511) / 512) * 512
-
-    private fun readFully(input: InputStream, buf: ByteArray): Boolean {
-        var off = 0
-        while (off < buf.size) {
-            val n = input.read(buf, off, buf.size - off)
-            if (n <= 0) return off == 0
-            off += n
-        }
-        return true
-    }
-
-    private fun skipFully(input: InputStream, count: Long) {
-        var left = count
-        val buf = ByteArray(8 * 1024)
-        while (left > 0) {
-            val n = input.read(buf, 0, minOf(left, buf.size.toLong()).toInt())
-            if (n <= 0) return
-            left -= n
-        }
-    }
-
-    private fun readString(header: ByteArray, offset: Int, length: Int): String {
-        val end = (offset until offset + length).firstOrNull { header[it] == 0.toByte() }
-            ?: (offset + length)
-        return String(header, offset, end - offset).trim()
     }
 }

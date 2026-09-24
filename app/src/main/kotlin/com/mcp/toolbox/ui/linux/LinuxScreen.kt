@@ -45,6 +45,7 @@ import com.mcp.toolbox.core.design.component.MiuixTag
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.outlined.Code
@@ -54,7 +55,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 /**
  * Linux 工具环境主页。
  *
- * 环境按需下载，不随应用打包；下载源在代码里配置，界面不展示地址。
+ * 环境按需下载，不随应用打包；下载源可选、也可自动测速选择，界面不展示具体地址。
  */
 @Composable
 fun LinuxScreen(
@@ -82,6 +83,13 @@ fun LinuxScreen(
     var pickDistro by remember { mutableStateOf(false) }
     var pickRuntime by remember { mutableStateOf(false) }
     var components by remember { mutableStateOf<List<ComponentStatus>>(emptyList()) }
+    var sourceId by remember { mutableStateOf(LinuxPrefs.source(context, distro)) }
+    var pickSource by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<InstallState?>(null) }
+    var partialPercent by remember { mutableStateOf(0) }
+    var statusLine by remember { mutableStateOf("") }
+    // 各工具已下载但未解包的断点大小：> 0 的工具在列表里标「可继续下载」
+    var toolPartials by remember { mutableStateOf<Map<LinuxComponent, Long>>(emptyMap()) }
 
     suspend fun refresh() {
         // sizeOf 会遍历整个 rootfs（几万个文件），放主线程必卡
@@ -93,9 +101,73 @@ fun LinuxScreen(
         sizeText = if (snapshot.first) LinuxChecker.humanSize(snapshot.second) else "未安装"
     }
 
-    LaunchedEffect(distro) {
+    /** 读取未完成的安装进度：有中断记录时按钮改成「继续安装」。 */
+    suspend fun refreshPending() {
+        val state = withContext(Dispatchers.IO) { InstallState.load(context, distro) }
+        pending = state
+        partialPercent = withContext(Dispatchers.IO) {
+            if (state == null || state.total <= 0) return@withContext 0
+            val target = File(LinuxEnvStore.downloads(context), state.fileName)
+            val part = LinuxInstaller.partFile(target, state.url)
+            if (part.isFile) ((part.length() * 100) / state.total).toInt().coerceIn(0, 100) else 0
+        }
+    }
+
+    /**
+     * 扫描「可选用工具」：真实探测各工具版本，并统计下载断点大小。
+     *
+     * 装机后必须调用一次，否则列表会停在「全部未安装」——用户装完的第一眼
+     * 就在看这一栏，不能等他手动进检测页。
+     */
+    suspend fun rescanComponents() {
+        val snapshot = withContext(Dispatchers.IO) {
+            if (!LinuxEnvStore.isInstalled(context, distro)) {
+                return@withContext emptyList<ComponentStatus>() to emptyMap<LinuxComponent, Long>()
+            }
+            val statuses = LinuxChecker.check(context, distro)
+            val versions = probeVersions(context, distro)
+            val enriched = statuses.map { status ->
+                val found = versions[status.component]
+                if (status.installed && !found.isNullOrBlank()) status.copy(version = found) else status
+            }
+            val partials = LinuxComponent.entries
+                .associateWith { LinuxToolchain.pendingBytes(context, distro, it) }
+                .filterValues { it > 0L }
+            enriched to partials
+        }
+        components = snapshot.first
+        toolPartials = snapshot.second
+    }
+
+    /** 下载并安装（或继续安装），完成后立刻重扫工具状态。 */
+    suspend fun installAction() {
+        busy = true
+        message = ""
+        statusLine = ""
+        val result = LinuxInstaller.install(
+            context = context,
+            distro = distro,
+            sourceId = sourceId,
+            onProgress = { progress = it },
+            onStatus = { statusLine = it },
+        )
+        busy = false
+        progress = null
+        statusLine = ""
+        result.fold(
+            onSuccess = { message = "安装完成，已自动完成环境检测" },
+            onFailure = { message = it.message ?: "安装失败" },
+        )
         refresh()
-        components = withContext(Dispatchers.IO) { LinuxChecker.check(context, distro) }
+        refreshPending()
+        rescanComponents()
+    }
+
+    LaunchedEffect(distro) {
+        sourceId = LinuxPrefs.source(context, distro)
+        refresh()
+        refreshPending()
+        rescanComponents()
     }
 
     Column(
@@ -118,7 +190,8 @@ fun LinuxScreen(
                     text = when {
                         busy && progress != null ->
                             "正在下载 ${progress?.fileName.orEmpty()} ${progress?.percent ?: 0}%"
-                        busy -> "正在准备…"
+                        busy -> statusLine.ifBlank { "正在准备…" }
+                        pending != null -> "上次安装中断（约 $partialPercent%），点下方继续"
                         installed -> "基础工具已就绪（$sizeText），可按需安装扩展工具"
                         else -> "尚未安装，点击下方按钮下载并安装"
                     },
@@ -136,24 +209,15 @@ fun LinuxScreen(
                 Spacer(Modifier.height(spacing.md))
                 Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
                     MiuixButton(
-                        text = if (installed) "重新安装" else "下载并安装",
+                        text = when {
+                            busy -> "安装中"
+                            pending != null -> "继续安装"
+                            installed -> "重新安装"
+                            else -> "下载并安装"
+                        },
                         onClick = {
                             if (busy) return@MiuixButton
-                            busy = true
-                            message = ""
-                            scope.launch {
-                                val result = LinuxInstaller.install(context, distro) { progress = it }
-                                busy = false
-                                progress = null
-                                result.fold(
-                                    onSuccess = { message = "安装完成" },
-                                    onFailure = { message = it.message ?: "安装失败" },
-                                )
-                                refresh()
-                                components = withContext(Dispatchers.IO) {
-                                    LinuxChecker.check(context, distro)
-                                }
-                            }
+                            scope.launch { installAction() }
                         },
                         enabled = !busy,
                         loading = busy,
@@ -185,8 +249,13 @@ fun LinuxScreen(
                 SettingsRow(
                     title = stringResource(R.string.linux_runtime),
                     value = runtime.title,
-                    divider = false,
                     onClick = { pickRuntime = true },
+                )
+                SettingsRow(
+                    title = stringResource(R.string.linux_source),
+                    value = LinuxSources.nameOf(distro, sourceId),
+                    divider = false,
+                    onClick = { pickSource = true },
                 )
             }
         }
@@ -231,6 +300,7 @@ fun LinuxScreen(
                         component = component,
                         status = status,
                         installed = installed,
+                        partialBytes = toolPartials[component] ?: 0L,
                         showDivider = index != LinuxComponent.entries.lastIndex,
                         onInstall = { onInstallTool(component) },
                     )
@@ -248,9 +318,29 @@ fun LinuxScreen(
             onPick = {
                 distro = LinuxDistro.entries[it]
                 LinuxPrefs.save(context, distro, runtime)
+                pending = null
                 pickDistro = false
             },
             onDismiss = { pickDistro = false },
+        )
+    }
+    if (pickSource) {
+        LinuxChoiceSheet(
+            title = stringResource(R.string.linux_source),
+            options = LinuxSources.options(distro).map { source ->
+                val id = source?.id ?: LinuxSources.AUTO
+                LinuxSources.nameOf(distro, id) to LinuxSources.describe(source)
+            },
+            selectedIndex = LinuxSources.options(distro)
+                .indexOfFirst { it?.id == sourceId || (it == null && sourceId == LinuxSources.AUTO) }
+                .coerceAtLeast(0),
+            onPick = { index ->
+                val picked = LinuxSources.options(distro)[index]
+                sourceId = picked?.id ?: LinuxSources.AUTO
+                LinuxPrefs.saveSource(context, distro, sourceId)
+                pickSource = false
+            },
+            onDismiss = { pickSource = false },
         )
     }
     if (pickRuntime) {
@@ -309,6 +399,7 @@ private fun ComponentRow(
     component: LinuxComponent,
     status: ComponentStatus?,
     installed: Boolean,
+    partialBytes: Long,
     showDivider: Boolean,
     onInstall: () -> Unit,
 ) {
@@ -339,10 +430,11 @@ private fun ComponentRow(
             Column(Modifier.weight(1f)) {
                 MiuixText(text = component.title, style = MiuixTheme.typography.bodyLarge)
                 MiuixText(
-                    text = if (ready && status.version.isNotBlank()) {
-                        "${component.subtitle}\n${status.version}"
-                    } else {
-                        component.subtitle
+                    text = when {
+                        ready && status.version.isNotBlank() -> "${component.subtitle}\n${status.version}"
+                        partialBytes > 0L ->
+                            "${component.subtitle}\n已下载 ${LinuxChecker.humanSize(partialBytes)}，可继续"
+                        else -> component.subtitle
                     },
                     style = MiuixTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
@@ -352,7 +444,12 @@ private fun ComponentRow(
                 !installed -> MiuixTag(text = "需先安装环境", color = colors.onSurfaceVariant)
                 ready -> MiuixTag(text = stringResource(R.string.linux_installed))
                 else -> MiuixButton(
-                    text = stringResource(R.string.linux_install),
+                    // 有残留下载时说明上次中断过，按钮改成「继续下载」更贴合实际
+                    text = if (partialBytes > 0L) {
+                        "继续下载"
+                    } else {
+                        stringResource(R.string.linux_install)
+                    },
                     onClick = onInstall,
                     variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
                 )

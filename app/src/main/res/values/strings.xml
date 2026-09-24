@@ -34,6 +34,7 @@
     <string name="linux_runtime">Runtime</string>
     <string name="linux_distro">Distribution</string>
     <string name="linux_section_config">Environment</string>
+    <string name="linux_source">Mirror</string>
     <string name="ai_current">Current</string>
     <string name="ai_model_cancel">Cancel</string>
     <string name="ai_model_delete">Delete model</string>

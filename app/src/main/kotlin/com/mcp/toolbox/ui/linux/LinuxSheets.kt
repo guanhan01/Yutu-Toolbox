@@ -195,6 +195,10 @@ fun LinuxCheckScreen(
     var envReady by remember { mutableStateOf(LinuxEnvStore.isInstalled(context, distro)) }
     var sizeText by remember { mutableStateOf("") }
     val installLog = remember { mutableStateListOf<String>() }
+    // 各工具的断点大小（已下载未解包），用于提示「继续下载」
+    var partials by remember { mutableStateOf<Map<LinuxComponent, Long>>(emptyMap()) }
+    // 当前下载进度文案，装的时候显示在组件行上
+    var downloadNote by remember { mutableStateOf("") }
 
     suspend fun rescan() {
         scanning = true
@@ -204,19 +208,41 @@ fun LinuxCheckScreen(
         envReady = snapshot.first
         statuses = snapshot.second
         sizeText = snapshot.third
+        partials = withContext(Dispatchers.IO) {
+            if (!snapshot.first) {
+                emptyMap()
+            } else {
+                LinuxComponent.entries
+                    .associateWith { LinuxToolchain.pendingBytes(context, distro, it) }
+                    .filterValues { it > 0L }
+            }
+        }
         scanning = false
     }
 
     fun startInstall(component: LinuxComponent) {
         if (installing != null) return
         installing = component
+        downloadNote = ""
         installLog.clear()
         installLog.add("→ 开始安装 ${component.title}，请稍候")
         scope.launch {
-            val result = LinuxToolchain.install(context, distro, component) { line ->
-                installLog.add(line)
-                if (installLog.size > 500) installLog.removeAt(0)
-            }
+            val result = LinuxToolchain.install(
+                context = context,
+                distro = distro,
+                component = component,
+                onProgress = { p ->
+                    downloadNote = if (p.done) {
+                        ""
+                    } else {
+                        "下载 ${p.fileName} ${p.percent}%（可中断，重试会续传）"
+                    }
+                },
+                onLine = { line ->
+                    installLog.add(line)
+                    if (installLog.size > 500) installLog.removeAt(0)
+                },
+            )
             installLog.add(
                 if (result.isFailure) {
                     "✗ ${result.exceptionOrNull()?.message ?: "安装失败"}"
@@ -225,6 +251,7 @@ fun LinuxCheckScreen(
                 },
             )
             installing = null
+            downloadNote = ""
             rescan()
         }
     }
@@ -307,10 +334,13 @@ fun LinuxCheckScreen(
                                     style = MiuixTheme.typography.bodyLarge,
                                 )
                                 MiuixText(
-                                    text = if (status.version.isNotBlank()) {
-                                        status.version
-                                    } else {
-                                        status.component.subtitle
+                                    text = when {
+                                        installing == status.component && downloadNote.isNotBlank() ->
+                                            downloadNote
+                                        status.version.isNotBlank() -> status.version
+                                        (partials[status.component] ?: 0L) > 0L ->
+                                            "已下载 ${LinuxChecker.humanSize(partials.getValue(status.component))}，可继续"
+                                        else -> status.component.subtitle
                                     },
                                     style = MiuixTheme.typography.bodySmall,
                                     color = colors.onSurfaceVariant,
@@ -318,7 +348,7 @@ fun LinuxCheckScreen(
                             }
                             when {
                                 installing == status.component -> MiuixTag(
-                                    text = "安装中…",
+                                    text = if (downloadNote.isNotBlank()) "下载中…" else "安装中…",
                                     color = colors.primary,
                                 )
                                 status.installed -> MiuixTag(
@@ -330,7 +360,11 @@ fun LinuxCheckScreen(
                                     color = colors.onSurfaceVariant,
                                 )
                                 else -> MiuixButton(
-                                    text = stringResource(R.string.linux_install),
+                                    text = if ((partials[status.component] ?: 0L) > 0L) {
+                                        "继续下载"
+                                    } else {
+                                        stringResource(R.string.linux_install)
+                                    },
                                     onClick = { startInstall(status.component) },
                                     variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
                                 )
