@@ -161,7 +161,8 @@ fun MiuixTheme(
             // 这里补一个只当「弹层宿主」的 Scaffold：popupHost 默认就是 MiuixPopupHost()，
             // 负责把所有官方弹层画到内容之上。容器色设为透明，不影响现有界面底色。
             OfficialScaffold(
-                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                // 必须是不透明背景：透明会让页面在转场/叠加时透视到下层内容
+                containerColor = colors.background,
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
             ) { _ ->
                 content()

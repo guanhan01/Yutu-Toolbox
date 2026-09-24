@@ -87,7 +87,7 @@ fun MiuixOverflowMenu(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, offset, content)
+        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, offset, content)
         return
     }
     val colors = MiuixTheme.colors
@@ -329,6 +329,7 @@ private fun MiuixOverlayMenuBody(
 private fun officialPositionProvider(
     anchor: Rect?,
     alignStart: Boolean,
+    stickToBottom: Boolean,
     offset: IntOffset,
 ): OfficialPopupPositionProvider = object : OfficialPopupPositionProvider {
     override fun getMargins(): PaddingValues = PaddingValues(0.dp)
@@ -360,6 +361,8 @@ private fun officialPositionProvider(
             it.top.roundToInt() - popupContentSize.height - gap + offset.y
         }
         val top = when {
+            // 贴底模式：底边固定在窗口底部上方
+            stickToBottom -> windowBounds.height - popupContentSize.height
             below + popupContentSize.height <= windowBounds.height -> below
             above != null -> above.coerceAtLeast(0)
             else -> below
@@ -375,11 +378,12 @@ private fun MiuixOverflowMenuOfficial(
     modifier: Modifier,
     anchor: Rect?,
     alignStart: Boolean,
+    stickToBottom: Boolean,
     offset: IntOffset,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val provider = remember(anchor, alignStart, offset) {
-        officialPositionProvider(anchor, alignStart, offset)
+    val provider = remember(anchor, alignStart, stickToBottom, offset) {
+        officialPositionProvider(anchor, alignStart, stickToBottom, offset)
     }
     OfficialOverlayListPopup(
         show = expanded,
@@ -388,6 +392,8 @@ private fun MiuixOverflowMenuOfficial(
         alignment = if (alignStart) OfficialPopupPositionProvider.Align.Start
         else OfficialPopupPositionProvider.Align.End,
         onDismissRequest = onDismiss,
+        // 菜单不压暗整屏（默认 true 会让整屏蒙黑）
+        enableWindowDim = false,
         minWidth = 0.dp,
     ) {
         OfficialListPopupColumn {
