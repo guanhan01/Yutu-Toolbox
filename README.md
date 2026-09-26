@@ -177,7 +177,7 @@ org.gradle.parallel=false
 app/                      壳工程：MainActivity、AppShell（抽屉 + 底栏 + 宽屏 NavRail）、导航图、AI 设置与对话宿主
 core/common/              Result、Dispatcher、特权管理（Root / Shizuku / 无障碍）、无障碍服务
 core/model/               领域模型
-core/designsystem/        DesignToken、主题引擎（HCT 动态取色）、Miuix 风格组件库
+core/designsystem/        DesignToken、主题引擎（HCT 动态取色）、官方 Miuix 封装 + 自绘组件
 feature/home/             AI 对话：消息流、工具步骤卡片、记忆、压缩、计划
 feature/settings/         设置与「主题与色彩」
 feature/files/            文件浏览
@@ -198,8 +198,11 @@ feature/mcp/              MCP 客户端 / 内置 Server / 103 个工具 / Skill 
 - **Linux 环境需要 Root**：执行后端是系统 chroot，免 Root 的 PRoot 路线在 Android 16 上不可用
 - **抓包受证书固定限制**：目标应用启用 certificate pinning 或拒绝用户 CA 时只能看到未解密的记录
 - **界面操作依赖 ROM**：无障碍通道在部分定制 ROM 上 `takeScreenshot` 可能被限制，此时回落 Root / Shizuku
-- **未依赖官方 Miuix**：`top.yukonga.miuix.kmp` 的 API 无法在离线环境校验，改为按其视觉规范自绘组件，
-  保留同一套 Token API；将来切换官方库只需替换 `core:designsystem` 的 `component/` 包实现
+- **设计系统是官方 Miuix 之上的封装层**：按钮、卡片、列表项、对话框、开关、滑块、顶栏等
+  直接包装 `top.yukonga.miuix.kmp:miuix-ui` 0.9.2 的实现（squircle 圆角与官方点击反馈），
+  组件层只统一 API 并接上自己的 Token（`core:designsystem`）；徽标、代码块、Markdown、
+  分级控件等官方没有的部件为自绘。主题层把 HCT 动态取色算出的配色桥接进官方
+  `MiuixTheme`，同时并行维护一套自有的 Colors 实现
 - **依赖注入仍是手写最小容器**：Koin 已在 Version Catalog 声明但尚未接入
 - MiSans / HarmonyOS Sans 未随包分发，回退系统默认字体
 - `settings.gradle.kts` 配置了阿里云镜像（部分网络下 dl.google.com 会被重置），
