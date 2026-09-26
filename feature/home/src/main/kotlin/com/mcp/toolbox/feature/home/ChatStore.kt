@@ -47,10 +47,26 @@ object ChatStore {
     /** 新建会话并设为当前会话。 */
     suspend fun newSession(context: Context, title: String): ChatSession {
         val session = ChatSession(title = title)
-        _sessions.value = listOf(session) + _sessions.value
+        // 先丢掉上一个从没写过消息的草稿：空白会话不进侧边栏，留着只会
+        // 在后台越堆越多，而且下次「新建」看着和没建一样。
+        val blanks = _sessions.value.filter { it.messages.isEmpty() }
+        _sessions.value = listOf(session) + (_sessions.value - blanks.toSet())
         _currentId.value = session.id
         persist(context)
         return session
+    }
+
+    /**
+     * 重命名会话。
+     *
+     * 传空字符串表示恢复默认（回到「首条用户消息」推导的名字）。
+     */
+    suspend fun rename(context: Context, id: String, title: String) {
+        val name = title.trim()
+        _sessions.value = _sessions.value.map { s ->
+            if (s.id == id) s.copy(customTitle = name.ifBlank { null }) else s
+        }
+        persist(context)
     }
 
     suspend fun select(id: String) {
@@ -194,6 +210,8 @@ object ChatStore {
                 JSONObject()
                     .put("id", s.id)
                     .put("title", s.title)
+                    // 自定义标题：没改过就不写，保持落盘文件干净
+                    .put("customTitle", s.customTitle ?: JSONObject.NULL)
                     .put("createdAt", s.createdAt)
                     .put("updatedAt", s.updatedAt)
                     .put("messages", msgs),
@@ -227,6 +245,9 @@ object ChatStore {
             ChatSession(
                 id = o.optString("id"),
                 title = o.optString("title"),
+                // 旧数据没有这个字段，optString 会给出 "null" 字面量，必须过滤掉
+                customTitle = o.optString("customTitle")
+                    .takeIf { it.isNotBlank() && it != "null" },
                 createdAt = o.optLong("createdAt"),
                 updatedAt = o.optLong("updatedAt"),
                 // 迁移：`intermediate` 是后加的字段，此前落盘的中间旁白没有标记。

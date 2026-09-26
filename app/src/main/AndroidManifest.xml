@@ -59,6 +59,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!--
+          无障碍服务：让 AI 在没有 root / Shizuku 时也能点击、滑动、输入、读界面、截屏。
+          只在工具被调用时执行单条指令，不做任何自主操作；由用户在系统设置里手动开启。
+        -->
+        <service
+            android:name="com.mcp.toolbox.core.common.ToolboxAccessibilityService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
         <!-- 分享 / 安装 APK：把缓存里的文件以 content:// 暴露给系统 -->
         <provider
             android:name="androidx.core.content.FileProvider"

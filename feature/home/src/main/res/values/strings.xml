@@ -8,11 +8,6 @@
     <string name="chat_no_model">No model configured yet: this message was saved locally. Configure a model to get replies.</string>
     <string name="chat_new">New chat</string>
     <string name="chat_terminal">Terminal</string>
-    <string name="chat_hero_title">What can I help with?</string>
-    <string name="chat_sug_apk">Analyze APK</string>
-    <string name="chat_sug_screen">Device info</string>
-    <string name="chat_sug_network">Network check</string>
-    <string name="chat_sug_db">Query database</string>
     <string name="chat_err_network">Request failed: %1$s</string>
     <string name="chat_thinking">Generating…</string>
     <string name="chat_pick_model">Choose model</string>

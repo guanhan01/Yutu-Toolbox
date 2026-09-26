@@ -8,11 +8,6 @@
     <string name="chat_no_model">尚未接入模型：这条消息已存入本地会话，配置模型后即可获得回复。</string>
     <string name="chat_new">新建对话</string>
     <string name="chat_terminal">终端</string>
-    <string name="chat_hero_title">有什么可以帮你？</string>
-    <string name="chat_sug_apk">分析 APK</string>
-    <string name="chat_sug_screen">查看设备信息</string>
-    <string name="chat_sug_network">网络诊断</string>
-    <string name="chat_sug_db">查询数据库</string>
     <string name="chat_err_network">请求失败：%1$s</string>
     <string name="chat_thinking">正在生成…</string>
     <string name="chat_pick_model">选择模型</string>

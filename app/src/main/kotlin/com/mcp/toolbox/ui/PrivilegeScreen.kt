@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Terminal
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.common.PrivilegeBackend
+import com.mcp.toolbox.core.common.ToolboxAccessibilityService
 import com.mcp.toolbox.core.common.PrivilegeManager
 import com.mcp.toolbox.core.common.PrivilegeStatus
 import com.mcp.toolbox.core.design.component.MiuixButton
@@ -44,6 +46,24 @@ fun PrivilegeScreen(modifier: Modifier = Modifier, onToast: (String) -> Unit = {
 
     var status by remember { mutableStateOf(PrivilegeStatus()) }
     var probing by remember { mutableStateOf(true) }
+    // 无障碍开关：既要看系统设置里是否启用，也要看服务是否真的连上了
+    var accessibilityOn by remember {
+        mutableStateOf(ToolboxAccessibilityService.enabledInSettings(context))
+    }
+    var accessibilityLive by remember { mutableStateOf(ToolboxAccessibilityService.connected) }
+
+    // 从系统设置返回本页时重新读一次，否则开关状态会停在离页那一刻
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                accessibilityOn = ToolboxAccessibilityService.enabledInSettings(context)
+                accessibilityLive = ToolboxAccessibilityService.connected
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(Unit) {
         status = withContext(Dispatchers.IO) { PrivilegeManager.status(context, force = true) }
@@ -124,6 +144,49 @@ fun PrivilegeScreen(modifier: Modifier = Modifier, onToast: (String) -> Unit = {
                         MiuixTag(
                             text = if (status.shizukuGranted) "可用" else "不可用",
                             color = if (status.shizukuGranted) colors.primary else colors.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(spacing.groupGap))
+
+        // 无障碍：免 root 操作手机的唯一途径，放在 root / Shizuku 之后单独成节
+        MiuixSectionCard(
+            title = "免 root 能力",
+            subtitle = "开启后 AI 无需 root 或 Shizuku 即可点击、滑动、输入、读界面与截屏",
+        ) {
+            Column {
+                MiuixListItem(
+                    title = "无障碍服务",
+                    subtitle = when {
+                        accessibilityLive -> "已开启并已连接，AI 的界面操作与截屏走这条路"
+                        accessibilityOn -> "系统设置里已开启，服务尚未连接（可在系统里关掉重开）"
+                        else -> "未开启。不开也能用，但界面操作与截屏需要 root 或 Shizuku"
+                    },
+                    leadingIcon = Icons.Outlined.Accessibility,
+                    trailing = {
+                        MiuixTag(
+                            text = if (accessibilityLive) "可用" else "不可用",
+                            color = if (accessibilityLive) colors.primary else colors.onSurfaceVariant,
+                        )
+                    },
+                    onClick = {
+                        // 直接开无障碍设置列表。
+                        //
+                        // 曾想深链到本应用的详情页，但 `ACTION_ACCESSIBILITY_DETAILS_SETTINGS`
+                        // 在公开 SDK 里并不存在（只有 ACTION_ACCESSIBILITY_SETTINGS），
+                        // 用非公开字符串拼 Intent 属于赌 ROM 实现，因此改为最稳的列表页。
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS,
+                        ).apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        val opened = runCatching { context.startActivity(intent) }.isSuccess
+                        onToast(
+                            if (opened) "在「已下载的应用」里找到「Yutu Toolbox」并开启"
+                            else "无法打开设置页，请手动进入 系统设置 → 无障碍",
                         )
                     },
                 )

@@ -44,14 +44,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.mcp.toolbox.R
 import com.mcp.toolbox.feature.capture.CaptureStore
+import com.mcp.toolbox.feature.home.ChatSession
 import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.core.design.component.MiuixBadge
+import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
+import com.mcp.toolbox.core.design.component.MiuixMenuItem
+import com.mcp.toolbox.core.design.component.MiuixDialog
+import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import com.mcp.toolbox.core.design.component.MiuixIconButton
-import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
-import com.mcp.toolbox.core.design.component.MiuixMenuItem
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixText
 import com.mcp.toolbox.core.design.component.miuixClickable
@@ -59,7 +63,6 @@ import com.mcp.toolbox.core.design.component.rememberMiuixPressState
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.navigation.Destination
 import com.mcp.toolbox.navigation.DrawerFooter
-import com.mcp.toolbox.navigation.DrawerNetworkChildren
 import com.mcp.toolbox.navigation.DrawerPrimary
 import com.mcp.toolbox.navigation.Routes
 import kotlinx.coroutines.launch
@@ -77,11 +80,16 @@ fun DrawerContent(
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
-    var networkExpanded by remember { mutableStateOf(currentRoute.startsWith("network")) }
     var chatExpanded by remember { mutableStateOf(currentRoute == Routes.HOME) }
-    val chatSessions by ChatStore.sessions.collectAsState()
+    val allSessions by ChatStore.sessions.collectAsState()
+    // 只列有消息的会话：空白会话没有内容，也就没有可展示的标题，
+    // 露在列表里只会变成一行行同名空壳（新建后看着像没生效）。
+    val chatSessions = remember(allSessions) { allSessions.filter { it.messages.isNotEmpty() } }
     val currentChatId by ChatStore.currentId.collectAsState()
     val scope = rememberCoroutineScope()
+    // 正在重命名的会话；非空即弹对话框
+    var renamingSession by remember { mutableStateOf<ChatSession?>(null) }
+    val context = LocalContext.current
 
     Column(
         modifier = modifier
@@ -134,14 +142,16 @@ fun DrawerContent(
                     destination = destination,
                     selected = currentRoute == destination.route,
                     onClick = {
-                        if (destination.route == Routes.NETWORK) {
-                            networkExpanded = !networkExpanded
-                        }
-                        if (isChat) chatExpanded = !chatExpanded
+                        // 点行本身：进入该页面（抽屉会收起，这是预期行为）。
+                        //
+                        // 不能再在这里翻转展开状态：那样「点行」与「点箭头」都会切换，
+                        // 用户点箭头时会被这里再翻一次，看起来像没反应。
                         onNavigate(destination.route)
                     },
-                    expandable = destination.route == Routes.NETWORK || isChat,
-                    expanded = if (isChat) chatExpanded else networkExpanded,
+                    expandable = isChat,
+                    expanded = chatExpanded,
+                    // 只切换展开，不导航、不关抽屉
+                    onToggleExpand = { if (isChat) chatExpanded = !chatExpanded },
                 )
                 if (isChat) {
                     AnimatedVisibility(
@@ -156,12 +166,11 @@ fun DrawerContent(
                                     title = item.displayTitle,
                                     selected = item.id == currentChatId,
                                     onClick = {
-                                        scope.launch {
-                                            ChatStore.select(item.id)
-                                            // 不调 onClose()：切换对话时收起抽屉，
-                                            // 会让「展开/收起对话列表」的交互被抽屉关闭打断
-                                        }
+                                        scope.launch { ChatStore.select(item.id) }
+                                        // 刻意不调 onClose()：切对话属于「浏览」，抽屉留着
+                                        // 才能连着看好几条；收起交给点遮罩或点开关闭按钮。
                                     },
+                                    onRename = { renamingSession = item },
                                     onDelete = {
                                         scope.launch { ChatStore.delete(context, item.id) }
                                     },
@@ -170,24 +179,7 @@ fun DrawerContent(
                         }
                     }
                 }
-                if (destination.route == Routes.NETWORK) {
-                    AnimatedVisibility(
-                        visible = networkExpanded,
-                        enter = expandVertically(tween(200)),
-                        exit = shrinkVertically(tween(200)),
-                    ) {
-                        Column {
-                            DrawerNetworkChildren.forEach { child ->
-                                DrawerItem(
-                                    destination = child,
-                                    selected = currentRoute == child.route,
-                                    onClick = { onNavigate(child.route) },
-                                    indented = true,
-                                )
-                            }
-                        }
-                    }
-                }
+
             }
         }
 
@@ -210,6 +202,27 @@ fun DrawerContent(
         }
     }
 
+    // 重命名对话框
+    renamingSession?.let { target ->
+        var text by remember(target.id) { mutableStateOf(target.displayTitle) }
+        MiuixDialog(
+            visible = true,
+            onDismiss = { renamingSession = null },
+            title = stringResource(R.string.chat_history_rename),
+            confirmText = stringResource(R.string.app_action_save),
+            onConfirm = {
+                val name = text
+                scope.launch { ChatStore.rename(context, target.id, name) }
+            },
+        ) {
+            MiuixTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = stringResource(R.string.chat_history_rename_hint),
+                singleLine = true,
+            )
+        }
+    }
 }
 
 /** 抽屉底部的语言入口：显示当前选择，点开三选一。 */
@@ -221,6 +234,13 @@ private fun DrawerItem(
     indented: Boolean = false,
     expandable: Boolean = false,
     expanded: Boolean = false,
+    /**
+     * 「展开 / 收起」与「进入该页面」是两个不同的动作。
+     *
+     * 之前箭头就是整行的一部分，点它等于点整行，于是展开子列表的同时把抽屉也关了。
+     * 现在把箭头单独接出来：点箭头只切换展开，点行的其它地方才导航。
+     */
+    onToggleExpand: (() -> Unit)? = null,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -261,12 +281,28 @@ private fun DrawerItem(
             MiuixBadge(count = badgeCount)
         }
         if (expandable) {
-            MiuixIcon(
-                icon = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                contentDescription = null,
-                tint = colors.onSurfaceVariant,
-                size = 18.dp,
+            val arrowPress = rememberMiuixPressState()
+            val arrowDesc = stringResource(
+                if (expanded) R.string.app_drawer_collapse else R.string.app_drawer_expand,
             )
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(MiuixTheme.radius.inner))
+                    .miuixClickable(
+                        arrowPress,
+                        true,
+                        onClick = { onToggleExpand?.invoke() },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                MiuixIcon(
+                    icon = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = arrowDesc,
+                    tint = colors.onSurfaceVariant,
+                    size = 18.dp,
+                )
+            }
         }
     }
 }
@@ -297,18 +333,27 @@ private fun DrawerFooterIcon(
     }
 }
 
-/** 抽屉里的一条历史对话：长按弹出删除。 */
+/**
+ * 抽屉里的一条历史对话。
+ *
+ * 编辑与删除放在**长按弹出的溢出菜单**里：这两个动作低频且不可逆，
+ * 常驻行尾会让一整列条目看着都是按钮，也容易误触删除。
+ *
+ * 点击整行 = 切换到该对话（由调用方决定是否收起抽屉）。
+ */
 @Composable
 private fun ChatHistoryRow(
     title: String,
     selected: Boolean,
     onClick: () -> Unit,
+    onRename: () -> Unit = {},
     onDelete: () -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val press = rememberMiuixPressState()
     var showMenu by remember { mutableStateOf(false) }
+
     Box {
         Row(
             modifier = Modifier
@@ -334,6 +379,11 @@ private fun ChatHistoryRow(
                 onDismiss = { showMenu = false },
                 alignStart = true,
             ) {
+                MiuixMenuItem(
+                    text = stringResource(R.string.chat_history_rename),
+                    icon = Icons.Outlined.DriveFileRenameOutline,
+                    onClick = { showMenu = false; onRename() },
+                )
                 MiuixMenuItem(
                     text = stringResource(R.string.chat_history_delete),
                     icon = Icons.Outlined.DeleteOutline,

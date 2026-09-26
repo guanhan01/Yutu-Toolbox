@@ -34,6 +34,17 @@ fun MiuixTopAppBar(
     scrolled: Boolean = false,
     centeredTitle: Boolean = false,
     subtitle: String = "",
+    /**
+     * 是否绘制标题文字。
+     *
+     * 传 false 时标题槽留空（导航图标仍在左、动作区仍在右），[title] 仅用于
+     * 导航按钮的无障碍描述 —— 对话页顶栏就是这种形态：标题内容较长且与消息区
+     * 重复，留着只会挤占空间。
+     *
+     * 官方 TopAppBar 本身没有这个开关（它的 title 是必填 String），
+     * 所以在这一层用空串实现。
+     */
+    showTitle: Boolean = true,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val colors = MiuixTheme.colors
@@ -55,9 +66,11 @@ fun MiuixTopAppBar(
         }
     }
 
+    val shownTitle = if (showTitle) title else ""
+
     if (centeredTitle) {
         OfficialTopAppBar(
-            title = title,
+            title = shownTitle,
             modifier = modifier,
             color = background,
             titleColor = colors.onSurface,
@@ -68,7 +81,7 @@ fun MiuixTopAppBar(
         )
     } else {
         OfficialSmallTopAppBar(
-            title = title,
+            title = shownTitle,
             modifier = modifier,
             color = background,
             titleColor = colors.onSurface,

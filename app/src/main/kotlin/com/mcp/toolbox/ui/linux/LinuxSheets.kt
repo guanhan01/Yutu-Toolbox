@@ -160,6 +160,7 @@ internal suspend fun probeVersions(
         echo "PYTHON=${'$'}(uv --version 2>&1 | head -n 1)"
         echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
         echo "SSH=${'$'}(ssh -V 2>&1 | head -n 1)"
+        echo "JAVA=${'$'}(java -version 2>&1 | head -n 1)"
         echo "APK=${'$'}(jadx --version 2>&1 | head -n 1)"
         echo "GIT=${'$'}(git --version 2>&1 | head -n 1)"
         echo "CODEX=${'$'}(codex --version 2>&1 | head -n 1)"
@@ -174,6 +175,7 @@ internal suspend fun probeVersions(
             "PYTHON" -> LinuxComponent.PYTHON
             "NODE" -> LinuxComponent.NODE
             "SSH" -> LinuxComponent.SSH
+            "JAVA" -> LinuxComponent.JAVA
             "APK" -> LinuxComponent.APK
             "GIT" -> LinuxComponent.GIT
             "CODEX" -> LinuxComponent.CODEX

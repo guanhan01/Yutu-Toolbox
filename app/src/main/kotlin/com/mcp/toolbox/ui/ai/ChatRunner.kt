@@ -7,6 +7,7 @@ import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.feature.home.ChatUsageStore
 import com.mcp.toolbox.feature.home.CompressionStore
 import com.mcp.toolbox.feature.home.PlanStore
+import com.mcp.toolbox.feature.mcp.SkillStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -363,6 +364,8 @@ object ChatRunner {
             ChatMemoryStore.syncModelWindow(context, config.active.contextWindowOrNull() ?: 0)
             ChatMemoryStore.buildPrompt()?.let { add(it) }
             PlanStore.buildPrompt(sessionId)?.let { add(it) }
+            // 用户导入并启用的 Skill：只给目录（名称 + 描述），正文按需用 skill.read 取
+            SkillStore.buildPrompt()?.let { add(it) }
         }
         return parts.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }

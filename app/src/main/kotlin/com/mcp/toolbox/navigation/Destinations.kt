@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,6 +46,7 @@ object Routes {
     const val DECOMPILE = "decompile"
     const val MCP = "mcp"
     const val ARTIFACTS = "artifacts"
+    const val SKILLS = "skills"
     const val SETTINGS = "settings"
     const val AI_SETTINGS = "settings/ai"
     const val AI_PROVIDERS = "settings/ai/providers"
@@ -66,15 +68,21 @@ val DrawerPrimary: List<Destination> = listOf(
 )
 
 /** 「应用工具」子页面里的工具入口。 */
+/**
+ * 「应用工具」页面的入口。
+ *
+ * 这里只列**面向用户的功能页**。以下页面已从入口移除，但路由与实现保留：
+ *  - 网络 / 数据库：都是开发者向的工具，且 AI 侧已有等价能力
+ *    （http.request、net.info、db.* / sql.query），不再单独占用入口。
+ *  - 反编译：面向用户的编辑器入口去掉；反编译能力本身仍完整保留给 AI
+ *    （apk.* / dex.* / build.* 共约二十个工具），不影响对话里使用。
+ *  - MCP 产物：属于 MCP 服务的附属目录，入口集中到 MCP 页面内部。
+ */
 val ToolEntries: List<Destination> = listOf(
     Destination(Routes.APPS, R.string.app_nav_apps, Icons.Outlined.Smartphone, implStage = "P2"),
     Destination(Routes.WEB, R.string.app_nav_web, Icons.Outlined.Language, implStage = "P3"),
-    Destination(Routes.NETWORK, R.string.app_nav_network, Icons.Outlined.Wifi, implStage = "P3"),
-    Destination(Routes.DATABASE, R.string.app_nav_database, Icons.Outlined.Storage, implStage = "P4"),
     Destination(Routes.CAPTURE, R.string.app_nav_capture, Icons.Outlined.Bolt, implStage = "P5"),
-    Destination(Routes.DECOMPILE, R.string.app_nav_decompile, Icons.Outlined.Terminal, implStage = "P6"),
     Destination(Routes.MCP, R.string.app_nav_mcp, Icons.Outlined.Hub, implStage = "P7"),
-    Destination(Routes.ARTIFACTS, R.string.app_nav_artifacts, Icons.Outlined.GridView, implStage = "P7"),
 )
 
 /** 「网络」二级可折叠菜单。 */
@@ -90,6 +98,7 @@ val DrawerNetworkChildren: List<Destination> = listOf(
 /** 抽屉底部固定项。 */
 val DrawerFooter: List<Destination> = listOf(
     Destination(Routes.TOOLS, R.string.app_drawer_group_tools, Icons.Outlined.GridView),
+    Destination(Routes.SKILLS, R.string.app_nav_skills, Icons.Outlined.Extension),
     Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, Icons.Outlined.AutoAwesome),
     Destination(Routes.SETTINGS, R.string.app_nav_settings, Icons.Outlined.Settings),
     Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),

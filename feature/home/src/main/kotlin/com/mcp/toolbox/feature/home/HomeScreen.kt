@@ -131,11 +131,9 @@ import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Widgets
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -522,7 +520,10 @@ fun HomeScreen(
             .background(colors.background),
     ) {
         MiuixTopAppBar(
+            // 标题只用于无障碍描述，不再绘制：对话页的标题与消息内容重复，
+            // 摆在中间既占地方又容易被长标题截断成「检查所有工…」。
             title = session?.displayTitle ?: stringResource(R.string.chat_title),
+            showTitle = false,
             navigationIcon = Icons.Outlined.Menu,
             onNavigationClick = onOpenDrawer,
             actions = {
@@ -564,131 +565,127 @@ fun HomeScreen(
         var inputBarHeightPx by remember { mutableIntStateOf(0) }
 
         Box(Modifier.weight(1f)) {
-            if (messageCount == 0) {
-                ChatSuggestions(onPick = { submit(it) })
-            } else {
-                // 「回到最新」浮标：用户往上翻时出现，点一下回到底部
-                if (sending && !atBottom) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(colors.surfaceContainerHigh)
-                            .clickable {
+            // 「回到最新」浮标：用户往上翻时出现，点一下回到底部
+            if (sending && !atBottom) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.surfaceContainerHigh)
+                        .clickable {
+                            scope.launch {
+                                listState.animateScrollToItem(session!!.messages.size + 8)
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixIcon(
+                        Icons.Outlined.ArrowDownward,
+                        stringResource(R.string.chat_jump_latest),
+                        tint = colors.onSurfaceVariant,
+                        size = 20.dp,
+                    )
+                }
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = spacing.pageHorizontal,
+                    end = spacing.pageHorizontal,
+                    top = spacing.sm,
+                    // 底部预留输入栏高度：列表铺满内容区后，末条消息仍能滚到输入栏上方
+                    bottom = spacing.md + with(LocalDensity.current) { inputBarHeightPx.toDp() },
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(items = chatItems, key = { it.key }) { item ->
+                    when (item) {
+                        is ChatItem.Summary -> CompressionBlock(
+                            range = item.range,
+                            original = item.original,
+                            step = item.position + 1,
+                            total = compression?.ranges?.size ?: 1,
+                            onRestore = {
                                 scope.launch {
-                                    listState.animateScrollToItem(session!!.messages.size + 8)
+                                    CompressionStore.remove(context, session!!.id, item.range.id)
                                 }
                             },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        MiuixIcon(
-                            Icons.Outlined.ArrowDownward,
-                            stringResource(R.string.chat_jump_latest),
-                            tint = colors.onSurfaceVariant,
-                            size = 20.dp,
+                        )
+
+                        is ChatItem.Process -> ProcessBlock(
+                            steps = item.steps,
+                            expandedKey = item.key,
+                            expandedMap = processExpanded,
+                        )
+
+                        is ChatItem.Single -> MessageBubble(
+                            message = item.message,
+                            onCopy = {
+                                clipboard.setText(
+                                    androidx.compose.ui.text.AnnotatedString(item.message.content),
+                                )
+                            },
+                            onResend = {
+                                if (!sending) scope.launch { regenerateFrom(item.message) }
+                            },
+                            onDelete = {
+                                if (!sending) scope.launch {
+                                    ChatStore.deleteMessage(context, session!!.id, item.message.id)
+                                }
+                            },
+                            onEdit = { if (!sending) beginEdit(item.message) },
                         )
                     }
                 }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = spacing.pageHorizontal,
-                        end = spacing.pageHorizontal,
-                        top = spacing.sm,
-                        // 底部预留输入栏高度：列表铺满内容区后，末条消息仍能滚到输入栏上方
-                        bottom = spacing.md + with(LocalDensity.current) { inputBarHeightPx.toDp() },
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(items = chatItems, key = { it.key }) { item ->
-                        when (item) {
-                            is ChatItem.Summary -> CompressionBlock(
-                                range = item.range,
-                                original = item.original,
-                                step = item.position + 1,
-                                total = compression?.ranges?.size ?: 1,
-                                onRestore = {
-                                    scope.launch {
-                                        CompressionStore.remove(context, session!!.id, item.range.id)
-                                    }
-                                },
+                if (sending) {
+                    // 思考与工具调用按发生顺序收进同一个过程框：谁先发生谁在前。
+                    // 中间旁白（模型带工具那轮的正文）仍按原位置单独铺开，
+                    // 于是「工具之后继续思考」自然落在工具下面。
+                    val processSteps = mutableListOf<ProcessStep>()
+                    fun flushProcess() {
+                        if (processSteps.isNotEmpty()) {
+                            val snapshot = processSteps.toList()
+                            item(key = liveProcessKey) {
+                                ProcessBlock(
+                                    steps = snapshot,
+                                    expandedKey = liveProcessKey,
+                                    expandedMap = processExpanded,
+                                    autoOpen = true,
+                                )
+                            }
+                            processSteps.clear()
+                        }
+                    }
+                    runningTimeline.forEach { step ->
+                        when (step) {
+                            is RunningStep.Thinking -> processSteps += ProcessStep.Thinking(
+                                text = step.text,
+                                live = step.live,
+                                elapsedMs = step.elapsedMs,
                             )
-
-                            is ChatItem.Process -> ProcessBlock(
-                                steps = item.steps,
-                                expandedKey = item.key,
-                                expandedMap = processExpanded,
+                            is RunningStep.Tool -> processSteps += ProcessStep.Tool(
+                                name = step.name,
+                                title = toolStepTitle(context, step.name, step.arguments),
+                                arguments = step.arguments,
+                                result = step.result,
+                                running = step.result.isEmpty(),
+                                elapsedMs = step.elapsedMs,
                             )
-
-                            is ChatItem.Single -> MessageBubble(
-                                message = item.message,
-                                onCopy = {
-                                    clipboard.setText(
-                                        androidx.compose.ui.text.AnnotatedString(item.message.content),
-                                    )
-                                },
-                                onResend = {
-                                    if (!sending) scope.launch { regenerateFrom(item.message) }
-                                },
-                                onDelete = {
-                                    if (!sending) scope.launch {
-                                        ChatStore.deleteMessage(context, session!!.id, item.message.id)
-                                    }
-                                },
-                                onEdit = { if (!sending) beginEdit(item.message) },
+                            // 中间旁白也进同一个过程块：它和同轮的思考、工具是一体的
+                            is RunningStep.Narration -> processSteps += ProcessStep.Narration(
+                                text = step.text,
                             )
                         }
                     }
-                    if (sending) {
-                        // 思考与工具调用按发生顺序收进同一个过程框：谁先发生谁在前。
-                        // 中间旁白（模型带工具那轮的正文）仍按原位置单独铺开，
-                        // 于是「工具之后继续思考」自然落在工具下面。
-                        val processSteps = mutableListOf<ProcessStep>()
-                        fun flushProcess() {
-                            if (processSteps.isNotEmpty()) {
-                                val snapshot = processSteps.toList()
-                                item(key = liveProcessKey) {
-                                    ProcessBlock(
-                                        steps = snapshot,
-                                        expandedKey = liveProcessKey,
-                                        expandedMap = processExpanded,
-                                        autoOpen = true,
-                                    )
-                                }
-                                processSteps.clear()
-                            }
-                        }
-                        runningTimeline.forEach { step ->
-                            when (step) {
-                                is RunningStep.Thinking -> processSteps += ProcessStep.Thinking(
-                                    text = step.text,
-                                    live = step.live,
-                                    elapsedMs = step.elapsedMs,
-                                )
-                                is RunningStep.Tool -> processSteps += ProcessStep.Tool(
-                                    name = step.name,
-                                    title = toolStepTitle(context, step.name, step.arguments),
-                                    arguments = step.arguments,
-                                    result = step.result,
-                                    running = step.result.isEmpty(),
-                                    elapsedMs = step.elapsedMs,
-                                )
-                                // 中间旁白也进同一个过程块：它和同轮的思考、工具是一体的
-                                is RunningStep.Narration -> processSteps += ProcessStep.Narration(
-                                    text = step.text,
-                                )
-                            }
-                        }
-                        flushProcess()
-                        if (!runningText.isNullOrEmpty()) {
-                            item(key = "pending-text") { StreamingAnswer(runningText!!) }
-                        }
-                        if (runningTimeline.isEmpty() && runningText.isNullOrEmpty()) {
-                            item(key = "pending") { PendingBubble() }
-                        }
+                    flushProcess()
+                    if (!runningText.isNullOrEmpty()) {
+                        item(key = "pending-text") { StreamingAnswer(runningText!!) }
+                    }
+                    if (runningTimeline.isEmpty() && runningText.isNullOrEmpty()) {
+                        item(key = "pending") { PendingBubble() }
                     }
                 }
             }
@@ -1379,83 +1376,6 @@ private fun InputBar(
                 iconSize = 18.dp,
             )
         }
-    }
-}
-
-/** 空态：标题 + 常用能力卡片。点击直接发起一次对话。 */
-@Composable
-private fun ChatSuggestions(onPick: (String) -> Unit) {
-    val colors = MiuixTheme.colors
-    val spacing = MiuixTheme.dimens.spacing
-
-    val items = listOf(
-        Icons.Outlined.Terminal to stringResource(R.string.chat_sug_apk),
-        Icons.Outlined.Smartphone to stringResource(R.string.chat_sug_screen),
-        Icons.Outlined.Wifi to stringResource(R.string.chat_sug_network),
-        Icons.Outlined.Storage to stringResource(R.string.chat_sug_db),
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = spacing.pageHorizontal),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        MiuixIcon(
-            Icons.Outlined.SmartToy,
-            null,
-            tint = colors.onSurfaceVariant,
-            size = 36.dp,
-        )
-        Spacer(Modifier.height(spacing.md))
-        MiuixText(
-            text = stringResource(R.string.chat_hero_title),
-            style = MiuixTheme.typography.titleLarge,
-        )
-        Spacer(Modifier.height(spacing.xl))
-        items.chunked(2).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-            ) {
-                rowItems.forEach { (icon, label) ->
-                    SuggestionCard(
-                        icon = icon,
-                        label = label,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onPick(label) },
-                    )
-                }
-            }
-            Spacer(Modifier.height(spacing.sm))
-        }
-    }
-}
-
-@Composable
-private fun SuggestionCard(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(MiuixTheme.radius.md))
-            .background(colors.surfaceContainerLow)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        MiuixIcon(icon, null, tint = colors.primary, size = 20.dp)
-        MiuixText(
-            text = label,
-            style = MiuixTheme.typography.bodyMedium,
-            maxLines = 2,
-        )
     }
 }
 

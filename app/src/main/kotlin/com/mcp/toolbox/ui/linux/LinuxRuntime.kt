@@ -253,6 +253,7 @@ object LinuxRuntime {
             LinuxComponent.PYTHON -> "uv --version 2>/dev/null || true"
             LinuxComponent.NODE -> "node --version 2>/dev/null || true"
             LinuxComponent.SSH -> "ssh -V 2>&1 || ssh-keygen --help 2>/dev/null | head -1 || true"
+            LinuxComponent.JAVA -> "java -version 2>&1 | head -n 1 || true"
             LinuxComponent.APK -> "apktool --version 2>/dev/null || true"
             LinuxComponent.GIT -> "git --version 2>/dev/null || true"
             LinuxComponent.CODEX -> "codex --version 2>/dev/null || true"

@@ -3,6 +3,7 @@ package com.mcp.toolbox
 import android.app.Application
 import com.mcp.toolbox.core.design.theme.ThemeController
 import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
+import com.mcp.toolbox.feature.mcp.SkillStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +44,8 @@ class ToolboxApplication : Application() {
         appScope.launch {
             runCatching { ChatMemoryStore.load(this@ToolboxApplication) }
             runCatching { PlanStore.load(this@ToolboxApplication) }
+            // Skill 列表与启用状态：AI 系统提示要用它，必须在第一条消息之前就绪
+            runCatching { SkillStore.refresh(this@ToolboxApplication) }
         }
     }
 

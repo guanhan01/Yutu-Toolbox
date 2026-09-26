@@ -247,6 +247,11 @@ object LinuxToolchain {
                 echo "ssh: §(ssh -V 2>&1)"
             """.trimIndent()
 
+            LinuxComponent.JAVA -> """
+                §PKG ca-certificates ${if (alpine) "openjdk21-jre-headless" else "openjdk-21-jre-headless"}
+                echo "java: §(java -version 2>&1 | head -n 1)"
+            """.trimIndent()
+
             LinuxComponent.APK -> """
                 §PKG curl ca-certificates unzip ${if (alpine) "openjdk21-jre-headless" else "openjdk-21-jre-headless"}
                 echo "[4/4] 安装 jadx 与 apktool"
@@ -260,6 +265,7 @@ object LinuxToolchain {
                 printf '#!/bin/sh\nexec java -jar /opt/apktool/apktool.jar "$@"\n' > /opt/apktool/apktool
                 chmod 755 /opt/apktool/apktool
                 ln -sf /opt/apktool/apktool /usr/local/bin/apktool
+                echo "java: §(java -version 2>&1 | head -n 1)"
                 echo "jadx: ok"
                 echo "apktool: ok"
             """.trimIndent()
@@ -349,6 +355,17 @@ object LinuxToolchain {
      * Codex / Claude 走 npm 全局安装，没有 Node 时脚本注定失败；这里只看
      * 可执行文件是否存在，不做真实执行——真跑一次 chroot 代价太大。
      */
+    /**
+     * 安装前必须先装好的依赖。
+     *
+     * jadx 与 apktool 本体都是 jar，装完没有 Java 运行时一样跑不起来；
+     * 放在这里而不是枚举构造参数里，是为了避开枚举项之间的前向引用。
+     */
+    private fun dependenciesOf(component: LinuxComponent): List<LinuxComponent> = when (component) {
+        LinuxComponent.APK -> listOf(LinuxComponent.JAVA)
+        else -> emptyList()
+    }
+
     private fun nodeReady(context: Context, distro: LinuxDistro): Boolean {
         val rootfs = LinuxEnvStore.rootfs(context, distro)
         // 查 node 本体与 npm 包本体，不查 /usr/local/bin/npm：
@@ -402,6 +419,19 @@ object LinuxToolchain {
         if (component.requiresNode && !nodeReady(context, distro)) {
             onLine("✗ 请先安装 Node.js 环境，再安装 ${component.title}")
             return Result.failure(IllegalStateException("请先安装 Node.js 环境"))
+        }
+        // 通用前置依赖：APK 分析缺 Java 时装完也跑不起来，先补上再继续
+        dependenciesOf(component).forEach { dep ->
+            if (!LinuxChecker.isInstalled(context, distro, dep)) {
+                onLine("→ 先安装依赖：${dep.title}")
+                val depResult = installBlocking(context, distro, dep, onProgress, onLine)
+                if (depResult.isFailure) {
+                    onLine("✗ 依赖 ${dep.title} 安装失败，已中止")
+                    return Result.failure(
+                        IllegalStateException("依赖 ${dep.title} 安装失败：${depResult.exceptionOrNull()?.message}"),
+                    )
+                }
+            }
         }
         onLine("→ 开始安装 ${component.title}")
 

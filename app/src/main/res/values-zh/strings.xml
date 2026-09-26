@@ -67,11 +67,6 @@
     <string name="ai_reasoning">思考能力</string>
     <string name="ai_not_configured">尚未配置模型，请先到「AI 设置」填写服务商与 API Key。</string>
     <string name="chat_err_network">请求失败：%1$s</string>
-    <string name="chat_sug_db">查询数据库</string>
-    <string name="chat_sug_network">网络诊断</string>
-    <string name="chat_sug_screen">查看设备信息</string>
-    <string name="chat_sug_apk">分析 APK</string>
-    <string name="chat_hero_title">有什么可以帮你？</string>
     <string name="chat_new">新建对话</string>
     <string name="ai_key_note">密钥已用系统密钥库（Keystore）加密后保存在本机，不会随对话上传。</string>
     <string name="ai_save">保存</string>
@@ -107,6 +102,9 @@
     <string name="app_nav_network_whois">Whois</string>
     <string name="app_nav_network_env">网络环境</string>
     <string name="app_nav_settings">设置</string>
+    <string name="app_nav_skills">Skill 工具箱</string>
+    <string name="app_accessibility_summary">让 AI 免 root 点击、滑动、输入与读取界面</string>
+    <string name="app_accessibility_description">供内置 AI 工具调用：点击、滑动、输入、读取当前界面与截屏。只在工具被调用时执行单条指令，不会自行操作手机。</string>
     <string name="app_nav_about">关于</string>
     <string name="app_nav_theme">主题</string>
 
@@ -181,6 +179,11 @@
     <string name="app_compliance_message">本应用提供的抓包（含 HTTPS 解密）与反编译能力，仅限用于你自有或已获得明确授权的应用的学习与调试；禁止用于破解、篡改他人应用。所有数据仅保存在本机，应用默认不上传任何用户数据。</string>
     <string name="app_compliance_footer">继续即表示你同意上述使用范围。</string>
     <string name="app_action_close">关闭</string>    <string name="chat_history_delete">删除</string>
+    <string name="chat_history_rename">重命名</string>
+    <string name="chat_history_rename_hint">新的名称</string>
+    <string name="app_drawer_expand">展开</string>
+    <string name="app_drawer_collapse">收起</string>
+    <string name="app_action_save">保存</string>
     <string name="memory_title">记忆</string>
     <string name="memory_usage_title">记忆用量</string>
     <string name="memory_usage_detail">已用 %1$d / %2$d token</string>

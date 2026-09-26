@@ -23,19 +23,19 @@ android {
     flavorDimensions += "channel"
     productFlavors {
         create("stable") {
-            // 正式版永远保持 com.mcp.toolbox：以后发布正式版是覆盖更新，
+            // 正式版保持 com.Yutu.Agent：以后发布正式版是覆盖更新，
             // 而不是安装成另一个新应用。
-            applicationId = "com.mcp.toolbox"
+            applicationId = "com.Yutu.Agent"
             // 只有正式版联网检查更新
             buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "true")
         }
         create("beta") {
             // Beta 用独立 applicationId，才能与正式版同机共存。
-            applicationId = "com.mcp.toolbox.beta"
-            manifestPlaceholders["appLabel"] = "Yutu Toolbox Beta"
+            applicationId = "com.Yutu.Agent.beta"
+            manifestPlaceholders["appLabel"] = "Yutu Agt Beta"
             // Beta 版本号独立推进，与正式版互不影响
-            versionCode = 5
-            versionName = "0.1.4"
+            versionCode = 6
+            versionName = "0.1.5"
             versionNameSuffix = "-beta"
             // 内测包不联网检查更新
             buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")

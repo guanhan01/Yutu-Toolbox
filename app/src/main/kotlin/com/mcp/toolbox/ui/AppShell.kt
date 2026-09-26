@@ -91,6 +91,7 @@ import com.mcp.toolbox.ui.ai.AiMemoryScreen
 import com.mcp.toolbox.ui.ai.ChatRunner
 import com.mcp.toolbox.ui.ai.ReasoningEffort
 import com.mcp.toolbox.ui.ai.AiChatClient
+import com.mcp.toolbox.feature.mcp.SkillScreen
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
 import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
 import com.mcp.toolbox.feature.mcp.McpConnectionState
@@ -729,6 +730,14 @@ private fun ToolboxNavHost(
                     onToast = { toastState.show(it) },
                     onOpenArtifacts = { navController.navigate(Routes.ARTIFACTS) },
                 )
+                }
+            }
+            composable(Routes.SKILLS) {
+                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                    SkillScreen(
+                        onBack = { navController.popBackStack() },
+                        onToast = { toastState.show(it) },
+                    )
                 }
             }
             composable(Routes.ARTIFACTS) {

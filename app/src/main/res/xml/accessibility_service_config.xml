@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  无障碍服务声明。
+
+  只申请真正用到的能力：
+  - canPerformGestures：点击 / 长按 / 滑动
+  - canRetrieveWindowContent：读控件树（AI 定位元素用）
+  - canTakeScreenshot：截屏（Android 11+ 的 AccessibilityService.takeScreenshot）
+  不申请 canRequestFilterKeyEvents / canRequestTouchExplorationMode 等会影响
+  用户正常操作的项——这个服务的定位是「被 AI 调用时才动」，不是常驻辅助工具。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:description="@string/app_accessibility_description"
+    android:notificationTimeout="100"
+    android:summary="@string/app_accessibility_summary" />

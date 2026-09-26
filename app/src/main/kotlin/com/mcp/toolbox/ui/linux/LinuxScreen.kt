@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.runtime.Composable
@@ -475,6 +476,7 @@ private fun ComponentRow(
                     LinuxComponent.PYTHON -> Icons.Outlined.Terminal
                     LinuxComponent.NODE -> Icons.Outlined.Memory
                     LinuxComponent.SSH -> Icons.Outlined.Key
+                    LinuxComponent.JAVA -> Icons.Outlined.Build
                     LinuxComponent.APK -> Icons.Outlined.Android
                     LinuxComponent.GIT -> Icons.Outlined.Code
                     LinuxComponent.CODEX -> Icons.Outlined.SmartToy

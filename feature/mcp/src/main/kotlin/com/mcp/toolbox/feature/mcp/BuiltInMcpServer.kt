@@ -57,6 +57,41 @@ object BuiltInMcpServer {
         val client: String,
     )
 
+    /**
+     * 面向**外部 MCP 客户端**暴露的基础工具集。
+     *
+     * 这里是白名单而不是黑名单，原因：内置工具集有 70+ 个，且会随开发不断新增
+     * （反编译、Linux、Skill 等）。用黑名单的话，新加一个敏感工具就会**默认泄漏**给
+     * 外部客户端；白名单则是「没显式加进来就不暴露」，新增工具时天然安全。
+     *
+     * 明确**不暴露**的类别：
+     *  - 高权限 / 敏感：shell.exec、settings.put、app.uninstall、app.clearData、
+     *    system.kill、keystore.manage、file.delete / file.write / file.move 等
+     *  - 界面自动化与截屏：ui.*（含 ui.screenshot）
+     *  - 反编译与重打包：apk.*、dex.*、build.*、decode.*
+     *  - Linux 环境：linux.*、android.install_apk（由 app 模块注入）
+     *  - 抓包：capture.*
+     *  - Skill 与 Agent 状态：skill.*、memory/plan 相关
+     *
+     * 用户仍可在「启用工具」里进一步缩小范围；本白名单是它不可逾越的上限。
+     */
+    val EXTERNAL_SAFE_TOOLS: Set<String> = setOf(
+        // 只读设备信息
+        "device.info", "system.battery", "system.memory", "system.storage",
+        "system.sensors", "system.wifi", "system.prop", "net.info",
+        // 只读应用清单
+        "app.list", "app.info", "app.permissions", "app.components",
+        // 只读文件与搜索
+        "file.list", "file.read", "file.readRange", "file.info", "file.search",
+        "file.grep", "file.tree", "file.hash", "file.du",
+        // 只读数据库查询
+        "db.list", "db.tables", "db.schema", "db.rows", "db.query", "sql.query",
+        // 网络请求与网页读取（对外部客户端是核心用途）
+        "http.request", "web.fetch",
+        // 剪贴板读写（写剪贴板不涉及文件系统与提权）
+        "clipboard.get", "clipboard.set",
+    )
+
     private const val PREFS = "mcp-server"
     private const val KEY_CONFIG = "config"
 
@@ -143,7 +178,7 @@ object BuiltInMcpServer {
      */
     fun tokenFiles(): List<File> {
         val root = Environment.getExternalStorageDirectory()
-        val pkg = appContext?.packageName ?: "com.mcp.toolbox"
+        val pkg = appContext?.packageName ?: "com.Yutu.Agent"
         return listOf(
             File(root, "Documents/$TOKEN_DIR/$TOKEN_FILE"),
             File(root, "Android/media/$pkg/$TOKEN_FILE"),
@@ -213,9 +248,17 @@ object BuiltInMcpServer {
             .edit().putString(KEY_CONFIG, obj.toString()).apply()
     }
 
+    /**
+     * 对外部 MCP 客户端可见的工具。
+     *
+     * 两道过滤，取交集：
+     *  1. 必须在 [EXTERNAL_SAFE_TOOLS] 内（硬上限，敏感与高权限工具一律不出去）；
+     *  2. 若用户在「启用工具」里选了子集，再按它收窄；没选则视为「白名单内全开」。
+     */
     fun tools(): List<ToolDef> {
+        val allowed = toolsByContext.filter { it.name in EXTERNAL_SAFE_TOOLS }
         val enabled = config.value.enabledTools
-        return if (enabled.isEmpty()) toolsByContext else toolsByContext.filter { it.name in enabled }
+        return if (enabled.isEmpty()) allowed else allowed.filter { it.name in enabled }
     }
 
     fun start(context: Context, port: Int = config.value.port): Result<Int> {

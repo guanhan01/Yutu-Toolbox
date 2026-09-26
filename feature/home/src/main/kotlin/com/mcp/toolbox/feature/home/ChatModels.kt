@@ -94,16 +94,25 @@ data class ChatSession(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val messages: List<ChatMessage> = emptyList(),
+    /**
+     * 用户手动设置的标题。
+     *
+     * 与 [title] 的区别：`title` 是新建对话时按时间生成的默认名，用户改它没有意义
+     * ——[displayTitle] 永远优先取首条用户消息，改了也看不出来。所以重命名单独记在
+     * 这里，并拥有最高优先级；为空表示没改过，仍按原文推导。
+     */
+    val customTitle: String? = null,
 ) {
-    /** 列表里显示的标题：优先用首条用户消息，其次用创建时的时间标题。 */
+    /** 列表与顶栏显示的名字：用户改过的名字 > 首条用户消息 > 创建时的时间标题。 */
     val displayTitle: String
-        get() = messages.firstOrNull { it.role == ChatMessage.Role.USER }
-            ?.content
-            ?.lineSequence()
-            ?.firstOrNull()
-            ?.trim()
-            ?.take(24)
-            ?.takeIf { it.isNotEmpty() }
+        get() = customTitle?.takeIf { it.isNotBlank() }
+            ?: messages.firstOrNull { it.role == ChatMessage.Role.USER }
+                ?.content
+                ?.lineSequence()
+                ?.firstOrNull()
+                ?.trim()
+                ?.take(24)
+                ?.takeIf { it.isNotEmpty() }
             ?: title
 }
 

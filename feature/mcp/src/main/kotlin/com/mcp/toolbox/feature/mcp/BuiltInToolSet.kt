@@ -40,7 +40,7 @@ object BuiltInToolSet {
         appList(context),
         artifactList(context),
         captureRecords(),
-    ) + BuiltInToolSetExtra.all(context) + BuiltInToolSetApk.all(context) + BuiltInToolSetDex.all(context) + BuiltInToolSetSys.all(context) + BuiltInToolSetFs.all(context) + BuiltInToolSetApps.all(context) + BuiltInToolSetDb.all(context) + BuiltInToolSetCapture.all(context) + BuiltInToolSetReverse.all(context) + extras.flatMap { it(context) }
+    ) + BuiltInToolSetExtra.all(context) + BuiltInToolSetSkill.all() + BuiltInToolSetWeb.all() + BuiltInToolSetApk.all(context) + BuiltInToolSetDex.all(context) + BuiltInToolSetSys.all(context) + BuiltInToolSetFs.all(context) + BuiltInToolSetApps.all(context) + BuiltInToolSetDb.all(context) + BuiltInToolSetCapture.all(context) + BuiltInToolSetReverse.all(context) + extras.flatMap { it(context) }
 
     private fun deviceInfo(context: Context) = ToolDef(
         name = "device.info",

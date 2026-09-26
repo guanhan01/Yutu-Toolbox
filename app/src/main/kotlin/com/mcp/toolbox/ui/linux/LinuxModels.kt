@@ -20,7 +20,10 @@ enum class LinuxDistro(
 
 /** 运行方式。 */
 enum class LinuxRunMode(val title: String, val subtitle: String) {
-    PROOT("普通模式 · PRoot", "无需 Root，使用独立的私有 Linux 环境"),
+    // 说明与实测对齐：当前执行后端只有系统 chroot（需要 Root）。
+    // PRoot 免 Root 路线在 Android 16 上实测无法 exec（连 /system/bin/toybox 都报
+    // ENOENT），因此不再对外宣称「无需 Root」，以免用户装到一半才发现装不起来。
+    PROOT("普通模式 · 独立环境", "独立的私有 Linux 环境（安装需 Root 权限）"),
     CHROOT("Root 模式 · chroot", "使用 Root 与独立挂载空间，保留已有环境"),
 }
 
@@ -186,7 +189,8 @@ enum class LinuxComponent(
     PYTHON("Python / uv 环境", "uv 与最新正式版 Python", "/usr/local/bin/uv"),
     NODE("Node.js 环境", "Node.js 与 npm", "/usr/local/bin/node"),
     SSH("SSH 远程访问", "sshd、ssh-keygen 与 ssh-agent", "/usr/bin/ssh-keygen"),
-    APK("APK 分析", "JADX、Apktool、smali 与 baksmali", "/opt/apktool/apktool"),
+    APK("APK 分析", "JADX、Apktool、smali 与 baksmali（含 OpenJDK）", "/opt/apktool/apktool"),
+    JAVA("OpenJDK 运行时", "jadx 与 apktool 依赖的 Java 运行时（随 APK 分析一起安装）", "/usr/bin/java"),
     GIT("Git 版本控制", "git 命令行工具", "/usr/bin/git"),
     CODEX("Codex CLI", "OpenAI 命令行助手（需先装 Node.js）", "/usr/local/bin/codex", requiresNode = true),
     CLAUDE("Claude Code", "Anthropic 命令行助手（需先装 Node.js）", "/usr/local/bin/claude", requiresNode = true),
@@ -429,6 +433,17 @@ object LinuxChecker {
     private fun probeExecutable(file: File): Boolean {
         if (file.canExecute()) return true
         return runCatching { Os.lstat(file.absolutePath); true }.getOrDefault(false)
+    }
+
+    /**
+     * 单个组件是否已就绪。
+     *
+     * 判据与 [check] 一致（路径存在且可执行），只是不做版本读取——安装前置依赖时
+     * 只需要知道「装没装」，不需要顺带跑一次探测。
+     */
+    fun isInstalled(context: Context, distro: LinuxDistro, component: LinuxComponent): Boolean {
+        val path = File(LinuxEnvStore.rootfs(context, distro), component.probe.removePrefix("/"))
+        return probeExists(path) && probeExecutable(path)
     }
 
     fun check(context: Context, distro: LinuxDistro): List<ComponentStatus> =
