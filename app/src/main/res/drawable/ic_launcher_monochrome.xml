@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  主题图标（Android 13+ 单色图标）。
+  系统只取本图的 alpha 通道再填主题色，因此这里必须是简化的单色图形，
+  不能直接用彩色插画前景（那会变成一整块实心色）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左耳：垂直椭圆，绕耳根向左倾 -->
+    <group
+        android:pivotX="45"
+        android:pivotY="50"
+        android:rotation="-20">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M39,28 a6,15 0 1,0 12,0 a6,15 0 1,0 -12,0 z" />
+    </group>
+
+    <!-- 右耳：镜像 -->
+    <group
+        android:pivotX="63"
+        android:pivotY="50"
+        android:rotation="20">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M57,28 a6,15 0 1,0 12,0 a6,15 0 1,0 -12,0 z" />
+    </group>
+
+    <!-- 头部 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,64 a20,18 0 1,0 40,0 a20,18 0 1,0 -40,0 z" />
+</vector>
