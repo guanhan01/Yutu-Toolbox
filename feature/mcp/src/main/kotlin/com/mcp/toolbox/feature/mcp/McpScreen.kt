@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -80,7 +81,7 @@ internal enum class McpTab(val label: String) {
  */
 @Composable
 fun McpScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onToast: (String) -> Unit = {},
     onOpenArtifacts: () -> Unit = {},
@@ -190,8 +191,8 @@ fun McpScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "MCP",
-                navigationIcon = Icons.Outlined.Hub,
-                onNavigationClick = onOpenDrawer,
+                navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                onNavigationClick = onBack,
                 actions = {
                     Box {
                         MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })

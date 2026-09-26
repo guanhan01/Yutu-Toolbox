@@ -7,6 +7,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import com.mcp.toolbox.core.design.theme.MiuixTheme
@@ -22,6 +23,36 @@ fun ProvideMiuixContentColor(color: Color, content: @Composable () -> Unit) {
 @Composable
 fun MiuixText(
     text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = MiuixTheme.typography.bodyLarge,
+    color: Color = Color.Unspecified,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+) {
+    val local = LocalMiuixContentColor.current
+    val resolved = when {
+        color != Color.Unspecified -> color
+        local != Color.Unspecified -> local
+        else -> MiuixTheme.colors.onSurface
+    }
+    BasicText(
+        text = text,
+        modifier = modifier,
+        style = style.copy(color = resolved),
+        maxLines = maxLines,
+        overflow = overflow,
+    )
+}
+
+/**
+ * 行内已带样式的重载。
+ *
+ * [MiuixText] 的 String 版本无法承载粗体 / 行内代码这类局部样式，
+ * Markdown 行内渲染需要它，所以在这里补一个同样的入口。
+ */
+@Composable
+fun MiuixText(
+    text: AnnotatedString,
     modifier: Modifier = Modifier,
     style: TextStyle = MiuixTheme.typography.bodyLarge,
     color: Color = Color.Unspecified,

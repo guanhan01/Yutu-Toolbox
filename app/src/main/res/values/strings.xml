@@ -3,7 +3,7 @@
     <string name="app_name">Yutu Toolbox</string>
 
     <!-- 抽屉 / 底栏导航 -->
-    <string name="app_nav_home">Chat</string>
+    <string name="app_nav_home">Chat history</string>
     <string name="linux_install_finished">Finished</string>
     <string name="linux_install_done">Install</string>
     <string name="linux_installing">Installing…</string>
@@ -114,6 +114,7 @@
     <string name="app_drawer_close">Close menu</string>
     <string name="app_drawer_subtitle">Developer toolbox · MCP client</string>
     <string name="app_action_open_drawer">Open menu</string>
+    <string name="app_action_back">Back</string>
     <string name="app_action_more">More</string>
 
     <!-- 语言 -->
@@ -180,4 +181,30 @@
     <string name="app_compliance_message">The packet capture (including HTTPS decryption) and decompilation features are only for learning and debugging apps you own or are explicitly authorized to test. Do not use them to crack or tamper with other people\'s apps. All data stays on this device; nothing is uploaded by default.</string>
     <string name="app_compliance_footer">Continuing means you accept the scope above.</string>
     <string name="app_action_close">Close</string>    <string name="chat_history_delete">Delete</string>
+    <string name="memory_title">Memory</string>
+    <string name="memory_usage_title">Memory usage</string>
+    <string name="memory_usage_detail">%1$d / %2$d tokens used</string>
+    <string name="memory_usage_hint">Also capped by the model window (currently %1$d tokens)</string>
+    <string name="memory_enabled">Enable memory (sent with every request)</string>
+    <string name="memory_core_title">Core memory</string>
+    <string name="memory_core_desc">Always injected. Both you and the AI can edit it — best for long-term preferences and hard requirements.</string>
+    <string name="memory_core_empty">No core memory yet</string>
+    <string name="memory_entries_title">Sub-memories</string>
+    <string name="memory_entries_desc">Created by the AI as needed, or written by you. Turn one off to hide it from the AI.</string>
+    <string name="memory_entries_empty">No sub-memories yet</string>
+    <string name="memory_new">New memory</string>
+    <string name="memory_edit">Edit</string>
+    <string name="memory_add">Add</string>
+    <string name="memory_save">Save</string>
+    <string name="memory_title_hint">Title, e.g. "code style"</string>
+    <string name="memory_from_ai">AI</string>
+    <string name="app_nav_memory">Memory</string>
+    <string name="memory_cancel">Cancel</string>
+    <string name="memory_delete">Delete</string>
+    <string name="chat_usage_compress_done">Compressed %1$d messages into a summary</string>
+    <string name="chat_usage_compress_fail">Compression failed: %1$s</string>
+
+    <string name="ai_model_context_from_remote">Context limit (auto-filled on pull, editable)</string>
+    <string name="ai_context_missing">not provided</string>
+    <string name="memory_usage_hint_unknown">Model context limit unknown, so only your own limit applies; set it in AI settings → Models to tighten this automatically</string>
 </resources>

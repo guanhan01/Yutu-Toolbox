@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.R
 import com.mcp.toolbox.core.design.component.MiuixButton
+import com.mcp.toolbox.core.design.component.MiuixDialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixListItem
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
@@ -85,6 +87,7 @@ fun LinuxScreen(
     var components by remember { mutableStateOf<List<ComponentStatus>>(emptyList()) }
     var sourceId by remember { mutableStateOf(LinuxPrefs.source(context, distro)) }
     var pickSource by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<InstallState?>(null) }
     var partialPercent by remember { mutableStateOf(0) }
     var statusLine by remember { mutableStateOf("") }
@@ -145,6 +148,27 @@ fun LinuxScreen(
     }
 
     /** 下载并安装（或继续安装），完成后立刻重扫工具状态。 */
+    /** 卸载当前发行版：清 rootfs、下载缓存与续装状态，完成后重扫界面状态。 */
+    suspend fun removeAction() {
+        busy = true
+        message = ""
+        statusLine = ""
+        val result = LinuxInstaller.uninstall(
+            context = context,
+            distro = distro,
+            onStatus = { statusLine = it },
+        )
+        busy = false
+        statusLine = ""
+        result.fold(
+            onSuccess = { message = "已卸载 ${distro.displayName} 环境" },
+            onFailure = { message = it.message ?: "卸载失败" },
+        )
+        refresh()
+        refreshPending()
+        rescanComponents()
+    }
+
     suspend fun installAction() {
         busy = true
         message = ""
@@ -212,7 +236,13 @@ fun LinuxScreen(
                     )
                 }
                 Spacer(Modifier.height(spacing.md))
-                Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                // 用 FlowRow 而不是 Row：加上「卸载」后四个按钮在窄屏上会超出一行，
+                // Row 不换行会直接把最后一个挤出卡片裁掉（实测「卸载」被裁得看不见），
+                // FlowRow 放不下时自动换到下一行，任何屏宽都能完整显示。
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                ) {
                     MiuixButton(
                         text = when {
                             busy -> "安装中"
@@ -238,6 +268,14 @@ fun LinuxScreen(
                         onClick = onOpenChecker,
                         variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TEXT,
                     )
+                    // 仅在已安装时给出卸载入口：没装就没有可删的东西
+                    if (installed && !busy) {
+                        MiuixButton(
+                            text = "卸载",
+                            onClick = { confirmRemove = true },
+                            variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TEXT,
+                        )
+                    }
                 }
             }
         }
@@ -315,6 +353,20 @@ fun LinuxScreen(
         Spacer(Modifier.height(32.dp))
     }
 
+    if (confirmRemove) {
+        MiuixDialog(
+            visible = true,
+            onDismiss = { confirmRemove = false },
+            title = "卸载 ${distro.displayName} 环境",
+            message = "将删除该系统已安装的全部内容，包括已装好的扩展工具（$sizeText）。共享文件夹与工作区文件不受影响，但下次使用需要重新下载安装。",
+            confirmText = "卸载",
+            onConfirm = {
+                confirmRemove = false
+                scope.launch { removeAction() }
+            },
+            destructive = true,
+        )
+    }
     if (pickDistro) {
         LinuxChoiceSheet(
             title = stringResource(R.string.linux_distro),

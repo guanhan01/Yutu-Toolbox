@@ -65,11 +65,12 @@ internal object GeminiBackend {
                 JSONObject().put("parts", JSONArray().put(JSONObject().put("text", it))),
             )
         }
-        root.put(
-            "generationConfig",
-            JSONObject()
-                .put("temperature", config.temperature.toDouble()),
-        )
+        val generation = JSONObject()
+            .put("temperature", config.temperature.toDouble())
+        thinkingBudget(config)?.let { budget ->
+            generation.put("thinkingConfig", JSONObject().put("thinkingBudget", budget))
+        }
+        root.put("generationConfig", generation)
 
         if (tools) {
             root.put(
@@ -134,18 +135,25 @@ internal object GeminiBackend {
      * 文本：`candidates[0].content.parts[].text`
      * 工具调用：`candidates[0].content.parts[].functionCall = { name, args }`
      */
-    fun parseEvent(data: String, accumulator: ToolCallAccumulator): String {
-        val root = runCatching { JSONObject(data) }.getOrNull() ?: return ""
+    fun parseEvent(data: String, accumulator: ToolCallAccumulator): StreamDelta {
+        val root = runCatching { JSONObject(data) }.getOrNull() ?: return StreamDelta()
         val parts = root.optJSONArray("candidates")
             ?.optJSONObject(0)
             ?.optJSONObject("content")
             ?.optJSONArray("parts")
-            ?: return ""
+            ?: return StreamDelta()
 
         val text = StringBuilder()
+        val thinking = StringBuilder()
         (0 until parts.length()).forEach { i ->
             val part = parts.optJSONObject(i) ?: return@forEach
-            part.optString("text").takeIf { it.isNotEmpty() }?.let { text.append(it) }
+            val chunk = part.optString("text")
+            if (chunk.isNotEmpty()) {
+                // 2.5 系列把思考内容也放在 parts 里，用 thought=true 标记，
+                // 不分开就会和正式答复混成一段。
+                if (part.optBoolean("thought", false)) thinking.append(chunk)
+                else text.append(chunk)
+            }
             part.optJSONObject("functionCall")?.let { call ->
                 val name = call.optString("name")
                 val args = call.opt("args")?.toString() ?: "{}"
@@ -154,7 +162,22 @@ internal object GeminiBackend {
                 accumulator.append(index, args)
             }
         }
-        return text.toString()
+        val meta = root.optJSONObject("usageMetadata")
+        return StreamDelta(
+            text = text.toString(),
+            reasoning = thinking.toString(),
+            promptTokens = meta?.optInt("promptTokenCount", 0) ?: 0,
+            completionTokens = meta?.optInt("candidatesTokenCount", 0) ?: 0,
+        )
+    }
+
+    /** thinkingBudget：-1 表示动态思考；Off 显式关闭。 */
+    fun thinkingBudget(config: AiConfig): Int? = when (config.reasoning) {
+        ReasoningEffort.OFF -> 0
+        ReasoningEffort.DEFAULT -> null
+        ReasoningEffort.MINIMAL, ReasoningEffort.LOW -> 1024
+        ReasoningEffort.MEDIUM -> 4096
+        else -> -1
     }
 
     /** 工具结果回填：`role: "function"` + `functionResponse`。 */
@@ -212,7 +235,9 @@ internal object GeminiBackend {
             ?: error("响应缺少 candidates：${body.take(200)}")
         val text = StringBuilder()
         (0 until parts.length()).forEach { i ->
-            text.append(parts.optJSONObject(i)?.optString("text").orEmpty())
+            val part = parts.optJSONObject(i) ?: return@forEach
+            if (part.optBoolean("thought", false)) return@forEach
+            text.append(part.optString("text"))
         }
         return text.toString().ifBlank { error("回复内容为空") }
     }

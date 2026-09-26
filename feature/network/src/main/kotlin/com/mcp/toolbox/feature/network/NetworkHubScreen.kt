@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Language
@@ -25,7 +26,7 @@ import com.mcp.toolbox.core.design.theme.MiuixTheme
 /** 网络模块：三个子工具的入口页。 */
 @Composable
 fun NetworkHubScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     onOpenRoute: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -34,8 +35,8 @@ fun NetworkHubScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "网络",
-            navigationIcon = Icons.Outlined.Wifi,
-            onNavigationClick = onOpenDrawer,
+            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            onNavigationClick = onBack,
         )
         Column(Modifier.padding(horizontal = spacing.pageHorizontal)) {
             Spacer(Modifier.height(spacing.sm))

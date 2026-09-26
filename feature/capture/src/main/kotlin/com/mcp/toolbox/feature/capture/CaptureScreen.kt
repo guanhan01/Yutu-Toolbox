@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteSweep
@@ -94,7 +95,7 @@ private const val FILTER_ALL = "ALL"
 
 @Composable
 fun CaptureScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onToast: (String) -> Unit = {},
 ) {
@@ -177,8 +178,8 @@ fun CaptureScreen(
 
         MiuixTopAppBar(
             title = str.title,
-            navigationIcon = Icons.Outlined.VpnKey,
-            onNavigationClick = onOpenDrawer,
+            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            onNavigationClick = onBack,
             actions = {
                 MiuixIconButton(
                     Icons.Outlined.Settings, str.actionSettings, onClick = { configOpen = true })

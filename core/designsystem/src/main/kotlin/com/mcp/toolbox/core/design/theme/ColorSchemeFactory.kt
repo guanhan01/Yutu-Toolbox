@@ -127,6 +127,35 @@ object MiuixColorSchemeFactory {
     }
 }
 
+/**
+ * 纯白模式。
+ *
+ * 只压 surface 系，不动主色：主色仍是 Seed 派生的鲜艳色，
+ * 所以滑杆、按钮这些「用主色画」的控件在纯白下依旧是鲜艳的。
+ * 气泡与输入栏落在 surfaceContainer / surfaceContainerLow，按「灰白」给值，
+ * 保证在白底上仍有分层、不是一片死白。
+ */
+fun MiuixColors.toPureWhite(): MiuixColors = copy(
+    isDark = false,
+    amoled = false,
+    pureWhite = true,
+    background = Color(0xFFFFFFFF),
+    surface = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFF2F2F5),
+    surfaceBright = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFF1F1F4),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF6F6F8),
+    surfaceContainer = Color(0xFFF1F1F4),
+    surfaceContainerHigh = Color(0xFFE9E9EE),
+    surfaceContainerHighest = Color(0xFFE1E1E7),
+    onSurface = Color(0xFF1A1A1C),
+    onSurfaceVariant = Color(0xFF5C5C63),
+    outline = Color(0xFF8E8E96),
+    outlineVariant = Color(0xFFDFDFE4),
+    codeBackground = Color(0xFFF6F6F8),
+)
+
 /** AMOLED 纯黑：把 surface/background 压到 #000000，容器整体下压。 */
 fun MiuixColors.toAmoled(): MiuixColors = copy(
     isDark = true,

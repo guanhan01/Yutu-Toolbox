@@ -29,4 +29,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.activity.compose)
+    // 过程步骤要读内置工具的中文标题（device.info -> 设备信息），只能正向依赖
+    implementation(project(":feature:mcp"))
+    implementation(libs.androidx.compose.material3)
 }

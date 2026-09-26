@@ -59,12 +59,17 @@ internal object AnthropicBackend {
             }
         }
 
+        val thinking = thinkingBudget(config)
         val root = JSONObject()
             .put("model", config.model)
             .put("max_tokens", MAX_TOKENS)
             .put("messages", messages)
             .put("stream", stream)
-            .put("temperature", config.temperature.toDouble())
+            // 开扩展思考时 temperature 只能为 1，否则接口直接报错
+            .put("temperature", if (thinking != null) 1.0 else config.temperature.toDouble())
+        thinking?.let {
+            root.put("thinking", JSONObject().put("type", "enabled").put("budget_tokens", it))
+        }
 
         systemPrompt?.takeIf { it.isNotBlank() }?.let { root.put("system", it) }
 
@@ -111,14 +116,15 @@ internal object AnthropicBackend {
     }
 
     /**
-     * 解析一行 SSE，返回本次的文本增量与工具调用增量。
+     * 解析一行 SSE，返回本次的正文增量与推理增量。
      *
      * Anthropic 的事件形如：
-     * - `content_block_start`：`content_block.type == tool_use`，带 id / name
-     * - `content_block_delta`：`delta.type == text_delta` 时取 `delta.text`；
-     *   `input_json_delta` 时取 `delta.partial_json` 追加到参数
+     * - `content_block_start`：`content_block.type == tool_use` 带 id / name；
+     *   `type == thinking` 表示扩展思考块开始
+     * - `content_block_delta`：`text_delta` 取 `delta.text`；
+     *   `thinking_delta` 取 `delta.thinking`；`input_json_delta` 追加参数
      */
-    fun parseEvent(data: String, accumulator: ToolCallAccumulator): Pair<String, Unit>? {
+    fun parseEvent(data: String, accumulator: ToolCallAccumulator): StreamDelta? {
         val root = runCatching { JSONObject(data) }.getOrNull() ?: return null
         return when (root.optString("type")) {
             "content_block_start" -> {
@@ -130,27 +136,53 @@ internal object AnthropicBackend {
                         name = block.optString("name"),
                     )
                 }
-                "" to Unit
+                StreamDelta()
+            }
+
+            // message_start 带输入用量；message_delta 带累计输出用量
+            "message_start" -> {
+                val usage = root.optJSONObject("message")?.optJSONObject("usage")
+                StreamDelta(promptTokens = usage?.optInt("input_tokens", 0) ?: 0)
+            }
+
+            "message_delta" -> {
+                val usage = root.optJSONObject("usage")
+                StreamDelta(completionTokens = usage?.optInt("output_tokens", 0) ?: 0)
             }
 
             "content_block_delta" -> {
                 val delta = root.optJSONObject("delta")
                 when (delta?.optString("type")) {
-                    "text_delta" -> delta.optString("text") to Unit
+                    "text_delta" -> StreamDelta(text = delta.optString("text"))
+                    "thinking_delta" -> StreamDelta(reasoning = delta.optString("thinking"))
+                    "signature_delta" -> StreamDelta(signature = delta.optString("signature"))
                     "input_json_delta" -> {
                         accumulator.append(
                             index = root.optInt("index", 0),
                             partial = delta.optString("partial_json"),
                         )
-                        "" to Unit
+                        StreamDelta()
                     }
 
-                    else -> "" to Unit
+                    else -> StreamDelta()
                 }
             }
 
             else -> null
         }
+    }
+
+    /**
+     * 是否启用扩展思考。
+     *
+     * Off / Default 不下发：Default 的语义是「按服务商默认」，Anthropic 的默认
+     * 是不思考，显式下发反而会挤占 max_tokens。
+     */
+    fun thinkingBudget(config: AiConfig): Int? = when (config.reasoning) {
+        ReasoningEffort.OFF, ReasoningEffort.DEFAULT -> null
+        ReasoningEffort.MINIMAL, ReasoningEffort.LOW -> 1024
+        ReasoningEffort.MEDIUM -> 2048
+        else -> 3072
     }
 
     /** 把 tool_use 结果转成下一轮的 user 消息块。 */
@@ -167,12 +199,27 @@ internal object AnthropicBackend {
         return JSONObject().put("role", "user").put("content", parts)
     }
 
-    /** 把 assistant 的 tool_use 回填进历史。 */
+    /**
+     * 把 assistant 的 tool_use 回填进历史。
+     *
+     * 开启扩展思考后，Anthropic 要求把当轮的 thinking 块（含签名）原样回传，
+     * 且必须排在 tool_use 之前，否则下一轮直接返回 400。
+     */
     fun assistantToolUseBlock(
         text: String,
         calls: List<ToolCallAccumulator.Call>,
+        thinking: String = "",
+        signature: String = "",
     ): JSONObject {
         val parts = JSONArray()
+        if (thinking.isNotBlank()) {
+            parts.put(
+                JSONObject()
+                    .put("type", "thinking")
+                    .put("thinking", thinking)
+                    .put("signature", signature),
+            )
+        }
         if (text.isNotBlank()) parts.put(JSONObject().put("type", "text").put("text", text))
         calls.forEach { c ->
             parts.put(
@@ -253,3 +300,12 @@ internal object MediaReader {
         mime to android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }.getOrNull()
 }
+
+/** 一次流式增量：正文、推理、思考签名与用量分开。 */
+internal data class StreamDelta(
+    val text: String = "",
+    val reasoning: String = "",
+    val signature: String = "",
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
+)

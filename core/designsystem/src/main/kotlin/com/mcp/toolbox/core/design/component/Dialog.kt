@@ -20,11 +20,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mcp.toolbox.core.design.theme.MiuixTheme
-import com.mcp.toolbox.core.design.theme.UiStyle
 import top.yukonga.miuix.kmp.overlay.OverlayDialog as OfficialOverlayDialog
 
 /**
- * 标准对话框。按 [UiStyle] 分两套实现：经典自绘 / 官方库。
+ * 标准对话框。实现为官方 Miuix 组件。
  * destructive = true 时确认按钮走红色（卸载/冻结/删除/解密 HTTPS 等危险操作）。
  */
 @Composable
@@ -40,11 +39,7 @@ fun MiuixDialog(
     destructive: Boolean = false,
     content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixDialogOfficial(visible, onDismiss, title, modifier, message, confirmText, onConfirm, dismissText, destructive, content)
-    } else {
-        MiuixDialogClassic(visible, onDismiss, title, modifier, message, confirmText, onConfirm, dismissText, destructive, content)
-    }
+    MiuixDialogOfficial(visible, onDismiss, title, modifier, message, confirmText, onConfirm, dismissText, destructive, content)
 }
 
 /**
@@ -112,72 +107,3 @@ private fun MiuixDialogOfficial(
  * 标准对话框：28dp 圆角、标题 + 说明 + 可选自定义内容 + 操作按钮。
  * destructive = true 时确认按钮走红色（卸载/冻结/删除/解密 HTTPS 等危险操作）。
  */
-@Composable
-private fun MiuixDialogClassic(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    title: String,
-    modifier: Modifier = Modifier,
-    message: String? = null,
-    confirmText: String = "确定",
-    onConfirm: () -> Unit = {},
-    dismissText: String? = "取消",
-    destructive: Boolean = false,
-    content: (@Composable ColumnScope.() -> Unit)? = null,
-) {
-    if (!visible) return
-    val colors = MiuixTheme.colors
-    val radius = MiuixTheme.radius
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Box(modifier = Modifier.padding(horizontal = 32.dp)) {
-            Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(radius.dialog))
-                    .background(colors.surfaceContainerHigh)
-                    .padding(24.dp),
-            ) {
-                MiuixText(text = title, style = MiuixTheme.typography.titleLarge)
-                if (message != null) {
-                    Spacer(Modifier.height(8.dp))
-                    MiuixText(
-                        text = message,
-                        style = MiuixTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-                if (content != null) {
-                    Spacer(Modifier.height(16.dp))
-                    content()
-                }
-                Spacer(Modifier.height(20.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (dismissText != null) {
-                        MiuixButton(
-                            text = dismissText,
-                            onClick = onDismiss,
-                            variant = MiuixButtonVariant.TEXT,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    MiuixButton(
-                        text = confirmText,
-                        onClick = {
-                            onConfirm()
-                            onDismiss()
-                        },
-                        variant = if (destructive) MiuixButtonVariant.FILLED else MiuixButtonVariant.FILLED,
-                    )
-                }
-            }
-        }
-    }
-}

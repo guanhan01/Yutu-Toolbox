@@ -35,12 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mcp.toolbox.core.design.theme.MiuixTheme
-import com.mcp.toolbox.core.design.theme.UiStyle
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet as OfficialOverlayBottomSheet
 import kotlinx.coroutines.launch
 
 /**
- * 底部 Sheet。按 [UiStyle] 分两套实现：经典自绘 / 官方库。
+ * 底部 Sheet。实现为官方 Miuix 组件。
  */
 @Composable
 fun MiuixBottomSheet(
@@ -49,11 +48,7 @@ fun MiuixBottomSheet(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixBottomSheetOfficial(visible, onDismiss, modifier, content)
-    } else {
-        MiuixBottomSheetClassic(visible, onDismiss, modifier, content)
-    }
+    MiuixBottomSheetOfficial(visible, onDismiss, modifier, content)
 }
 
 /**
@@ -72,6 +67,8 @@ private fun MiuixBottomSheetOfficial(
     OfficialOverlayBottomSheet(
         show = visible,
         modifier = modifier,
+        // 官方默认 28dp 固定值；这里接项目 token，跟随主题圆角滑杆
+        cornerRadius = MiuixTheme.radius.sheet,
         onDismissRequest = onDismiss,
     ) {
         Column(
@@ -91,78 +88,3 @@ private fun MiuixBottomSheetOfficial(
  * 动效：进场是带一点过冲的弹性上滑，退场是下滑 + 淡出（遮罩同步淡出）。Dialog 一关就没机会播退场， 所以这里自己记一个「还挂在屏幕上」的状态：点遮罩或按返回先播完收回动画，再回调
  * onDismiss。
  */
-@Composable
-private fun MiuixBottomSheetClassic(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    val radius = MiuixTheme.radius
-    val scope = rememberCoroutineScope()
-
-    var mounted by remember { mutableStateOf(visible) }
-    val progress = remember { Animatable(if (visible) 1f else 0f) }
-    LaunchedEffect(visible) {
-        if (visible) {
-            mounted = true
-            // 等 Dialog 真正上屏一帧，避免窗口创建吃掉动画开头。
-            withFrameNanos {}
-            progress.animateTo(
-                1f,
-                spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-            )
-        } else {
-            progress.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
-            mounted = false
-        }
-    }
-    if (!mounted) return
-
-    // 关闭路径统一先播收回动画：否则点遮罩会瞬间消失，看上去像「没有动画」。
-    val dismissWithMotion: () -> Unit = {
-        scope.launch {
-            progress.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
-            onDismiss()
-        }
-        Unit
-    }
-
-    Dialog(
-        onDismissRequest = dismissWithMotion,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        val p = progress.value.coerceIn(0f, 1f)
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f * p)),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Column(
-                modifier =
-                    modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            // 从屏幕下方滑上来；退场原路滑回去，并同步淡出。
-                            translationY = (1f - p) * size.height
-                            alpha = p
-                        }
-                        .clip(RoundedCornerShape(topStart = radius.sheet, topEnd = radius.sheet))
-                        .background(colors.surfaceContainerLow)
-                        .navigationBarsPadding()
-                        .padding(bottom = 8.dp),
-            ) {
-                Spacer(Modifier.height(10.dp))
-                Box(
-                    modifier =
-                        Modifier.align(Alignment.CenterHorizontally)
-                            .size(width = 36.dp, height = 4.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(colors.outlineVariant),
-                )
-                Spacer(Modifier.height(12.dp))
-                content()
-            }
-        }
-    }
-}

@@ -13,8 +13,8 @@ android {
         // 避免 flavor 覆盖后出现「正式版变新应用」的坑。
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
 
         // 应用名：stable 走 @string/app_name（跟随语言），beta 写死带 Beta 后缀
         manifestPlaceholders["appLabel"] = "@string/app_name"

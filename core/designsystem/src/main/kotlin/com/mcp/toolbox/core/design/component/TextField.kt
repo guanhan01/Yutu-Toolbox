@@ -1,32 +1,30 @@
 package com.mcp.toolbox.core.design.component
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.TextField as OfficialTextField
+import top.yukonga.miuix.kmp.basic.TextFieldColors as OfficialTextFieldColors
 
 /**
- * 文本输入：TextField 12dp 圆角、可选前缀/后缀、清除按钮、错误态与字数计数。
- * 用于 MCP Schema 表单（string 字段）与各模块的搜索/参数输入。
+ * 文本输入。
+ *
+ * 实现走官方 [OfficialTextField]：官方「聚焦时上浮 label + 描边」动画、官方按压与光标行为。
+ * 圆角接项目 token（跟随主题里的圆角滑杆），不写死官方默认的 16dp。
+ * prefix/suffix/清除按钮通过官方 leadingIcon / trailingIcon 槽位承载。
  */
 @Composable
 fun MiuixTextField(
@@ -45,71 +43,47 @@ fun MiuixTextField(
     maxCharCount: Int? = null,
     showClear: Boolean = true,
     /** 输入内容变换；传 [PasswordVisualTransformation] 即为密码框。 */
-    visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
-        androidx.compose.ui.text.input.VisualTransformation.None,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     val colors = MiuixTheme.colors
     val typography = MiuixTheme.typography
     val radius = MiuixTheme.radius
-    val shape = RoundedCornerShape(radius.field)
-    val borderColor = when {
-        isError -> colors.error
-        else -> colors.outlineVariant
+
+    val fieldColors = OfficialTextFieldColors(
+        backgroundColor = colors.surfaceContainerHigh,
+        labelColor = if (isError) colors.error else colors.onSurfaceVariant,
+        borderColor = if (isError) colors.error else colors.primary,
+    )
+
+    // leading：图标 + 前缀文字，按顺序排（官方只提供一个槽位）
+    val leading: (@Composable () -> Unit)? = when {
+        leadingIcon != null -> {
+            {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MiuixIcon(leadingIcon, null, tint = colors.onSurfaceVariant, size = 18.dp)
+                    if (prefix != null) {
+                        Spacer(Modifier.width(6.dp))
+                        MiuixText(prefix, style = typography.bodyMedium, color = colors.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+        prefix != null -> {
+            { MiuixText(prefix, style = typography.bodyMedium, color = colors.onSurfaceVariant) }
+        }
+        else -> null
     }
 
-    Column(modifier = modifier) {
-        BasicTextField(
-            value = value,
-            onValueChange = { next ->
-                if (maxCharCount == null || next.length <= maxCharCount) onValueChange(next)
-            },
-            enabled = enabled,
-            singleLine = singleLine,
-            minLines = minLines,
-            visualTransformation = visualTransformation,
-            textStyle = typography.bodyLarge.copy(color = colors.onSurface),
-            cursorBrush = SolidColor(colors.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(colors.surfaceContainerHigh)
-                .defaultMinSize(minHeight = if (singleLine) 48.dp else 96.dp)
-                .padding(horizontal = 14.dp, vertical = if (singleLine) 0.dp else 12.dp),
-            decorationBox = { inner ->
+    // trailing：后缀文字 + 一键清空
+    val trailing: (@Composable () -> Unit)? = when {
+        suffix != null || (showClear && value.isNotEmpty() && enabled) -> {
+            {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (leadingIcon != null) {
-                        MiuixIcon(leadingIcon, null, tint = colors.onSurfaceVariant, size = 18.dp)
-                        Box(Modifier.width(8.dp))
-                    }
-                    if (prefix != null) {
-                        MiuixText(
-                            text = prefix,
-                            style = typography.bodyMedium,
-                            color = colors.onSurfaceVariant,
-                        )
-                        Box(Modifier.width(4.dp))
-                    }
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        if (value.isEmpty() && placeholder != null) {
-                            MiuixText(
-                                text = placeholder,
-                                style = typography.bodyLarge,
-                                color = colors.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                        inner()
-                    }
                     if (suffix != null) {
-                        Box(Modifier.width(4.dp))
-                        MiuixText(
-                            text = suffix,
-                            style = typography.bodyMedium,
-                            color = colors.onSurfaceVariant,
-                        )
+                        MiuixText(suffix, style = typography.bodyMedium, color = colors.onSurfaceVariant)
                     }
                     if (showClear && value.isNotEmpty() && enabled) {
-                        Box(Modifier.width(6.dp))
+                        if (suffix != null) Spacer(Modifier.width(6.dp))
                         MiuixIconButton(
                             icon = Icons.Outlined.Close,
                             contentDescription = "清除",
@@ -119,33 +93,47 @@ fun MiuixTextField(
                         )
                     }
                 }
+            }
+        }
+        else -> null
+    }
+
+    Column(modifier = modifier) {
+        OfficialTextField(
+            value = value,
+            onValueChange = { next ->
+                if (maxCharCount == null || next.length <= maxCharCount) onValueChange(next)
             },
+            modifier = Modifier.fillMaxWidth(),
+            // 官方默认 insideMargin 是 16dp×16dp，单行表单项会偏高；这里收窄到 14×10，
+            // 与项目既有行高（48dp 级）对齐。圆角走 token，跟随主题圆角滑杆。
+            insideMargin = androidx.compose.ui.unit.DpSize(14.dp, 10.dp),
+            colors = fieldColors,
+            cornerRadius = radius.field,
+            label = placeholder ?: "",
+            useLabelAsPlaceholder = true,
+            enabled = enabled,
+            textStyle = typography.bodyLarge,
+            leadingIcon = leading,
+            trailingIcon = trailing,
+            singleLine = singleLine,
+            minLines = minLines,
+            visualTransformation = visualTransformation,
+            cursorBrush = SolidColor(colors.primary),
         )
 
-        val errorColor = colors.error
-        val help = supportingText
-        val counter = maxCharCount?.let { "${value.length}/$it" }
-        if (help != null || counter != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 4.dp, top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                MiuixText(
-                    text = help ?: "",
-                    style = typography.labelSmall,
-                    color = if (isError) errorColor else colors.onSurfaceVariant,
-                )
-                if (counter != null) {
-                    MiuixText(text = counter, style = typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-            }
+        if (supportingText != null) {
+            MiuixText(
+                text = supportingText,
+                style = typography.labelSmall,
+                color = if (isError) colors.error else colors.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+            )
         }
     }
 }
 
-/** 搜索框：docked 胶囊形态，带搜索图标与一键清空。 */
+/** 搜索框：官方 docked 形态，带搜索图标与一键清空。 */
 @Composable
 fun MiuixSearchField(
     value: String,

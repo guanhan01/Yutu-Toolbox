@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.Color
 data class MiuixColors(
     val isDark: Boolean,
     val amoled: Boolean = false,
+    /** 纯白模式：surface 系压到白色/灰白，主色保持鲜艳。 */
+    val pureWhite: Boolean = false,
 
     val primary: Color,
     val onPrimary: Color,

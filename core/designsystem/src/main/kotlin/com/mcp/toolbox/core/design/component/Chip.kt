@@ -5,7 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -13,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import top.yukonga.miuix.kmp.anim.SinOutEasing
 
 private val ChipShape = RoundedCornerShape(percent = 50)
 
@@ -27,8 +31,17 @@ fun MiuixFilterChip(
 ) {
     val colors = MiuixTheme.colors
     val press = rememberMiuixPressState()
-    val container = if (selected) colors.primaryContainer else Color.Transparent
-    val content = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant
+    // 选中态切换走官方曲线（SinOutEasing），与官方 TabRow / dim 过渡同一手感
+    val container by animateColorAsState(
+        targetValue = if (selected) colors.primaryContainer else Color.Transparent,
+        animationSpec = tween(MiuixTheme.motion.fast, easing = SinOutEasing),
+        label = "chip-container",
+    )
+    val content by animateColorAsState(
+        targetValue = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+        animationSpec = tween(MiuixTheme.motion.fast, easing = SinOutEasing),
+        label = "chip-content",
+    )
 
     Box(
         modifier = modifier

@@ -7,16 +7,9 @@
     <string name="settings_demo_item_title">Standard list item</string>
     <string name="settings_demo_item_desc">Leading icon + title + subtitle + trailing control</string>
     <string name="settings_tag_preview">Preview</string>
-    <string name="settings_palette_title">Palette</string>
-    <string name="settings_palette_desc">Tap the wheel to build a full palette</string>
     <string name="settings_hex_hint">Supports #RRGGBB and #AARRGGBB</string>
-    <string name="settings_theme_source">Theme source</string>
-    <string name="settings_source_default">Default</string>
-    <string name="settings_source_monet">Monet</string>
-    <string name="settings_source_custom">Custom</string>
-    <string name="settings_source_preset">Preset</string>
-    <string name="settings_preset_packs">Preset palettes</string>
-    <string name="settings_preset_packs_count">%1$d palettes</string>
+    <string name="settings_seed_title">Accent color</string>
+    <string name="settings_mode_pure_white">Pure white</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_dark_mode">Light &amp; dark</string>
     <string name="settings_mode_system">Follow system</string>
@@ -29,15 +22,8 @@
     <string name="settings_amoled">AMOLED black</string>
     <string name="settings_amoled_desc">Pushes surface and background to #000000</string>
     <string name="settings_radius_scale">Corner radius: %1$d dp</string>
-    <string name="settings_contrast">Contrast</string>
-    <string name="settings_contrast_standard">Standard</string>
-    <string name="settings_contrast_medium">Medium</string>
-    <string name="settings_contrast_high">High</string>
-    <string name="settings_contrast_very_high">Very high</string>
-    <string name="settings_vibrancy">Theme style</string>
     <string name="settings_motion_scale">Motion duration: %1$s×</string>
     <string name="settings_font_scale">Font scale: %1$s×</string>
-    <string name="settings_line_height">Line height: %1$s×</string>
     <string name="settings_reset">Reset theme</string>
     <string name="settings_copy_accent">Copy accent color</string>
     <string name="settings_reset_done">Theme reset</string>
@@ -48,5 +34,4 @@
     <string name="settings_header_bg_clear">Restore default</string>
     <string name="settings_header_aurora_title">Flowing aurora</string>
     <string name="settings_header_aurora_desc">Aurora drifts randomly behind the header. Direction, speed and position differ each time; a custom image takes precedence</string>
-    <string name="settings_ui_style">UI style</string>
 </resources>

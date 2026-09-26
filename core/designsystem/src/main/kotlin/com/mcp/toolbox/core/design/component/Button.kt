@@ -23,7 +23,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
-import com.mcp.toolbox.core.design.theme.UiStyle
 import top.yukonga.miuix.kmp.basic.Button as OfficialButton
 import top.yukonga.miuix.kmp.basic.ButtonColors as OfficialButtonColors
 import top.yukonga.miuix.kmp.basic.Text as OfficialText
@@ -41,8 +40,7 @@ enum class MiuixButtonSize(val height: Dp, val horizontalPadding: Dp) {
 /**
  * 标准按钮。
  *
- * 按主题的 [UiStyle] 分两套实现：经典走自绘，Miuix 走官方库组件（squircle 圆角 +
- * 官方点击反馈）。两套 API 一致，调用点无需感知。
+ * 实现为官方 Miuix 组件（squircle 圆角 + 官方点击反馈），API 保持项目内统一。
  */
 @Composable
 fun MiuixButton(
@@ -56,15 +54,9 @@ fun MiuixButton(
     leadingIcon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
 ) {
-    if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixButtonOfficial(
+    MiuixButtonOfficial(
             text, onClick, modifier, variant, size, enabled, loading, leadingIcon, trailingIcon,
         )
-    } else {
-        MiuixButtonClassic(
-            text, onClick, modifier, variant, size, enabled, loading, leadingIcon, trailingIcon,
-        )
-    }
 }
 
 // ---------------- Miuix（官方库） ----------------
@@ -112,6 +104,12 @@ private fun MiuixButtonOfficial(
         disabledContentColor = if (variant == MiuixButtonVariant.FILLED) official.disabledOnPrimaryButton else contentColor,
     )
 
+    // 按钮保持项目的胶囊形态：把半径显式传成「高度的一半」，
+    // 而不是留给官方 ButtonDefaults.CornerRadius(16dp) —— 否则按钮圆角既不跟随项目
+    // 视觉语言，也不跟随主题圆角滑杆，成了一个没人管的固定值。
+    val cornerRadius = size.height / 2
+    val pillShape = RoundedCornerShape(cornerRadius)
+
     OfficialButton(
         onClick = onClick,
         modifier = modifier
@@ -120,15 +118,16 @@ private fun MiuixButtonOfficial(
                 when (variant) {
                     MiuixButtonVariant.OUTLINED -> Modifier.border(
                         BorderStroke(1.dp, colors.outlineVariant),
-                        RoundedCornerShape(percent = 50),
+                        pillShape,
                     )
                     MiuixButtonVariant.ELEVATED -> Modifier.shadow(
                         MiuixTheme.dimens.elevation.level2,
-                        RoundedCornerShape(percent = 50),
+                        pillShape,
                     )
                     else -> Modifier
                 },
             ),
+        cornerRadius = cornerRadius,
         enabled = clickable,
         minWidth = 0.dp,
         minHeight = size.height,
@@ -151,79 +150,6 @@ private fun MiuixButtonOfficial(
 
 // ---------------- Classic（自绘） ----------------
 
-@Composable
-private fun MiuixButtonClassic(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier,
-    variant: MiuixButtonVariant,
-    size: MiuixButtonSize,
-    enabled: Boolean,
-    loading: Boolean,
-    leadingIcon: ImageVector?,
-    trailingIcon: ImageVector?,
-) {
-    val colors = MiuixTheme.colors
-    val typography = MiuixTheme.typography
-    val elevation = MiuixTheme.dimens.elevation
-    val clickable = enabled && !loading
-    val press = rememberMiuixPressState(clickable)
-    val shape = RoundedCornerShape(percent = 50)
-
-    val container = when (variant) {
-        MiuixButtonVariant.FILLED -> colors.primary
-        MiuixButtonVariant.TONAL -> colors.secondaryContainer
-        MiuixButtonVariant.ELEVATED -> colors.surfaceContainerHigh
-        MiuixButtonVariant.OUTLINED, MiuixButtonVariant.TEXT -> Color.Transparent
-    }
-    val contentColor = when (variant) {
-        MiuixButtonVariant.FILLED -> colors.onPrimary
-        MiuixButtonVariant.TONAL -> colors.onSecondaryContainer
-        MiuixButtonVariant.ELEVATED -> colors.onSurface
-        MiuixButtonVariant.OUTLINED, MiuixButtonVariant.TEXT -> colors.primary
-    }
-    val textStyle = when (size) {
-        MiuixButtonSize.SMALL -> typography.labelMedium
-        MiuixButtonSize.MEDIUM -> typography.labelLarge
-        MiuixButtonSize.LARGE -> typography.bodyLarge
-    }
-    val iconSize = if (size == MiuixButtonSize.SMALL) 16.dp else 18.dp
-
-    Box(
-        modifier = modifier
-            .height(size.height)
-            .clip(shape)
-            .background(container)
-            .then(
-                when (variant) {
-                    MiuixButtonVariant.OUTLINED -> Modifier.border(BorderStroke(1.dp, colors.outlineVariant), shape)
-                    MiuixButtonVariant.ELEVATED -> Modifier.shadow(elevation.level2, shape)
-                    else -> Modifier
-                },
-            )
-            .miuixClickable(press, clickable, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.4f)
-            .padding(horizontal = size.horizontalPadding),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (press.pressed) {
-            Box(Modifier.matchParentSize().background(colors.pressedOverlay))
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            when {
-                loading -> MiuixCircularProgress(size = iconSize, color = contentColor, strokeWidth = 2.dp)
-                leadingIcon != null -> MiuixIcon(leadingIcon, null, tint = contentColor, size = iconSize)
-            }
-            MiuixText(text = text, style = textStyle, color = contentColor, maxLines = 1)
-            if (trailingIcon != null) MiuixIcon(trailingIcon, null, tint = contentColor, size = iconSize)
-        }
-    }
-}
-
-/** 圆形图标按钮；filled = true 时使用主色底。 */
 @Composable
 fun MiuixIconButton(
     icon: ImageVector,

@@ -29,6 +29,7 @@ data class Destination(
 
 object Routes {
     const val HOME = "home"
+    const val MEMORY = "memory"
     const val TOOLS = "tools"
     const val APPS = "apps"
     const val WEB = "web"

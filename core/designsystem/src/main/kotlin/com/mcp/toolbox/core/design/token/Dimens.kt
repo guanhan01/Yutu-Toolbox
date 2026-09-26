@@ -18,6 +18,12 @@ data class RadiusTokens(val base: Dp = DefaultBase) {
     val dialog: Dp = base * 1.4f
     val sheet: Dp = base * 1.4f
     val completionCard: Dp = base * 0.8f
+
+    /** 输入栏底板：比卡片更圆，避免高容器看着像矩形。 */
+    val composer: Dp = base * 1.4f
+
+    /** 溢出菜单：官方角半径体系里菜单是独立一档（16dp）。 */
+    val menu: Dp = base * 0.8f
     val inner: Dp = (base - InnerDelta).coerceAtLeast(0.dp)
 
     companion object {

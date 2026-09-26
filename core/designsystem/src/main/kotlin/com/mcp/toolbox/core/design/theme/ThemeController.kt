@@ -79,39 +79,29 @@ class ThemeController(
     }
 
     private fun Preferences.read(): ThemeConfig = ThemeConfig(
-        source = enumOr(this[KeySource], ThemeConfig().source),
         darkMode = enumOr(this[KeyDarkMode], DarkModeSetting.FOLLOW_SYSTEM),
         perModuleDark = this[KeyPerModuleDark]?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
         customSeedArgb = this[KeySeed] ?: ThemeConfig.BrandSeedArgb,
-        presetId = this[KeyPreset] ?: ThemeConfig().presetId,
-        amoled = this[KeyAmoled] ?: false,
         dynamicEnabled = this[KeyDynamic] ?: true,
-        contrast = enumOr(this[KeyContrast], ContrastSetting.STANDARD),
-        paletteStyle = enumOr(this[KeyStyle], PaletteStyleSetting.TONAL),
+        amoled = this[KeyAmoled] ?: false,
+        pureWhite = this[KeyPureWhite] ?: false,
         radiusScaleDp = this[KeyRadius] ?: ThemeConfig().radiusScaleDp,
         saturation = this[KeySaturation] ?: 1f,
         fontScale = this[KeyFontScale] ?: 1f,
-        lineHeightScale = this[KeyLineHeight] ?: 1f,
         motionScale = this[KeyMotion] ?: 1f,
-        uiStyle = enumOr(this[KeyUiStyle], UiStyle.MIUIX),
     )
 
     private fun MutablePreferences.write(config: ThemeConfig) {
-        this[KeySource] = config.source.name
         this[KeyDarkMode] = config.darkMode.name
         this[KeyPerModuleDark] = config.perModuleDark.joinToString(",")
         this[KeySeed] = config.customSeedArgb
-        this[KeyPreset] = config.presetId
-        this[KeyAmoled] = config.amoled
         this[KeyDynamic] = config.dynamicEnabled
-        this[KeyContrast] = config.contrast.name
-        this[KeyStyle] = config.paletteStyle.name
+        this[KeyAmoled] = config.amoled
+        this[KeyPureWhite] = config.pureWhite
         this[KeyRadius] = config.radiusScaleDp
         this[KeySaturation] = config.saturation
         this[KeyFontScale] = config.fontScale
-        this[KeyLineHeight] = config.lineHeightScale
         this[KeyMotion] = config.motionScale
-        this[KeyUiStyle] = config.uiStyle.name
     }
 
     private inline fun <reified T : Enum<T>> enumOr(raw: String?, fallback: T): T =
@@ -120,21 +110,16 @@ class ThemeController(
     companion object {
         private const val PersistDebounceMs = 150L
 
-        private val KeySource = stringPreferencesKey("theme_source")
         private val KeyDarkMode = stringPreferencesKey("dark_mode")
         private val KeyPerModuleDark = stringPreferencesKey("per_module_dark")
         private val KeySeed = longPreferencesKey("custom_seed")
-        private val KeyPreset = stringPreferencesKey("preset_id")
         private val KeyAmoled = booleanPreferencesKey("amoled")
+        private val KeyPureWhite = booleanPreferencesKey("pure_white")
         private val KeyDynamic = booleanPreferencesKey("dynamic_enabled")
-        private val KeyContrast = stringPreferencesKey("contrast")
-        private val KeyStyle = stringPreferencesKey("palette_style")
         private val KeyRadius = floatPreferencesKey("radius_scale")
         private val KeySaturation = floatPreferencesKey("saturation")
         private val KeyFontScale = floatPreferencesKey("font_scale")
-        private val KeyLineHeight = floatPreferencesKey("line_height")
         private val KeyMotion = floatPreferencesKey("motion_scale")
-        private val KeyUiStyle = stringPreferencesKey("ui_style")
 
         fun create(context: Context, scope: CoroutineScope): ThemeController =
             ThemeController(context.applicationContext.themeDataStore, scope)

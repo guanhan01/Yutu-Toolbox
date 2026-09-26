@@ -133,7 +133,21 @@ object LinuxRuntime {
             val inner = "cd " + workingDir + " 2>/dev/null || cd /; " + command
             append("chroot \"\$R\" /bin/sh -c ").append(shellQuote(inner))
         }
-        return listOf("/system/bin/sh", "-c", "su -c " + shellQuote(script))
+        // 必须在私有 mount namespace 里执行：下面会把 `/dev`、`/proc`、`/sys`、
+        // `/storage/emulated/0`（约 20 GB 的外部存储）以及系统分区 bind 进 rootfs，
+        // 而 mount namespace 属于进程，这些挂载若留在应用进程里就不会随命令结束
+        // 而消失——实测残留挂载会让系统的「用户数据」统计一路穿透到整个外部存储
+        // 与 `/system`，显示成 21 GB 的幻影占用（真实 rootfs 只有几百 MB），
+        // 且 `pm clear` 也无法回收。
+        //
+        // unshare -m 让每次执行都拿到独立的挂载视图：命令（或超时被杀）一结束，
+        // 命名空间销毁，挂载随之消失，既不需要在结尾逐个 umount，也不怕 kill。
+        // 实测子进程退出后 /proc/mounts 中该挂载命中数回到 0。
+        return listOf(
+            "/system/bin/sh",
+            "-c",
+            "su -c " + shellQuote("unshare -m /system/bin/sh -c " + shellQuote(script)),
+        )
     }
 
     /** 单引号包裹，内部的单引号转义掉。 */

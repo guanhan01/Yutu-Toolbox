@@ -112,10 +112,10 @@ object ChatStore {
     }
 
     /**
-     * 删除 [messageId] 及其后的一切消息，用于「重说」：先截断该回复，
-     * 调用方再把截断后的历史交回模型重新生成。
+     * 删除 [messageId] **以及**其后的一切消息，用于「重说」：
+     * 这条回复整个作废，调用方把截断后的历史交回模型重新生成。
      */
-    suspend fun truncateAfter(context: Context, sessionId: String, messageId: String): List<ChatMessage> {
+    suspend fun truncateFrom(context: Context, sessionId: String, messageId: String): List<ChatMessage> {
         var kept: List<ChatMessage> = emptyList()
         _sessions.value = _sessions.value
             .map { session ->
@@ -126,6 +126,31 @@ object ChatStore {
                     else session.copy(messages = session.messages.subList(0, index)).also {
                         kept = it.messages
                     }
+                }
+            }
+        persist(context)
+        return kept
+    }
+
+    /**
+     * 只删除 [messageId] **之后**的消息，保留它本身，用于「编辑并重发」。
+     *
+     * 与 [truncateFrom] 的区别很关键：编辑要先把用户那条消息留下，
+     * 之后的回复才作废。原先编辑走的是 truncateFrom，把用户消息也删了，
+     * 紧接着 updateMessage 按 id 找不到目标，于是「改了等于没改」，
+     * 界面上看起来就是那条对话消失了。
+     */
+    suspend fun truncateAfter(context: Context, sessionId: String, messageId: String): List<ChatMessage> {
+        var kept: List<ChatMessage> = emptyList()
+        _sessions.value = _sessions.value
+            .map { session ->
+                if (session.id != sessionId) session
+                else {
+                    val index = session.messages.indexOfFirst { it.id == messageId }
+                    if (index < 0) session
+                    else session.copy(
+                        messages = session.messages.subList(0, index + 1),
+                    ).also { kept = it.messages }
                 }
             }
         persist(context)
@@ -160,7 +185,9 @@ object ChatStore {
                         .put("time", m.time)
                         .put("toolName", m.toolName)
                         .put("toolArgs", m.toolArguments)
-                        .put("edited", m.edited),
+                        .put("edited", m.edited)
+                        .put("elapsedMs", m.elapsedMs)
+                        .put("intermediate", m.intermediate),
                 )
             }
             arr.put(
@@ -193,6 +220,8 @@ object ChatStore {
                     toolName = m.optString("toolName"),
                     toolArguments = m.optString("toolArgs"),
                     edited = m.optBoolean("edited", false),
+                    elapsedMs = m.optLong("elapsedMs", 0),
+                    intermediate = m.optBoolean("intermediate", false),
                 )
             }
             ChatSession(
@@ -200,8 +229,28 @@ object ChatStore {
                 title = o.optString("title"),
                 createdAt = o.optLong("createdAt"),
                 updatedAt = o.optLong("updatedAt"),
-                messages = messages,
+                // 迁移：`intermediate` 是后加的字段，此前落盘的中间旁白没有标记。
+                // 它们的特征很明确——ASSISTANT 后面紧跟 TOOL，就是模型「我要去调用
+                // 工具」的过渡语句。不改的话这些历史消息会一直带着复制/重说/删除按钮。
+                messages = markIntermediates(messages),
             )
+        }
+    }
+}
+
+/** 按「assistant 紧跟 tool」的特征，把历史里的中间旁白补上标记。 */
+private fun markIntermediates(messages: List<ChatMessage>): List<ChatMessage> {
+    if (messages.isEmpty()) return messages
+    return messages.mapIndexed { index, message ->
+        val nextIsTool = messages.getOrNull(index + 1)?.role == ChatMessage.Role.TOOL
+        if (message.role == ChatMessage.Role.ASSISTANT &&
+            !message.intermediate &&
+            !message.edited &&
+            nextIsTool
+        ) {
+            message.copy(intermediate = true)
+        } else {
+            message
         }
     }
 }

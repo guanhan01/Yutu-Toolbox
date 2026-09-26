@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -195,7 +196,7 @@ private fun uninstallApp(context: Context, app: InstalledApp, onToast: (String) 
  */
 @Composable
 fun AppsScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onToast: (String) -> Unit = {},
 ) {
@@ -236,8 +237,8 @@ fun AppsScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "应用管理",
-                navigationIcon = Icons.Outlined.Smartphone,
-                onNavigationClick = onOpenDrawer,
+                navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                onNavigationClick = onBack,
                 actions = {
                     Box {
                         MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })

@@ -149,7 +149,7 @@ import java.util.Locale
  */
 @Composable
 fun DecompileScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     onToast: (String) -> Unit = {},
 ) {
@@ -306,7 +306,7 @@ fun DecompileScreen(
             MiuixTopAppBar(
                 title = "反编译",
                 navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
-                onNavigationClick = onOpenDrawer,
+                onNavigationClick = onBack,
                 actions = {
                     Box {
                         MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })

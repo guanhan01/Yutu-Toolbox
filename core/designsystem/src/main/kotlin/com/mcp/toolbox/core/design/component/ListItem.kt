@@ -1,6 +1,5 @@
 package com.mcp.toolbox.core.design.component
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -12,22 +11,36 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.BasicComponent as OfficialBasicComponent
+import top.yukonga.miuix.kmp.basic.BasicComponentDefaults as OfficialBasicComponentDefaults
+import top.yukonga.miuix.kmp.basic.HorizontalDivider as OfficialHorizontalDivider
+import top.yukonga.miuix.kmp.basic.SmallTitle as OfficialSmallTitle
 
-/** 1dp 分隔线，默认从文字起始处缩进（列表内分割线规范）。 */
+/** 1dp 分隔线，默认从文字起始处缩进（列表内分割线规范）。绘制走官方 [OfficialHorizontalDivider]。 */
 @Composable
 fun MiuixDivider(modifier: Modifier = Modifier, startIndent: Dp = 0.dp) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .padding(start = startIndent)
-            .height(1.dp)
-            .background(MiuixTheme.colors.outlineVariant.copy(alpha = 0.5f)),
+    OfficialHorizontalDivider(
+        modifier = modifier.padding(start = startIndent),
+        thickness = 1.dp,
+        color = MiuixTheme.colors.outlineVariant.copy(alpha = 0.5f),
+    )
+}
+
+/** 分组小标题，走官方 [OfficialSmallTitle]。 */
+@Composable
+fun MiuixSmallTitle(text: String, modifier: Modifier = Modifier) {
+    OfficialSmallTitle(
+        text = text,
+        modifier = modifier,
+        textColor = MiuixTheme.colors.onSurfaceVariant,
     )
 }
 
 /**
  * 通用列表项：前导图标 + 标题/副标题 + 尾部控件。
- * 行高 56dp（带副标题 64dp），触控目标 ≥48dp。
+ *
+ * 实现走官方 [OfficialBasicComponent] —— 行高、内边距、按压反馈与禁用态判定全部取自
+ * [OfficialBasicComponentDefaults]，不再自行规定 56/64dp。
  */
 @Composable
 fun MiuixListItem(
@@ -40,53 +53,40 @@ fun MiuixListItem(
     onClick: (() -> Unit)? = null,
     showDivider: Boolean = false,
     danger: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val colors = MiuixTheme.colors
-    val typography = MiuixTheme.typography
-    val spacing = MiuixTheme.dimens.spacing
-    val press = rememberMiuixPressState(onClick != null)
-    val titleColor = if (danger) colors.error else colors.onSurface
+    val titleColor = if (danger) colors.error else colors.onBackground
+    val summaryColor = if (danger) colors.error.copy(alpha = 0.8f) else colors.onSurfaceVariant
+    val iconTint = if (danger) colors.error else colors.onSurfaceVariant
 
     Column {
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = if (subtitle == null) spacing.rowMinHeight else spacing.rowLargeHeight)
-                .then(if (onClick != null) Modifier.miuixClickable(press, true, onClick = onClick) else Modifier)
-                .padding(horizontal = spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (leadingIcon != null) {
-                MiuixIcon(
-                    icon = leadingIcon,
-                    contentDescription = null,
-                    tint = if (danger) colors.error else colors.onSurfaceVariant,
-                    size = 22.dp,
-                )
-                Spacer(Modifier.width(spacing.md))
-            }
-            if (leading != null) {
-                leading()
-                Spacer(Modifier.width(spacing.md))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                MiuixText(text = title, style = typography.bodyLarge, color = titleColor, maxLines = 1)
-                if (subtitle != null) {
-                    MiuixText(
-                        text = subtitle,
-                        style = typography.labelMedium,
-                        color = if (danger) colors.error.copy(alpha = 0.8f) else colors.onSurfaceVariant,
-                        maxLines = 2,
-                    )
+        OfficialBasicComponent(
+            modifier = modifier,
+            title = title,
+            titleColor = OfficialBasicComponentDefaults.titleColor(color = titleColor),
+            summary = subtitle,
+            summaryColor = OfficialBasicComponentDefaults.summaryColor(color = summaryColor),
+            startAction = when {
+                leadingIcon != null -> {
+                    {
+                        MiuixIcon(
+                            icon = leadingIcon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            size = 22.dp,
+                        )
+                    }
                 }
-            }
-            if (trailing != null) {
-                Spacer(Modifier.width(spacing.md))
-                trailing()
-            }
-        }
+                leading != null -> leading
+                else -> null
+            },
+            endActions = trailing?.let { { it() } },
+            onClick = if (enabled) onClick else null,
+            enabled = enabled,
+        )
         if (showDivider) {
-            MiuixDivider(startIndent = if (leadingIcon != null || leading != null) 54.dp else spacing.lg)
+            MiuixDivider(startIndent = if (leadingIcon != null || leading != null) 54.dp else 16.dp)
         }
     }
 }
@@ -151,6 +151,7 @@ fun MiuixSuperSwitch(
         modifier = modifier,
         onClick = if (enabled) ({ onCheckedChange(!checked) }) else null,
         showDivider = showDivider,
+        enabled = enabled,
         trailing = { MiuixSwitch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled) },
     )
 }

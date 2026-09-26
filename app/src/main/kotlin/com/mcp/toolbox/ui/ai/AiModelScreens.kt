@@ -116,12 +116,31 @@ fun AiModelScreen(
                                         baseUrl = provider.baseUrl.ifBlank { cfg.baseUrl },
                                         apiKey = cfg.apiKey,
                                     ).fold(
-                                        onSuccess = { ids ->
+                                        onSuccess = { remote ->
                                             val existing = cfg.models.associateBy { it.id }
                                             updateModels {
-                                                ids.map { id -> existing[id] ?: ModelEntry(id) }
+                                                remote.map { r ->
+                                                    val old = existing[r.id]
+                                                    ModelEntry(
+                                                        id = r.id,
+                                                        // 用户改过的名字优先，别被服务端的覆盖掉
+                                                        displayName = old?.displayName
+                                                            ?.takeIf { it.isNotBlank() }
+                                                            ?: r.displayName,
+                                                        // 窗口取服务端真实值；用户手填过的保留
+                                                        contextWindow = r.contextWindow
+                                                            ?: old?.contextWindow,
+                                                        supportsReasoning = r.supportsReasoning ||
+                                                            old?.supportsReasoning == true,
+                                                    )
+                                                }
                                             }
-                                            message = "已拉取 ${ids.size} 个模型"
+                                            val withCtx = remote.count { it.contextWindow != null }
+                                            message = if (withCtx == 0) {
+                                                "已拉取 ${remote.size} 个模型（服务端未提供上下文上限，请手动填写）"
+                                            } else {
+                                                "已拉取 ${remote.size} 个模型，其中 $withCtx 个带上下文上限"
+                                            }
                                         },
                                         onFailure = { message = "拉取失败：${it.message}" },
                                     )
@@ -228,10 +247,17 @@ fun AiModelScreen(
                                     color = colors.onSurfaceVariant,
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    entry.contextWindow?.let {
+                                    // 有真实值就显示，没有就说没有：不显示猜测值，
+                                    // 否则用户会把猜测当成服务商给的上限
+                                    if (entry.contextWindow != null) {
                                         MiuixTag(
-                                            text = formatContext(it),
+                                            text = formatContext(entry.contextWindow!!),
                                             color = colors.secondary,
+                                        )
+                                    } else {
+                                        MiuixTag(
+                                            text = stringResource(R.string.ai_context_missing),
+                                            color = colors.onSurfaceVariant,
                                         )
                                     }
                                     if (entry.supportsReasoning) {

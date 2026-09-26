@@ -1,20 +1,20 @@
 package com.mcp.toolbox.core.design.component
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.TabRow as OfficialTabRow
 
-/** 分段按钮：Tab 行的标准替代品（反编译页 Java/Smali、数据库页 结构/数据/SQL）。 */
+/**
+ * 分段选择。
+ *
+ * 实现走官方 [OfficialTabRow]（官方「轨道 + 浮起胶囊」形态与滑动动画），
+ * 不再自绘分段轨道。圆角接项目 token，跟随主题圆角滑杆。
+ */
 @Composable
 fun <T> MiuixSegmentedButton(
     options: List<T>,
@@ -23,49 +23,16 @@ fun <T> MiuixSegmentedButton(
     modifier: Modifier = Modifier,
     label: (T) -> String = { it.toString() },
 ) {
-    val colors = MiuixTheme.colors
-    val motion = MiuixTheme.motion
-    val outerShape = RoundedCornerShape(percent = 50)
+    if (options.isEmpty()) return
+    // 官方 TabRow 只接受字符串标签，这里把「下标 ↔ 选项」映射在调用侧完成。
+    val labels = remember(options, selected) { options.map(label) }
+    val index = options.indexOf(selected).coerceAtLeast(0)
 
-    Row(
-        modifier = modifier
-            .height(36.dp)
-            .clip(outerShape)
-            .background(colors.surfaceContainerHighest)
-            .padding(3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        options.forEach { option ->
-            val isSelected = option == selected
-            val press = rememberMiuixPressState()
-            val container by animateColorAsState(
-                targetValue = if (isSelected) colors.surface else colors.surfaceContainerHighest,
-                animationSpec = tween(motion.fast),
-                label = "segment-bg",
-            )
-            val contentColor by animateColorAsState(
-                targetValue = if (isSelected) colors.onSurface else colors.onSurfaceVariant,
-                animationSpec = tween(motion.fast),
-                label = "segment-fg",
-            )
-            val weight by animateFloatAsState(if (isSelected) 1f else 1f, label = "segment-weight")
-
-            Box(
-                modifier = Modifier
-                    .weight(weight)
-                    .fillMaxHeight()
-                    .clip(outerShape)
-                    .background(container)
-                    .miuixClickable(press, true) { onSelect(option) },
-                contentAlignment = Alignment.Center,
-            ) {
-                MiuixText(
-                    text = label(option),
-                    style = MiuixTheme.typography.labelMedium,
-                    color = contentColor,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
+    OfficialTabRow(
+        tabs = labels,
+        selectedTabIndex = index,
+        onTabSelected = { i -> options.getOrNull(i)?.let(onSelect) },
+        modifier = modifier,
+        cornerRadius = MiuixTheme.radius.field,
+    )
 }

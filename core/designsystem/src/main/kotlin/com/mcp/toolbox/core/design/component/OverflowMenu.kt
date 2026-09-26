@@ -48,7 +48,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.foundation.layout.PaddingValues
-import com.mcp.toolbox.core.design.theme.UiStyle
 import top.yukonga.miuix.kmp.basic.ListPopupColumn as OfficialListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider as OfficialPopupPositionProvider
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup as OfficialOverlayListPopup
@@ -88,89 +87,61 @@ fun MiuixOverflowMenu(
     focusable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (MiuixTheme.config.uiStyle == UiStyle.MIUIX) {
-        MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, content)
-        return
-    }
-    val colors = MiuixTheme.colors
-    val radius = MiuixTheme.radius
-    val motion = MiuixTheme.motion
-    // 进场稍长（有展开感），退场更短（不拖沓）。
-    val exitMillis = motion.duration(170)
-    val gapPx = with(LocalDensity.current) { 6.dp.roundToPx() }
-    // Popup 外框总宽 = 内容宽 + 左右内边距，用来预判「右对齐放不放得下」。
-    val boxWidthPx = with(LocalDensity.current) { (MenuContentWidth + MenuEdgePadding * 2).roundToPx() }
-    // 贴锚点右边缘会溢出到屏幕左侧时，改成从锚点左边缘向右展开；
-    // 缩放原点同步从右上角切到左上角，动画方向才和菜单实际位置一致。
-    // 锚点靠左、或显式要求时，从左边缘向右展开，避免菜单甩到屏幕另一侧
-    val expandToEnd = alignStart ||
-        (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
-    // 向上展开（锚点在屏幕下半部，菜单让到上方）时，进场位移改为从下往上
-    val growUpward = stickToBottom || (anchor != null && run {
-        val screenH = LocalConfiguration.current.screenHeightDp.dp
-        val anchorBottomDp = with(LocalDensity.current) { anchor.bottom.toDp() }
-        anchorBottomDp > screenH * 0.6f
-    })
-    val originX = if (expandToEnd) 0f else 1f
-    val positionProvider =
-        remember(anchor, offset, gapPx, expandToEnd, stickToBottom) {
-            OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd, stickToBottom)
+    MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, content)
+}
+
+/**
+ * 菜单定位：右边缘对齐锚点右边缘、顶边落在锚点下方，并夹在窗口内（不会跑出屏幕）。
+ *
+ * anchor 传 null 时退回 Popup 的父布局矩形：只要调用点写成 `Box { 图标按钮; MiuixOverflowMenu(...) }`，
+ * 父布局就是那颗按钮，菜单自然贴着按钮右下展开。传 anchor（窗口坐标）则用于菜单挂在顶层、 父布局是整个页面的场景——那种情况下默认会跑到屏幕左上角。
+ */
+private class OverflowMenuPositionProvider(
+    private val anchor: Rect?,
+    private val offset: IntOffset,
+    private val gapPx: Int,
+    private val expandToEnd: Boolean,
+    private val stickToBottom: Boolean,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val anchorRect = anchor
+        val anchorBottom = anchorRect?.bottom?.roundToInt()
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val maxY = (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+        val rawX =
+            when {
+                // 没有锚点：退回 Popup 父布局，仍然右对齐它的右边缘。
+                anchorRect == null ->
+                    if (expandToEnd) anchorBounds.left + offset.x
+                    else anchorBounds.right - popupContentSize.width + offset.x
+                // 右对齐会溢出左边：贴锚点左边缘向右展开，菜单落在按钮右下侧。
+                expandToEnd -> anchorRect.left.roundToInt() + offset.x
+                // 常规情况：右边缘对齐锚点右边缘。
+                else -> anchorRect.right.roundToInt() - popupContentSize.width + offset.x
+            }
+        // 垂直自适应：优先贴锚点下方展开；下方放不下就改成「覆盖锚点」向上生长，
+        // 让菜单底边贴住锚点底边，保证整份菜单都留在屏幕内，而不是顶到屏幕顶后被截掉下半截。
+        val below = (anchorBottom ?: anchorBounds.top) + gapPx + offset.y
+        val above = anchorRect?.let {
+            // 向上展开：菜单底边落在锚点顶边上方，留出 gap，避免盖住按钮
+            it.top.roundToInt() - popupContentSize.height - gapPx + offset.y
         }
+        val top =
+            when {
+                // 贴底模式：底边固定在屏幕底部上方 gapPx 处
+                stickToBottom -> (windowSize.height - popupContentSize.height - gapPx + offset.y)
+                    .coerceAtLeast(0)
 
-    // Popup 必须活到退出动画播完，所以另用一个「是否还挂在屏幕上」的标志，不能在 expanded 变 false 时直接 return。
-    var mounted by remember { mutableStateOf(expanded) }
-    // 0->1 的动画进度：进场用带过冲的 spring（回弹就是「灵动」的来源），退场用 tween 干脆收回。
-    // 连续开关时 animateTo 会从当前进度直接折返，所以中途打断也是平滑的，不会跳变。
-    val progress = remember { Animatable(if (expanded) 1f else 0f) }
-    LaunchedEffect(expanded) {
-        if (expanded) {
-            mounted = true
-            withFrameNanos {}
-            // 官方 Miuix 的弹出曲线：folmeSpring(damping = 0.5, response = 0.28)，
-            // 与官方 ListPopup 的「灵动回弹」一致
-            progress.animateTo(
-                1f,
-                folmeSpring(damping = 0.5f, response = 0.28f),
-            )
-        } else {
-            progress.animateTo(0f, tween(exitMillis, easing = FastOutSlowInEasing))
-            mounted = false
-        }
-    }
-    if (!mounted) return
-
-    val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
-
-    Popup(
-        onDismissRequest = onDismiss,
-        popupPositionProvider = positionProvider,
-        properties = PopupProperties(focusable = focusable),
-    ) {
-        val p = progress.value
-        val clamped = p.coerceIn(0f, 1f)
-        Column(
-            modifier =
-                modifier
-                    .graphicsLayer {
-                        // 缩放原点固定在右上角：像从三点按钮里「长」出来，收起时再吸回去。
-                        scaleX = 0.55f + 0.45f * p
-                        scaleY = 0.55f + 0.45f * p
-                        transformOrigin = TransformOrigin(originX, if (growUpward) 1f else 0f)
-                        alpha = 0.25f + 0.75f * clamped
-                        translationY = (1f - clamped) *
-                            (if (growUpward) 16.dp.toPx() else -16.dp.toPx())
-                    }
-                    .padding(8.dp)
-                    .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(radius.field))
-                    .clip(RoundedCornerShape(radius.field))
-                    .background(colors.surfaceContainerHigh)
-                    .padding(vertical = 6.dp)
-                    .width(MenuContentWidth)
-                    // 长菜单（如数据库排序 11 项）限制最大高度并可滚动，避免被屏幕裁掉半截。
-                    .heightIn(max = maxMenuHeight)
-                    .verticalScroll(rememberScrollState()),
-            content = content,
-        )
+                below + popupContentSize.height <= windowSize.height -> below
+                above != null -> above.coerceAtLeast(0)
+                else -> below
+            }
+        return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
     }
 }
 
@@ -252,73 +223,6 @@ fun MiuixMenuGroupLabel(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * 菜单定位：右边缘对齐锚点右边缘、顶边落在锚点下方，并夹在窗口内（不会跑出屏幕）。
- *
- * anchor 传 null 时退回 Popup 的父布局矩形：只要调用点写成 `Box { 图标按钮; MiuixOverflowMenu(...) }`，
- * 父布局就是那颗按钮，菜单自然贴着按钮右下展开。传 anchor（窗口坐标）则用于菜单挂在顶层、 父布局是整个页面的场景——那种情况下默认会跑到屏幕左上角。
- */
-private class OverflowMenuPositionProvider(
-    private val anchor: Rect?,
-    private val offset: IntOffset,
-    private val gapPx: Int,
-    private val expandToEnd: Boolean,
-    private val stickToBottom: Boolean,
-) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val anchorRect = anchor
-        val anchorBottom = anchorRect?.bottom?.roundToInt()
-        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
-        val maxY = (windowSize.height - popupContentSize.height).coerceAtLeast(0)
-        val rawX =
-            when {
-                // 没有锚点：退回 Popup 父布局，仍然右对齐它的右边缘。
-                anchorRect == null ->
-                    if (expandToEnd) anchorBounds.left + offset.x
-                    else anchorBounds.right - popupContentSize.width + offset.x
-                // 右对齐会溢出左边：贴锚点左边缘向右展开，菜单落在按钮右下侧。
-                expandToEnd -> anchorRect.left.roundToInt() + offset.x
-                // 常规情况：右边缘对齐锚点右边缘。
-                else -> anchorRect.right.roundToInt() - popupContentSize.width + offset.x
-            }
-        // 垂直自适应：优先贴锚点下方展开；下方放不下就改成「覆盖锚点」向上生长，
-        // 让菜单底边贴住锚点底边，保证整份菜单都留在屏幕内，而不是顶到屏幕顶后被截掉下半截。
-        val below = (anchorBottom ?: anchorBounds.top) + gapPx + offset.y
-        val above = anchorRect?.let {
-            // 向上展开：菜单底边落在锚点顶边上方，留出 gap，避免盖住按钮
-            it.top.roundToInt() - popupContentSize.height - gapPx + offset.y
-        }
-        val top =
-            when {
-                // 贴底模式：底边固定在屏幕底部上方 gapPx 处
-                stickToBottom -> (windowSize.height - popupContentSize.height - gapPx + offset.y)
-                    .coerceAtLeast(0)
-
-                below + popupContentSize.height <= windowSize.height -> below
-                above != null -> above.coerceAtLeast(0)
-                else -> below
-            }
-        return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
-    }
-}
-
-// ---------------- Miuix（官方动画参数 + 锚点跟随） ----------------
-
-/**
- * Miuix 风格实现。
- *
- * 官方 [OfficialOverlayListPopup] 的动画起点由 Popup 父布局边界推算，要求菜单写在
- * 锚点按钮的 Box 内；本项目的菜单都提升到页面顶层、用 [Rect] 传坐标，父布局是整页，
- * 会导致动画永远从页面边缘长出。因此这里保留自绘 Popup（正确跟随锚点），
- * 但动画参数完全采用官方 [OfficialListPopupDefaults]：
- *   FractionAnimationSpec 弹簧驱动 0.15→1 缩放；Alpha 进 200ms / 出 150ms；
- *   transformOrigin 落在锚点那一角，观感与官方一致。
- */
 @Composable
 private fun MiuixOverflowMenuOfficial(
     expanded: Boolean,
@@ -406,8 +310,8 @@ private fun MiuixOverflowMenuOfficial(
                     transformOrigin = TransformOrigin(originX, if (growUpward) 1f else 0f)
                 }
                 .padding(8.dp)
-                .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(radius.field))
-                .clip(RoundedCornerShape(radius.field))
+                .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(MiuixTheme.radius.menu))
+                .clip(RoundedCornerShape(MiuixTheme.radius.menu))
                 .background(colors.surfaceContainerHigh)
                 .padding(vertical = 6.dp)
                 .width(MenuContentWidth)

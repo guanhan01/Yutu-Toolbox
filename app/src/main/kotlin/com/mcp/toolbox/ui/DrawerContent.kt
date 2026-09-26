@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -85,6 +86,8 @@ fun DrawerContent(
     Column(
         modifier = modifier
             .fillMaxSize()
+            // 抽屉靠左，只圆右侧两角：既成「卡片式抽屉」，也不会在屏幕边缘留缺口
+            .clip(RoundedCornerShape(topEnd = MiuixTheme.radius.dialog, bottomEnd = MiuixTheme.radius.dialog))
             .background(colors.surfaceContainerLow)
             .statusBarsPadding(),
     ) {
@@ -113,6 +116,17 @@ fun DrawerContent(
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = spacing.xs),
         ) {
+            // 记忆入口固定在「对话」上方：它是对话的长期配套，不属于工具集
+            DrawerItem(
+                destination = Destination(
+                    route = Routes.MEMORY,
+                    labelRes = R.string.app_nav_memory,
+                    icon = Icons.Outlined.Psychology,
+                ),
+                selected = currentRoute == Routes.MEMORY,
+                onClick = { onNavigate(Routes.MEMORY) },
+            )
+
             // 主列表只保留「首页」，工具统一收进底栏的「应用工具」子页面
             DrawerPrimary.forEach { destination ->
                 val isChat = destination.route == Routes.HOME
@@ -144,7 +158,8 @@ fun DrawerContent(
                                     onClick = {
                                         scope.launch {
                                             ChatStore.select(item.id)
-                                            onClose()
+                                            // 不调 onClose()：切换对话时收起抽屉，
+                                            // 会让「展开/收起对话列表」的交互被抽屉关闭打断
                                         }
                                     },
                                     onDelete = {

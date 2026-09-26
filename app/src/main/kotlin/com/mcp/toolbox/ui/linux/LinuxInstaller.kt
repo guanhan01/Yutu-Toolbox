@@ -75,6 +75,69 @@ object LinuxInstaller {
         }
     }
 
+
+    /**
+     * 卸载一个发行版：删除它的 rootfs、下载缓存与续装状态。
+     *
+     * 这里最大的风险不是删不掉，而是删过头：执行 Linux 命令时会把宿主的
+     * `/dev`、`/proc`、`/sys`、`/storage/emulated/0` 以及自定义目录 bind 进
+     * rootfs，而且执行结束后并不卸载。此时对 rootfs 直接 `rm -rf`，rm 会顺着
+     * 挂载点递归进去，把外部存储与系统目录一并删掉。所以必须先解除本环境下的
+     * 全部挂载，确认一点不剩才动手；只要还有挂载残留就中止，宁可卸载失败。
+     *
+     * 另外 rootfs 由 root 解压产生、属主可能是 root，删除必须走 root shell，
+     * 否则应用进程删不动，清完还留一堆 root 所有的残渣。
+     */
+    suspend fun uninstall(
+        context: Context,
+        distro: LinuxDistro,
+        onStatus: (String) -> Unit = {},
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            onStatus("正在卸载 ${distro.displayName} 环境")
+            val envRoot = LinuxEnvStore.root(context)
+            val target = File(envRoot, distro.name.lowercase())
+            val downloads = LinuxEnvStore.downloads(context)
+            val envPath = envRoot.absolutePath
+            // 挂载点在 /proc/mounts 里记的是解析后的真实路径（/data/user/0/...），
+            // 与 /data/data/... 不是字符串前缀关系，所以按「包名 + files/linux-env」
+            // 匹配，两种写法都能命中
+            val key = "/" + context.packageName + "/files/linux-env"
+            // 用 buildString + \$ 显式转义拼脚本：raw string 里写 ${'$'}{d} 这类占位
+            // 极易把 ${'$'}{shellArg(...)} 当成普通文本送进 shell（实测报 bad substitution），
+            // 而 shell 变量只应转义成 \$ 交给运行时展开。
+            val script = buildString {
+                append("ENV=").append(shellArg(envPath)).append("; ")
+                append("KEY=").append(shellArg(key)).append("; ")
+                // 反复清点并解除：umount 是惰性的，一层解开后可能露出下一层
+                append("for pass in 1 2 3 4 5 6; do ")
+                append("M=\$(grep -F \"\$KEY\" /proc/mounts 2>/dev/null | cut -d' ' -f2); ")
+                append("[ -z \"\$M\" ] && break; ")
+                append("for m in \$M; do umount -l \"\$m\" 2>/dev/null; done; ")
+                append("done; ")
+                append("LEFT=\$(grep -F \"\$KEY\" /proc/mounts 2>/dev/null | wc -l); ")
+                append("if [ \"\$LEFT\" -gt 0 ]; then ")
+                append("echo \"仍有 \$LEFT 处挂载未解除，已中止以免误删宿主目录\"; exit 7; fi; ")
+                append("rm -rf ").append(shellArg(target.absolutePath)).append(" 2>/dev/null; ")
+                append("rm -rf ").append(shellArg(downloads.absolutePath)).append(" 2>/dev/null; ")
+                append("mkdir -p \"\$ENV\" 2>/dev/null; ")
+                append("chown -R ").append(context.applicationInfo.uid).append(":")
+                append(context.applicationInfo.uid).append(" ").append(shellArg(envPath)).append(" 2>/dev/null; ")
+                append("echo OK")
+            }
+            val result = shRaw(script)
+            if (!result.first) {
+                throw IllegalStateException(
+                    "卸载失败（步骤 ${result.second}）：${result.third.take(200)}",
+                )
+            }
+            // 续装状态文件在 filesDir 根下、不在 linux-env 里，需要单独清
+            InstallState.clear(context, distro)
+            onStatus("")
+            Unit
+        }
+    }
+
     // ---------- 阶段一：选源 ----------
 
     /**

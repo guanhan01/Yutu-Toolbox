@@ -7,16 +7,9 @@ import android.view.WindowManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,8 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
@@ -39,6 +31,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.delay
+import top.yukonga.miuix.kmp.basic.Snackbar as OfficialSnackbar
+import top.yukonga.miuix.kmp.basic.SnackbarColors as OfficialSnackbarColors
+import top.yukonga.miuix.kmp.basic.SnackbarData as OfficialSnackbarData
+import top.yukonga.miuix.kmp.basic.SnackbarDuration as OfficialSnackbarDuration
+import top.yukonga.miuix.kmp.basic.SnackbarVisuals as OfficialSnackbarVisuals
 
 enum class MiuixToastTone {
     NEUTRAL,
@@ -50,8 +47,11 @@ enum class MiuixToastTone {
 data class MiuixToastMessage(val id: Long, val text: String, val tone: MiuixToastTone)
 
 /**
- * 顶部胶囊 Toast：设计稿反编译 / 数据库 / 抓包页统一的提示形态。 由 Shell 顶层放置 [MiuixToastHost]，页面通过 [MiuixToastState.show]
- * 触发。
+ * 顶部胶囊提示。
+ *
+ * 视觉走官方 [OfficialSnackbar]（官方圆角、内边距、颜色角色），
+ * 仅保留本站必需的一层「窗口处理」：把承载窗口做成无遮罩、不吃触摸、不抢焦点，
+ * 否则系统给 Dialog 窗口的默认 dim 会把整屏压暗，且会挡住底部 Sheet。
  */
 @Stable
 class MiuixToastState {
@@ -76,12 +76,6 @@ class MiuixToastState {
 
 @Composable fun rememberMiuixToastState(): MiuixToastState = remember { MiuixToastState() }
 
-/**
- * 把提示条所在 Dialog 窗口调成“无遮罩、全屏、不吃触摸”的状态。
- *
- * 关键点是系统给 Dialog 窗口默认带一层 dim（半透明黑，铺满整屏连状态栏一起压暗），
- * 必须显式清掉 FLAG_DIM_BEHIND，否则提示显示期间整屏发灰。
- */
 private fun applyToastWindowParams(view: View) {
     var parent: ViewParent? = view.parent
     while (parent != null) {
@@ -104,21 +98,12 @@ private fun applyToastWindowParams(view: View) {
     }
 }
 
-/**
- * 提示条宿主（灵动岛形态）。
- *
- * 之前用 `Popup` 挂：Popup 是依附主窗口的子窗口，层级比底部 Sheet（独立 Dialog 窗口）低，
- * 所以弹窗打开时提示条会被 Sheet 的半透明遮罩压暗。现在改成：宿主本身是一个独立 Dialog 窗口，
- * 并且只在需要显示时才创建 —— 后创建的窗口一定盖在已经打开的 Sheet 之上，遮罩压不到它。
- *
- * 窗口参数必须在 Dialog 的 View 真正 attach 之后才拿得到，而 Composable 的 `LaunchedEffect`
- * 首次执行时 View 往往还没 attach（跟着帧回调重试也只有很小的时间窗），这会让 dim 时有时无。
- * 因此这里以 `OnAttachStateChangeListener` 为准（attach 发生在窗口首帧绘制之前，不会闪），
- * 另加若干帧的兜底重试。
- *
- * 动效：出现时从屏幕顶部一个小圆点弹落并展开成胶囊（带回弹），收起时整体收缩成一个圆点、同时
- * 向上飞出屏幕顶部。
- */
+/** 官方 Snackbar 需要的数据载体：本站只用来展示文案，动作一律为空。 */
+private class MiuixToastSnackbarData(override val visuals: OfficialSnackbarVisuals) : OfficialSnackbarData {
+    override suspend fun dismiss() = Unit
+    override suspend fun performAction() = Unit
+}
+
 @Composable
 fun MiuixToastHost(state: MiuixToastState, modifier: Modifier = Modifier) {
     val colors = MiuixTheme.colors
@@ -158,13 +143,27 @@ fun MiuixToastHost(state: MiuixToastState, modifier: Modifier = Modifier) {
     }
     if (!mounted) return
 
-    val tint =
-        when (lastTone) {
-            MiuixToastTone.SUCCESS -> colors.success
-            MiuixToastTone.ERROR -> colors.error
-            MiuixToastTone.WARNING -> colors.warning
-            MiuixToastTone.NEUTRAL -> colors.primary
-        }
+    // 语气色改由「底色」表达 —— 官方 Snackbar 没有前导圆点，用容器色区分语义更贴官方形态。
+    val tint = when (lastTone) {
+        MiuixToastTone.SUCCESS -> colors.success
+        MiuixToastTone.ERROR -> colors.error
+        MiuixToastTone.WARNING -> colors.warning
+        MiuixToastTone.NEUTRAL -> colors.primary
+    }
+    val snackbarColors = OfficialSnackbarColors(
+        containerColor = tint.copy(alpha = 0.18f).compositeOver(colors.surfaceContainerHigh),
+        contentColor = colors.onSurface,
+        actionContentColor = colors.onSurfaceVariant,
+        dismissActionContentColor = colors.onSurfaceVariant,
+    )
+    val data = MiuixToastSnackbarData(
+        OfficialSnackbarVisuals(
+            message = lastText,
+            actionLabel = null,
+            withDismissAction = false,
+            duration = OfficialSnackbarDuration.Short,
+        ),
+    )
 
     Dialog(
         onDismissRequest = {},
@@ -200,35 +199,37 @@ fun MiuixToastHost(state: MiuixToastState, modifier: Modifier = Modifier) {
 
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             val p = progress.value.coerceIn(0f, 1f)
-            Row(
+            Box(
                 modifier =
                     modifier
                         .padding(top = 14.dp)
                         .graphicsLayer {
-                            // p: 0 = 收成一个圆点并飞出顶部，1 = 完整胶囊
+                            // p: 0 = 收成一个点并飞出顶部，1 = 完整提示条
                             val scale = 0.06f + 0.94f * p
                             scaleX = scale
                             scaleY = scale
                             transformOrigin = TransformOrigin(0.5f, 0.5f)
                             translationY = -(1f - p) * 300.dp.toPx()
                             alpha = (p / 0.14f).coerceIn(0f, 1f)
-                        }
-                        .shadow(MiuixTheme.dimens.elevation.level3, CircleShape)
-                        .clip(CircleShape)
-                        .background(colors.surfaceContainerHigh)
-                        .border(1.dp, tint.copy(alpha = 0.6f), CircleShape)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                        },
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(tint))
-                Spacer(Modifier.width(10.dp))
-                MiuixText(
-                    text = lastText,
-                    style = MiuixTheme.typography.labelLarge,
-                    color = colors.onSurface,
-                    maxLines = 2,
+                OfficialSnackbar(
+                    data = data,
+                    cornerRadius = MiuixTheme.radius.composer,
+                    colors = snackbarColors,
                 )
             }
         }
     }
+}
+
+/** 让半透明语气色叠在不透明底色之上，避免穿透看到后面的内容。 */
+private fun Color.compositeOver(background: Color): Color {
+    val a = alpha
+    return Color(
+        red = red * a + background.red * (1 - a),
+        green = green * a + background.green * (1 - a),
+        blue = blue * a + background.blue * (1 - a),
+        alpha = 1f,
+    )
 }

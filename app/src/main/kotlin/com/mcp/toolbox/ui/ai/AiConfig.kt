@@ -73,6 +73,15 @@ data class ProviderConfig(
     val enabled: Boolean = true,
 ) {
     val ready: Boolean get() = baseUrl.isNotBlank() && selectedModel.isNotBlank() && apiKey.isNotBlank()
+
+    /**
+     * 当前模型的上下文窗口，**只返回服务端给出的真实值**。
+     *
+     * 拿不到就是 null：用量比例与「还剩多少」都依赖这个分母，用一个猜测值
+     * 会算出一个看起来精确、实际错误的百分比。未知时界面只显示已用量。
+     */
+    fun contextWindowOrNull(): Int? =
+        models.firstOrNull { it.id == selectedModel }?.contextWindow?.takeIf { it > 0 }
 }
 
 /** 全局配置：当前服务商 + 各服务商各自的配置。 */

@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowForward
@@ -117,7 +118,7 @@ import java.util.Locale
  */
 @Composable
 fun WebScreen(
-    onOpenDrawer: () -> Unit,
+    onBack: () -> Unit,
     onToast: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -176,8 +177,8 @@ fun WebScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "网页",
-            navigationIcon = Icons.Outlined.Menu,
-            onNavigationClick = onOpenDrawer,
+            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            onNavigationClick = onBack,
             actions = {
                 MiuixIconButton(
                     icon = Icons.Outlined.Add,

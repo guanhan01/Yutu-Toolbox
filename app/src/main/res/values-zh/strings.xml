@@ -3,13 +3,13 @@
     <string name="app_name">Yutu Toolbox</string>
 
     <!-- 抽屉 / 底栏导航 -->
-    <string name="app_nav_home">对话</string>
+    <string name="app_nav_home">对话记录</string>
     <string name="linux_install_finished">已完成</string>
     <string name="linux_install_done">安装</string>
     <string name="linux_installing">正在安装…</string>
     <string name="linux_cmd_run">执行</string>
     <string name="linux_cmd_hint">输入命令，回车执行</string>
-    <string name="linux_open_terminal">打开终端</string>
+    <string name="linux_open_terminal">终端</string>
     <string name="linux_entry_desc">Debian / Alpine，按需下载安装</string>
     <string name="linux_section_title">开发环境</string>
     <string name="app_nav_linux">Linux 工具环境</string>
@@ -114,6 +114,7 @@
     <string name="app_drawer_close">关闭菜单</string>
     <string name="app_drawer_subtitle">开发者工具箱 · MCP 客户端</string>
     <string name="app_action_open_drawer">打开菜单</string>
+    <string name="app_action_back">返回</string>
     <string name="app_action_more">更多</string>
 
     <!-- 语言 -->
@@ -180,4 +181,30 @@
     <string name="app_compliance_message">本应用提供的抓包（含 HTTPS 解密）与反编译能力，仅限用于你自有或已获得明确授权的应用的学习与调试；禁止用于破解、篡改他人应用。所有数据仅保存在本机，应用默认不上传任何用户数据。</string>
     <string name="app_compliance_footer">继续即表示你同意上述使用范围。</string>
     <string name="app_action_close">关闭</string>    <string name="chat_history_delete">删除</string>
+    <string name="memory_title">记忆</string>
+    <string name="memory_usage_title">记忆用量</string>
+    <string name="memory_usage_detail">已用 %1$d / %2$d token</string>
+    <string name="memory_usage_hint">上限同时受模型窗口限制（当前最多 %1$d token）</string>
+    <string name="memory_enabled">启用记忆（每轮对话自动带上）</string>
+    <string name="memory_core_title">核心记忆</string>
+    <string name="memory_core_desc">始终注入的内容。你和 AI 都可以修改，适合放长期偏好与硬性要求。</string>
+    <string name="memory_core_empty">还没有核心记忆</string>
+    <string name="memory_entries_title">子记忆</string>
+    <string name="memory_entries_desc">AI 在对话中按需创建，也可以自己写。关掉某条即不再提供给 AI。</string>
+    <string name="memory_entries_empty">还没有子记忆</string>
+    <string name="memory_new">新建记忆</string>
+    <string name="memory_edit">编辑</string>
+    <string name="memory_add">添加</string>
+    <string name="memory_save">保存</string>
+    <string name="memory_title_hint">标题，例如「代码风格偏好」</string>
+    <string name="memory_from_ai">AI</string>
+    <string name="app_nav_memory">记忆</string>
+    <string name="memory_cancel">取消</string>
+    <string name="memory_delete">删除</string>
+    <string name="chat_usage_compress_done">已压缩 %1$d 条历史为摘要</string>
+    <string name="chat_usage_compress_fail">压缩失败：%1$s</string>
+
+    <string name="ai_model_context_from_remote">上下文上限（拉取时自动填入，可手改）</string>
+    <string name="ai_context_missing">未提供</string>
+    <string name="memory_usage_hint_unknown">当前模型的上下文上限未知，暂只按你设定的上限计算；在「AI 设置 → 模型」里填写后会自动收紧</string>
 </resources>
