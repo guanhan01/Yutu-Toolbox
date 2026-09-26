@@ -15,12 +15,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      # 直接用 runner 预装的 Android SDK，不再调 android-actions/setup-android。
+      # 该 action 会执行 sdkmanager "tools"，而 runner 上的 cmdline-tools 16.0
+      # 已经不再提供 `tools` 这个包，报 "Failed to find package 'tools'" 并以
+      # 退出码 1 中断整个 job（管线里表现为卡在「准备 Android SDK」）。
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-
-      - name: 准备 Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: 配置 JDK 21
         uses: actions/setup-java@v4
@@ -31,19 +36,39 @@ jobs:
       - name: 配置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
-      - name: 构建 Debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: 打印 SDK 环境
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
+          ls "$ANDROID_HOME/build-tools" || true
+
+      - name: 构建 Debug APK（正式版 + Beta）
+        run: |
+          ./gradlew :app:assembleStableDebug :app:assembleBetaDebug \
+            --no-daemon --stacktrace
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: Yutu-Toolbox-debug
-          path: app/build/outputs/apk/debug/*.apk
+          # flavor 拆分后产物在 apk/stable/ 与 apk/beta/ 下，不再有 apk/debug/。
+          path: |
+            app/build/outputs/apk/stable/debug/*.apk
+            app/build/outputs/apk/beta/debug/*.apk
           if-no-files-found: error
+
+      - name: 打 tag 时把正式版 APK 重命名为发布名
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # 正式版走 com.mcp.toolbox，发布资产沿用既有命名 YutuToolbox-<版本>.apk
+          VER="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp app/build/outputs/apk/stable/debug/*.apk "dist/YutuToolbox-${VER}.apk"
+          ls -l dist
 
       - name: 打 tag 时创建 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          files: dist/YutuToolbox-*.apk
           generate_release_notes: true
