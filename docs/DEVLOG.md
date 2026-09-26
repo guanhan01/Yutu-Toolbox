@@ -3,8 +3,9 @@
 > 本文件保留项目的开发过程记录：阶段进度、构建环境细节、踩过的坑。
 > 面向使用者的说明请看根目录的 [README.md](../README.md)。
 
-> 开发者工具箱 + MCP 客户端 / 内置 MCP Server 的 Android 工程。
-> 应用名：MCP Toolbox（工程代号 `mcp-toolbox`，包名 `com.mcp.toolbox`）。
+> AI Agent 式开发者工具箱 + MCP 客户端 / 内置 MCP Server 的 Android 工程。
+> 应用名：Yutu Agt（工程代号 `mcp-toolbox`，Kotlin 包名 / namespace 仍是 `com.mcp.toolbox*`，
+> applicationId 为 `com.Yutu.Agent`，Beta 加 `.beta` 后缀）。
 
 ## 1. 当前状态
 
@@ -15,10 +16,13 @@
 | P2 | 文件 + 应用 | 完成（真机验证） |
 | P3 | 网页 + 网络（HTTP/Ping/DNS/端口扫描/Whois/网络环境） | 完成（真机验证） |
 | P4 | 数据库（SQLite 引擎、Schema/数据/查询三个视图、示例库） | 完成（真机验证） |
-| P5 | 抓包 | 暂停（按需求先不做，页面为占位） |
+| P5 | 抓包 | 已实现：本地 VPN + 真实 TLS 中间人解密、CA 管理、HAR / JSON 导出（`feature/capture` 约 6.5k 行，真机流程待复核） |
 | P6 | 反编译（真实引擎）+ 任务中心 | 完成（真机验证） |
 | P7 | MCP 客户端 + Schema 表单 + 内置 Server + 产物目录 + 外置 SAF 目录 | 完成（真机验证，含 streamable HTTP 与 legacy SSE） |
 | P8 | 打磨：动效、无障碍、性能、双语、README | 进行中 |
+| P9 | AI Agent：对话主界面、11 家服务商、工具调用、记忆、压缩、计划模式 | 完成 |
+| P10 | Linux 环境（Debian 13 / Alpine 按需安装 + 组件管理 + 终端） | 完成（运行需 Root） |
+| P11 | Skill 工具箱（六种导入源 + 注入系统提示词） | 完成 |
 
 P8 已完成：
 
@@ -36,14 +40,15 @@ P8 待办：字号 1.3× 破版检查、Koin 收尾、动效统一走 `MotionTok
 本工程在 **Android 设备上的 Debian(PRoot) 环境** 中构建，Android SDK 位于设备本地。
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-arm64   # 路径随发行版更新而变，用 ls /usr/lib/jvm/ 确认实际值
 export PATH=$JAVA_HOME/bin:$PATH
 export GRADLE_USER_HOME=/storage/emulated/0/gradlehome     # 复用依赖缓存，可换任意目录
 GRADLE=<gradle-9.6.0>/bin/gradle
-$GRADLE --console=plain -p <项目根> :app:assembleDebug
+$GRADLE --console=plain -p <项目根> :app:assembleStableDebug :app:assembleBetaDebug
 ```
 
-产物：`app/build/outputs/apk/debug/app-debug.apk`。
+产物：`app/build/outputs/apk/stable/debug/app-stable-debug.apk`（正式版）
+与 `app/build/outputs/apk/beta/debug/app-beta-debug.apk`（Beta）。
 
 构建请**同步执行**（同一次调用内等它跑完）。用异步后台任务时进程会被 SIGKILL（exit 137），
 单模块增量构建约 35–55s。

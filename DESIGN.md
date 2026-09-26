@@ -1,4 +1,4 @@
-# DESIGN.md · MCP Toolbox 设计系统
+# DESIGN.md · Yutu Agt 设计系统
 
 本文件是视觉与交互的唯一事实来源。实现与本文冲突时，先改实现，再更新本文。
 所有数值均在代码里以 Token 形式存在（`core/designsystem/.../token`），禁止散落硬编码。

@@ -1,5 +1,50 @@
 # 更新日志
 
+## v0.1.5
+
+### 新增
+
+- **Skill 工具箱**：底栏新增入口（应用 / 星标 / Skill / 设置 / 关于），进入独立的
+  二级页管理本地 Skill。**不内置任何 Skill，初始为空**。
+  - 导入支持六种方式，弹窗顶栏用分段控件分类，切到哪一类下面就换那一类的输入：
+    Markdown 文件、ZIP 压缩包、文件夹（SAF 目录树）、URL、JSON（文件或文本）、
+    剪贴板。
+  - 每个 Skill 右侧有启用开关，只有启用的才会进入 AI 上下文；点击或长按进详情，
+    可看正文与附带文件、重命名、导出为 ZIP、复制 JSON、删除。
+  - 落盘在应用私有目录 `filesDir/skills/<id>/`，沿用 `SKILL.md` + frontmatter 的约定，
+    可带 `scripts/`、`references/`、`assets/`。全程不需要存储权限。
+  - 导入做了防护：ZIP 与目录树都校验相对路径，拒绝 `..` 与白名单之外的顶层目录，
+    单个 Skill 上限 32 MB；同名导入追加 `-2`、`-3` 而不是覆盖。
+- **AI 接入 Skill**：启用的 Skill 以「名称 + 描述」注入系统提示词，正文不注入
+  （避免一次塞满窗口），另提供 `skill.list` 与 `skill.read` 两个内置工具按需取正文
+  或附带文件。两个工具都是只读，不让模型改本地 Skill。
+
+### 改进
+
+- **OpenJDK 在组件清单里显式列出**：此前 Java 只是「APK 分析」安装脚本里的一行隐式
+  依赖，界面上看不到。现在它是一项可单独安装、可单独探测版本的组件，且在安装
+  「APK 分析」时会作为前置依赖自动先装（装完脚本里回显 `java -version`）。
+  这样 jadx 与 apktool 不会再出现「装完了却跑不起来」。
+- **更正「普通模式」的说明**：原先写作「无需 Root，使用独立的私有 Linux 环境」，
+  但执行后端实际上只有系统 chroot（需要 Root），属于名实不符。现在改为
+  「独立的私有 Linux 环境（安装需 Root 权限）」。
+  实测记录：PRoot 免 Root 路线在 Android 16 上走不通——把 Termux 源的 proot 5.1.107.95
+  连它缺的 `libtalloc` / `libandroid-shmem` 一起补齐后，PRoot 自身能启动，但一进入目标
+  程序就 `execve` 失败（连宿主自带的 `/system/bin/toybox`、`/apex/.../linker64` 这两个
+  无解释器的可执行文件都报 ENOENT），`PROOT_NO_SECCOMP=1` 与关闭 ptrace 加速均无效。
+  因此没有合入 PRoot 后端，只把文案改成与实测一致。
+
+### 其他
+
+- **applicationId 变更**：`com.mcp.toolbox` → `com.Yutu.Agent`，
+  Beta 为 `com.Yutu.Agent.beta`（versionCode 6，`0.1.5-beta`）；正式版 `0.1.4`（versionCode 5）。
+  仅改 applicationId，Kotlin 包名与 namespace 仍是 `com.mcp.toolbox*`，Java 类名不变。
+  注意：applicationId 改变后**不再覆盖旧安装**，旧版（`com.mcp.toolbox*`）需卸载重装；
+  FileProvider 与 Shizuku 的 authority 由 `${applicationId}` 动态生成，已自动跟随。
+- **应用名**：Beta 的 launcher 名称改为「Yutu Agt Beta」。
+- **AI 聊天空态**：移除「有什么可以帮你？」标题、机器人图标与四张能力卡片，
+  空白会话只保留顶栏与输入栏。
+
 ## v0.1.4
 
 ### 界面

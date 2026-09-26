@@ -60,7 +60,7 @@ jobs:
       - name: 打 tag 时把正式版 APK 重命名为发布名
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          # 正式版走 com.mcp.toolbox，发布资产沿用既有命名 YutuToolbox-<版本>.apk
+          # 正式版走 com.Yutu.Agent，发布资产沿用既有命名 YutuToolbox-<版本>.apk
           VER="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           cp app/build/outputs/apk/stable/debug/*.apk "dist/YutuToolbox-${VER}.apk"
