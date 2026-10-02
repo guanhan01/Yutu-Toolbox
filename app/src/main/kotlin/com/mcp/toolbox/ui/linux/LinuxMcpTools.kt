@@ -67,7 +67,7 @@ object LinuxMcpTools {
         name = "linux.env",
         title = "Linux 环境状态",
         description = "返回 Linux 环境是否已安装、发行版、占用空间，以及各可选工具" +
-            "（Python/uv、Node.js、SSH、APK 分析、Git、Codex CLI、Claude Code）的安装状态与版本号。",
+            "（Python/uv、Node.js、SSH、APK 分析、Git）的安装状态与版本号。",
         schema = Schema.obj(emptyList()),
         readOnly = true,
         handler = { ctx, _ ->

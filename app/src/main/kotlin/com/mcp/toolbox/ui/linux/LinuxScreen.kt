@@ -52,8 +52,6 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.AutoAwesome
 
 /**
  * Linux 工具环境主页。
@@ -479,8 +477,6 @@ private fun ComponentRow(
                     LinuxComponent.JAVA -> Icons.Outlined.Build
                     LinuxComponent.APK -> Icons.Outlined.Android
                     LinuxComponent.GIT -> Icons.Outlined.Code
-                    LinuxComponent.CODEX -> Icons.Outlined.SmartToy
-                    LinuxComponent.CLAUDE -> Icons.Outlined.AutoAwesome
                 },
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,

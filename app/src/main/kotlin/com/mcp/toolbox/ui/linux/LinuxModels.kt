@@ -181,10 +181,6 @@ enum class LinuxComponent(
     val probe: String,
     /** 取版本号用的参数。 */
     val versionArgs: List<String> = listOf("--version"),
-    /**
-     * 是否依赖 Node.js。Codex / Claude 都是 npm 全局包，缺 Node 时装不上。
-     */
-    val requiresNode: Boolean = false,
 ) {
     PYTHON("Python / uv 环境", "uv 与最新正式版 Python", "/usr/local/bin/uv"),
     NODE("Node.js 环境", "Node.js 与 npm", "/usr/local/bin/node"),
@@ -192,8 +188,6 @@ enum class LinuxComponent(
     APK("APK 分析", "JADX、Apktool、smali 与 baksmali（含 OpenJDK）", "/opt/apktool/apktool"),
     JAVA("OpenJDK 运行时", "jadx 与 apktool 依赖的 Java 运行时（随 APK 分析一起安装）", "/usr/bin/java"),
     GIT("Git 版本控制", "git 命令行工具", "/usr/bin/git"),
-    CODEX("Codex CLI", "OpenAI 命令行助手（需先装 Node.js）", "/usr/local/bin/codex", requiresNode = true),
-    CLAUDE("Claude Code", "Anthropic 命令行助手（需先装 Node.js）", "/usr/local/bin/claude", requiresNode = true),
 }
 
 /** 一个组件的检测结果。 */
@@ -415,10 +409,10 @@ object LinuxChecker {
     /**
      * 探测路径是否存在。
      *
-     * 不能只用 [File.exists]：它会跟随软链接，而应用进程 stat rootfs 内的软链接会被
-     * SELinux 拒绝（`avc: denied { read } ... tclass=lnk_file`），于是 npm 全局安装
-     * 出来的 codex / claude 这类软链接一律被判成「未安装」，即使环境里跑得好好的。
-     * 退回 lstat 只看链接自身，不读链接内容，因此不会被拒。
+     * 不能只用 [File.exists]：它会跟随软链接，而应用进程解析 rootfs 内的软链接会被
+     * SELinux 拒绝（`avc: denied { read } ... tclass=lnk_file`），Debian 的
+     * `/bin` → `usr/bin`、`/lib` → `usr/lib` 这类 merged-usr 链接都会命中，
+     * 于是一律被判成「未安装」。退回 lstat 只看链接自身，不读链接内容，因此不会被拒。
      */
     private fun probeExists(file: File): Boolean =
         file.exists() || runCatching { Os.lstat(file.absolutePath); true }.getOrDefault(false)
@@ -481,6 +475,7 @@ object LinuxChecker {
         bytes >= 1L shl 20 -> "%.0f MB".format(bytes.toDouble() / (1L shl 20))
         bytes >= 1L shl 10 -> "%.0f KB".format(bytes.toDouble() / (1L shl 10))
         bytes > 0 -> "$bytes B"
-        else -> "未安装"
+        // 0 就老实说 0：这个函数也用来显示文件大小，空文件曾被显示成「未安装」
+        else -> "0 B"
     }
 }

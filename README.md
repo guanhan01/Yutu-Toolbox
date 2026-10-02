@@ -100,7 +100,7 @@ Yutu Agt 把这些能力做成**模型可调用的工具**，于是它们可以�
 | SSH | sshd、ssh-keygen、ssh-agent |
 | APK 分析 | JADX、Apktool、smali、baksmali（含 OpenJDK 前置依赖） |
 | OpenJDK | 可单独安装，也是「APK 分析」的依赖 |
-| Git / Codex CLI / Claude Code | 命令行工具与两个 AI CLI（后两者需 Node.js） |
+| Git | git 命令行工具 |
 
 下载支持多镜像并发测速选源、断点续传（严格校验 `Content-Range` 总长）、zip 中央目录完整性校验，
 中断后可续装。rootfs 全程不随应用打包。

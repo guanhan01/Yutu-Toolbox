@@ -77,14 +77,6 @@ object LinuxToolchain {
         "https://pypi.org/simple",
     )
 
-    /** npm registry 镜像。 */
-    private val NPM_MIRRORS = listOf(
-        "https://registry.npmmirror.com",
-        "https://mirrors.cloud.tencent.com/npm/",
-        "https://mirrors.huaweicloud.com/repository/npm/",
-        "https://registry.npmjs.org",
-    )
-
     private const val NODE_VERSION = "v22.20.0"
 
     /** Node 二进制镜像。 */
@@ -114,7 +106,7 @@ object LinuxToolchain {
     /** 一个需要预先下载的归档。 */
     private data class Archive(val name: String, val candidates: List<String>)
 
-    /** 该组件需要预下载的大文件；SSH / Git / npm 包不需要。 */
+    /** 该组件需要预下载的大文件；SSH / Git 这类走包管理器的组件不需要。 */
     private fun archivesOf(distro: LinuxDistro, component: LinuxComponent): List<Archive> {
         val musl = distro == LinuxDistro.ALPINE
         return when (component) {
@@ -274,35 +266,8 @@ object LinuxToolchain {
                 §PKG git
                 echo "git: §(git --version 2>&1)"
             """.trimIndent()
-
-            // 这两个是 npm 全局包，必须先有 Node.js 环境
-            LinuxComponent.CODEX -> npmBody(
-                packageName = "@openai/codex",
-                cleanupDir = "/usr/local/lib/node_modules/@openai",
-                binary = "codex",
-            )
-
-            LinuxComponent.CLAUDE -> npmBody(
-                packageName = "@anthropic-ai/claude-code",
-                cleanupDir = "/usr/local/lib/node_modules/@anthropic-ai",
-                binary = "claude",
-            )
         }
     }
-
-    /** npm 全局包：先挑一个连得通的 registry，再安装。 */
-    private fun npmBody(packageName: String, cleanupDir: String, binary: String): String = """
-        [ -x /usr/local/bin/npm ] || { echo "请先安装 Node.js 环境"; exit 1; }
-        NPM_REG=""
-        for r in ${NPM_MIRRORS.shellList()}; do
-          if curl -fsSL --max-time 6 -o /dev/null "§r/$packageName" 2>/dev/null; then NPM_REG="§r"; break; fi
-        done
-        if [ -n "§NPM_REG" ]; then npm config set registry "§NPM_REG"; fi
-        # 中断过的安装会残留半装目录，npm 重装时报 ENOTEMPTY 直接失败
-        rm -rf $cleanupDir
-        npm install -g $packageName
-        echo "$binary: §(/usr/local/bin/$binary --version 2>&1 | head -n 1)"
-    """.trimIndent()
 
     /**
      * 已经落盘但尚未解包的归档大小，用于界面提示「可继续下载」。
@@ -350,12 +315,6 @@ object LinuxToolchain {
     }
 
     /**
-     * Node.js 是否已就绪。
-     *
-     * Codex / Claude 走 npm 全局安装，没有 Node 时脚本注定失败；这里只看
-     * 可执行文件是否存在，不做真实执行——真跑一次 chroot 代价太大。
-     */
-    /**
      * 安装前必须先装好的依赖。
      *
      * jadx 与 apktool 本体都是 jar，装完没有 Java 运行时一样跑不起来；
@@ -364,15 +323,6 @@ object LinuxToolchain {
     private fun dependenciesOf(component: LinuxComponent): List<LinuxComponent> = when (component) {
         LinuxComponent.APK -> listOf(LinuxComponent.JAVA)
         else -> emptyList()
-    }
-
-    private fun nodeReady(context: Context, distro: LinuxDistro): Boolean {
-        val rootfs = LinuxEnvStore.rootfs(context, distro)
-        // 查 node 本体与 npm 包本体，不查 /usr/local/bin/npm：
-        // 那是个软链接，应用进程 stat 它会被 SELinux 拒绝（lnk_file read），
-        // 会让装了 Node 的用户仍然被拦在「请先安装 Node.js 环境」。
-        return File(rootfs, "usr/local/bin/node").exists() &&
-            File(rootfs, "usr/local/lib/node_modules/npm/bin/npm-cli.js").exists()
     }
 
     /** 安装一个组件；[onLine] 收到脚本输出行。 */
@@ -414,12 +364,6 @@ object LinuxToolchain {
             return Result.failure(IllegalStateException("请先安装 Linux 环境"))
         }
 
-        // Codex / Claude 是 npm 全局包，缺 Node 时装不出任何东西。脚本里的
-        // 判空在 apt-get update 之后，会先白等一轮索引更新才报错，这里提前拦下。
-        if (component.requiresNode && !nodeReady(context, distro)) {
-            onLine("✗ 请先安装 Node.js 环境，再安装 ${component.title}")
-            return Result.failure(IllegalStateException("请先安装 Node.js 环境"))
-        }
         // 通用前置依赖：APK 分析缺 Java 时装完也跑不起来，先补上再继续
         dependenciesOf(component).forEach { dep ->
             if (!LinuxChecker.isInstalled(context, distro, dep)) {

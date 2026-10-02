@@ -67,39 +67,111 @@ private data class FsEntry(
     val isDir: Boolean,
     val size: Long,
     val modified: Long,
-    val readable: Boolean,
 )
 
-/** 列目录。全部在 IO 线程调用，别放渲染路径里。 */
-private fun readDir(rootfs: File, rel: String): Pair<List<FsEntry>, String> {
-    val dir = if (rel.isEmpty()) rootfs else File(rootfs, rel)
-    if (!dir.isDirectory) return emptyList<FsEntry>() to "目录不存在，可能环境尚未安装"
-    if (!dir.canRead()) return emptyList<FsEntry>() to "没有读取权限"
-    val list = dir.listFiles() ?: return emptyList<FsEntry>() to "没有读取权限"
-    val entries = list.mapNotNull { file ->
-        runCatching {
-            FsEntry(
-                name = file.name,
-                path = if (rel.isEmpty()) file.name else "$rel/${file.name}",
-                isDir = file.isDirectory,
-                size = if (file.isDirectory) 0L else file.length(),
-                modified = file.lastModified(),
-                readable = file.canRead(),
-            )
-        }.getOrNull()
-    }.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() })
-    return entries to ""
+private fun shellQuoted(text: String): String = "'" + text.replace("'", "'\\''") + "'"
+
+/**
+ * 列目录。必须在 IO 线程调用，别放渲染路径里。
+ *
+ * 走 root shell 而不是 Java 侧 [File]：应用进程解析 rootfs 里的软链接会被 SELinux
+ * 拒绝（`avc: denied { read } ... tclass=lnk_file`，域是 untrusted_app）。Debian 自
+ * bookworm 起默认 merged-usr，`/bin`、`/lib`、`/sbin` 都是指向 `usr/bin` 一类的软链接，
+ * 全部命中该规则：`File.isDirectory` 恒为 false，于是被当成 0 字节文件，尺寸落进
+ * [LinuxChecker.humanSize] 的 0 值分支，显示成「未安装」。
+ *
+ * 这条规则连 QQ 缓存目录的 `cache` 软链都会拒，属于平台行为，应用侧绕不过去；
+ * 而列目录本来就需要 root，交给 root shell 一次问清楚最省事。
+ *
+ * 每条记录占两行：第一行 `<类型> <字节数> <修改时间>`，第二行文件名。文件名单独
+ * 占一行，不必纠结分隔符与文件名冲突（含换行的文件名仍不支持）。
+ */
+private suspend fun readDir(
+    context: Context,
+    distro: LinuxDistro,
+    rel: String,
+): Pair<List<FsEntry>, String> {
+    val target = if (rel.isEmpty()) "/" else "/$rel"
+    val script = """
+        cd ${shellQuoted(target)} 2>/dev/null || exit 3
+        ls -1A | while IFS= read -r n; do
+          i=${'$'}(stat -L -c '%F %s %Y' "${'$'}n" 2>/dev/null) || i="link 0 ${'$'}(stat -c '%Y' "${'$'}n" 2>/dev/null || echo 0)"
+          printf '%s\n%s\n' "${'$'}i" "${'$'}n"
+        done
+    """.trimIndent()
+    val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
+    if (out.exitCode == 3) {
+        return emptyList<FsEntry>() to "目录不存在，可能环境尚未安装"
+    }
+    if (out.exitCode != 0) {
+        return emptyList<FsEntry>() to out.combined.ifBlank { "列目录失败" }
+    }
+
+    val lines = out.stdout.lines()
+    val entries = mutableListOf<FsEntry>()
+    var i = 0
+    while (i + 1 < lines.size) {
+        val info = lines[i].trim()
+        val name = lines[i + 1]
+        i += 2
+        if (name.isBlank()) continue
+        // 类型名可能带空格（`regular file`），所以大小与时间从尾部取
+        val fields = info.split(' ')
+        val mtime = fields.lastOrNull()?.toLongOrNull() ?: 0L
+        val size = fields.getOrNull(fields.size - 2)?.toLongOrNull() ?: 0L
+        val isDir = info.startsWith("directory")
+        entries += FsEntry(
+            name = name,
+            path = if (rel.isEmpty()) name else "$rel/$name",
+            isDir = isDir,
+            size = if (isDir) 0L else size,
+            modified = mtime,
+        )
+    }
+    return entries.sortedWith(
+        compareByDescending<FsEntry> { it.isDir }.thenBy { it.name.lowercase() },
+    ) to ""
 }
 
-/** 读文本预览。二进制与大文件都只给一句说明。 */
-private fun previewOf(file: File): String {
-    if (file.length() > 256 * 1024) {
-        return "文件较大（${LinuxChecker.humanSize(file.length())}），暂不预览"
+/**
+ * 读文本预览。二进制与大文件都只给一句说明。
+ *
+ * 与 [readDir] 同理走 root shell：应用进程自己读普通文件没问题，但只要路径里有一段
+ * 是软链接，解析就会被 SELinux 拒掉。
+ */
+private suspend fun previewOf(
+    context: Context,
+    distro: LinuxDistro,
+    path: String,
+): String {
+    val file = shellQuoted("/$path")
+    val script = """
+        f=$file
+        [ -e "${'$'}f" ] || exit 3
+        [ -d "${'$'}f" ] && exit 6
+        s=${'$'}(wc -c < "${'$'}f" 2>/dev/null || echo 0)
+        if [ "${'$'}s" -gt 262144 ]; then printf 'BIG %s\n' "${'$'}s"; exit 0; fi
+        printf 'TXT %s\n' "${'$'}s"
+        cat "${'$'}f"
+    """.trimIndent()
+    val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
+    val head = out.stdout.lineSequence().firstOrNull().orEmpty()
+    val kind = head.substringBefore(' ')
+    val size = head.substringAfter(' ', "").trim().toLongOrNull() ?: 0L
+    return when {
+        out.exitCode == 3 -> "文件不存在或已被删除"
+        out.exitCode == 6 -> "这是一个目录"
+        kind == "BIG" -> "文件较大（${LinuxChecker.humanSize(size)}），暂不预览"
+        kind == "TXT" -> {
+            val text = out.stdout.substringAfter('\n', "")
+            when {
+                text.isEmpty() -> "（空文件）"
+                text.contains('\u0000') -> "二进制文件，暂不预览"
+                else -> text
+            }
+        }
+        else -> "无法读取：" + out.combined.ifBlank { "未知错误" }
     }
-    return runCatching {
-        val bytes = file.readBytes()
-        if (bytes.any { it == 0.toByte() }) "二进制文件，暂不预览" else String(bytes, Charsets.UTF_8)
-    }.getOrElse { "无法读取：${it.message ?: "权限不足"}" }
 }
 
 /** 浏览 Linux 环境中的文件（只读）。 */
@@ -112,8 +184,6 @@ fun LinuxFilesScreen(
     val spacing = MiuixTheme.dimens.spacing
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val rootfs = remember(distro) { LinuxEnvStore.rootfs(context, distro) }
-
     var rel by remember { mutableStateOf(LinuxBrowseTarget.initialPath.trim('/')) }
     var entries by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -122,7 +192,8 @@ fun LinuxFilesScreen(
 
     LaunchedEffect(rel) {
         loading = true
-        val result = withContext(Dispatchers.IO) { readDir(rootfs, rel) }
+        // LinuxRuntime.exec 内部已切到 IO 线程，这里不再套一层 withContext
+        val result = readDir(context, distro, rel)
         entries = result.first
         note = result.second
         loading = false
@@ -201,10 +272,7 @@ fun LinuxFilesScreen(
                                     }
                                 } else {
                                     scope.launch {
-                                        val text = withContext(Dispatchers.IO) {
-                                            previewOf(File(rootfs, entry.path))
-                                        }
-                                        preview = entry.name to text
+                                        preview = entry.name to previewOf(context, distro, entry.path)
                                     }
                                 }
                             }
@@ -232,9 +300,6 @@ fun LinuxFilesScreen(
                                 style = MiuixTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                             )
-                        }
-                        if (!entry.readable) {
-                            MiuixTag(text = "无权限", color = colors.onSurfaceVariant)
                         }
                     }
                 }
