@@ -26,3 +26,7 @@ build/
 *.orig
 *.rej
 *.swp
+
+# 固定签名密钥：必须随仓库分发，否则 CI 与本地构建拿不到同一张证书
+# （口令是公开默认值 android，文件本身不是秘密；关键是别丢、别换）
+!app/keystore/yutu-debug.keystore

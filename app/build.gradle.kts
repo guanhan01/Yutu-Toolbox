@@ -42,12 +42,33 @@ android {
         }
     }
 
+    signingConfigs {
+        // 固定签名。
+        //
+        // 不显式配置时，debug 构建会用 $HOME/.android/debug.keystore ——
+        // 那是**每台机器各自生成**的，CI runner 上更是每次全新，导致：
+        //   · 正式版（com.Yutu.Agent）每次发布签名都不同，老用户无法覆盖升级；
+        //   · 本地构建的包装不到已发布的版本上。
+        // 这里改为读取仓库内固定的一份 keystore，两个 flavor 共用，
+        // 保证任何机器、任何次构建产出的签名都一致。
+        //
+        // 口令是公开默认值，keystore 本身不是秘密；关键在**不能丢失、不能更换**。
+        create("yutu") {
+            storeFile = file("keystore/yutu-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("yutu")
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("yutu")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
