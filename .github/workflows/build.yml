@@ -66,9 +66,19 @@ jobs:
           cp app/build/outputs/apk/stable/debug/*.apk "dist/YutuToolbox-${VER}.apk"
           ls -l dist
 
+          # Release 正文取自 CHANGELOG 里对应版本的段落，不再用自动生成的 compare 链接。
+          # 抽取逻辑放在脚本里，便于本地直接验证。
+          python3 scripts/release_body.py "${VER}" > dist/release-body.md
+          echo "--- release-body.md ---"
+          cat dist/release-body.md
+
       - name: 打 tag 时创建 Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          # 用本人账号发布，而不是 github-actions[bot]：
+          # 默认的 GITHUB_TOKEN 只能代表机器人，Release 的 author 会显示成 bot；
+          # 而作者无法事后修改（GitHub 没有改 author 的接口，只能删掉重建）。
+          token: ${{ secrets.RELEASE_TOKEN }}
           files: dist/YutuToolbox-*.apk
-          generate_release_notes: true
+          body_path: dist/release-body.md
