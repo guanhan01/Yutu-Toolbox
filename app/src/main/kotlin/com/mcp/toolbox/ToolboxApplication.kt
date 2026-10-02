@@ -2,7 +2,8 @@ package com.mcp.toolbox
 
 import android.app.Application
 import com.mcp.toolbox.core.design.theme.ThemeController
-import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
+import com.mcp.toolbox.feature.mcp.McpAiAccess
+import com.mcp.toolbox.feature.mcp.WriteGuard
 import com.mcp.toolbox.feature.mcp.SkillStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,9 +31,11 @@ class ToolboxApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // IMPL-NOTE: 尽早载入内置 Server 配置。token 的「固定文件」在 app 私有目录之外，
-        // 清理数据 / 卸载重装后必须在这里恢复；不能等用户打开 MCP 页面（Server 服务可能自启）。
-        runCatching { BuiltInMcpServer.load(this) }
+        // 写类工具（file.write / linux.file_write / apk.* 等）的全局开关。
+        // 必须在任何工具调用之前就绪，否则第一条写指令会被误判为「未开启」。
+        runCatching { WriteGuard.load(this) }
+        // 外部 MCP Server 的「接入 AI」白名单：决定模型能看到哪些外部工具。
+        runCatching { McpAiAccess.load(this) }
         // 把 Linux 环境的能力接进 MCP 工具集。LinuxRuntime 在 app 模块，
         // 只能从这里注入，feature:mcp 不反向依赖。
         runCatching { BuiltInToolSet.registerExtra { ctx -> LinuxMcpTools.all(ctx) } }
@@ -44,6 +47,8 @@ class ToolboxApplication : Application() {
         appScope.launch {
             runCatching { ChatMemoryStore.load(this@ToolboxApplication) }
             runCatching { PlanStore.load(this@ToolboxApplication) }
+            // 随应用预置的 Skill 先落盘，再读取列表；顺序颠倒首次启动会读到空列表
+            runCatching { SkillStore.ensureBuiltIns(this@ToolboxApplication) }
             // Skill 列表与启用状态：AI 系统提示要用它，必须在第一条消息之前就绪
             runCatching { SkillStore.refresh(this@ToolboxApplication) }
         }

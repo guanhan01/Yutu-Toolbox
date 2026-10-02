@@ -18,17 +18,53 @@ sealed interface ChatAttachment {
     data class Folder(val uri: String, override val label: String) : ChatAttachment
     data class Path(val path: String) : ChatAttachment {
         override val label: String get() = path.substringAfterLast('/').ifBlank { path }
+
+        /**
+         * 路径指向目录还是文件。
+         *
+         * 在构造期判定一次：显示图标要按它分支，写成 getter 会在每次重组时重新 stat 一遍。
+         * 刻意不做构造参数——否则它会进入 data class 的 equals/copy，
+         * 同一条路径因判定时机不同就可能被当成两个不同的附件。
+         */
+        val isDirectory: Boolean = runCatching { java.io.File(path).isDirectory }.getOrDefault(false)
     }
 
     /** 转成给模型看的上下文文本。 */
     fun toContext(context: Context): String = when (this) {
         is Image -> "【图片】$label（路径：$uri）"
         is Folder -> "【文件夹】$label 的内容：\n" + listTree(context, uri).take(2000)
-        is Path -> readPath(java.io.File(path))?.let { "【文件】$path 的内容：\n$it" } ?: "【路径】$path（无法读取）"
+        // 目录路径之前会落进 readPath 的 !isFile 分支，显示成「无法读取」——
+        // 明明是个能打开的目录。这里按 isDirectory 分开处理。
+        is Path -> if (isDirectory) {
+            "【文件夹】$path 的内容：\n" + listDir(java.io.File(path))
+        } else {
+            readPath(java.io.File(path))?.let { "【文件】$path 的内容：\n$it" }
+                ?: "【路径】$path（无法读取）"
+        }
         is File -> readUri(context, uri)?.let { "【文件】$label 的内容：\n$it" } ?: "【文件】$label（无法读取）"
     }
 
     companion object {
+        /**
+         * 文件夹树 URI → 展示用路径。
+         *
+         * 取 tree 的 documentId（形如 `primary:Download/sub`），把分隔符还原成 `/`；
+         * 存储卷标（`primary`）对用户没有意义，去掉只留真正的目录层级。
+         */
+        fun folderLabel(uri: Uri): String? {
+            val docId = runCatching {
+                android.provider.DocumentsContract.getTreeDocumentId(uri)
+            }.getOrNull() ?: return null
+            val scheme = docId.substringBefore(':', "")
+            val rest = docId.substringAfter(':', docId).trimStart('/')
+            val path = when (scheme) {
+                "", "primary", "raw" -> rest
+                // 第三方 provider 的卷标可能带信息，保留
+                else -> "$scheme/$rest"
+            }
+            return path.ifBlank { null }
+        }
+
         /** 从 content URI 取显示名。 */
         fun displayName(context: Context, uri: Uri): String = runCatching {
             context.contentResolver.query(uri, null, null, null, null)?.use { c ->
@@ -43,6 +79,11 @@ sealed interface ChatAttachment {
                 bytes.toString(Charsets.UTF_8)
             }
         }.getOrNull()
+
+        /** 目录内容（最多 200 项），与 [listTree] 的截断口径保持一致。 */
+        private fun listDir(dir: java.io.File): String = runCatching {
+            dir.listFiles()?.take(200)?.joinToString("\n") { it.name }.orEmpty()
+        }.getOrDefault("")
 
         private fun readPath(file: java.io.File): String? = runCatching {
             if (!file.exists() || !file.isFile) return null

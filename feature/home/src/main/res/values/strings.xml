@@ -76,4 +76,5 @@
     <string name="chat_step_thinking">Thinking…</string>
     <string name="chat_step_thought">Thought</string>
     <string name="chat_tool_result">Result</string>
+    <string name="chat_attach_remove">Remove attachment</string>
 </resources>

@@ -22,7 +22,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -95,11 +93,8 @@ fun McpScreen(
     val states by McpRegistry.states.collectAsState()
     val toolsMap by McpRegistry.tools.collectAsState()
     val calls by McpRegistry.calls.collectAsState()
-    val serverRunning by BuiltInMcpServer.running.collectAsState()
-    val serverConfig by BuiltInMcpServer.config.collectAsState()
-    val serverLogs by BuiltInMcpServer.logs.collectAsState()
-    val requestCount by BuiltInMcpServer.requestCount.collectAsState()
     val artifactConfig by ArtifactStore.config.collectAsState()
+    var aiEnabledIds by remember { mutableStateOf(McpAiAccess.enabledIds.value) }
 
     var tab by remember { mutableStateOf(McpTab.SERVERS) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -133,9 +128,10 @@ fun McpScreen(
     var selectedServerId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        BuiltInMcpServer.load(context)
         McpRegistry.load(context)
         ArtifactStore.load(context)
+        McpAiAccess.load(context)
+        aiEnabledIds = McpAiAccess.enabledIds.value
     }
 
     fun connect(config: McpServerConfig) {
@@ -152,27 +148,6 @@ fun McpScreen(
                 },
             )
         }
-    }
-
-    /**
-     * 启动内置 Server 后自动连上本机客户端。
-     * 服务是异步开始监听的，立刻连必然失败，所以这里轮询重试；
-     * 已经连上就不再打扰（例如进程重启后服务本来就在跑）。
-     */
-    LaunchedEffect(serverRunning) {
-        if (!serverRunning) return@LaunchedEffect
-        val client = McpRegistry.servers.value.firstOrNull { it.builtIn } ?: return@LaunchedEffect
-        if (McpRegistry.state(client.id).state == McpConnectionState.READY) return@LaunchedEffect
-        repeat(24) { attempt ->
-            delay(if (attempt == 0) 300L else 250L)
-            val state = runCatching { McpClient.connect(context, client) }.getOrNull()
-            if (state?.state == McpConnectionState.READY) {
-                selectedServerId = client.id
-                onToast("已自动连接内置 Server · ${state.toolCount} 个工具")
-                return@LaunchedEffect
-            }
-        }
-        onToast("内置 Server 已启动，但自动连接超时，请手动点「连接」")
     }
 
     val exportLog: () -> Unit = {
@@ -198,24 +173,10 @@ fun McpScreen(
                         MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                             MiuixMenuItem(
-                                text = if (serverRunning) "停止内置 Server" else "启动内置 Server",
-                                onClick = {
-                                    menuOpen = false
-                                    if (serverRunning) {
-                                        McpServerService.stop(context)
-                                        onToast("内置 Server 已停止")
-                                    } else {
-                                        McpServerService.start(context)
-                                        onToast("内置 Server 启动中：${BuiltInMcpServer.httpEndpoint}")
-                                    }
-                                },
-                                icon = if (serverRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
-                            )
-                            MiuixMenuItem(
                                 text = "连接全部已启用 Server",
                                 onClick = {
                                     menuOpen = false
-                                    servers.filter { !it.builtIn || serverRunning }.forEach { connect(it) }
+                                    servers.forEach { connect(it) }
                                 },
                                 icon = Icons.Outlined.Refresh,
                             )
@@ -264,25 +225,20 @@ fun McpScreen(
                     servers = servers,
                     states = states,
                     toolsMap = toolsMap,
-                    serverRunning = serverRunning,
-                    serverConfig = serverConfig,
-                    requestCount = requestCount,
-                    serverLogs = serverLogs,
                     busyServer = busyServer,
+                    aiEnabledIds = aiEnabledIds,
+                    onToggleAi = { config, enabled ->
+                        McpAiAccess.setEnabled(context, config.id, enabled)
+                        aiEnabledIds = McpAiAccess.enabledIds.value
+                        onToast(
+                            if (enabled) {
+                                "已接入 AI：${config.name} 的工具在下一轮对话可用"
+                            } else {
+                                "已取消接入：${config.name} 的工具不再暴露给模型"
+                            },
+                        )
+                    },
                     onMessage = onToast,
-                    onToggleServer = { enabled ->
-                        if (enabled) {
-                            McpServerService.start(context)
-                            onToast("内置 Server 启动中：${BuiltInMcpServer.httpEndpoint}")
-                        } else {
-                            McpServerService.stop(context)
-                            onToast("内置 Server 已停止")
-                        }
-                    },
-                    onUpdateServerConfig = { next ->
-                        BuiltInMcpServer.saveConfig(context, next)
-                        onToast("内置 Server 配置已保存")
-                    },
                     onConnect = { connect(it) },
                     onEdit = { editing = it },
                     onDelete = { config ->
@@ -290,20 +246,6 @@ fun McpScreen(
                         onToast("已删除 ${config.name}")
                     },
                     onAdd = { addOpen = true },
-                    onOpenStatusPage = {
-                        val uri = Uri.parse(if (serverConfig.localOnly) BuiltInMcpServer.httpEndpoint.replace("/mcp", "/") else "http://127.0.0.1:${serverConfig.port}/")
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                        }.onFailure { onToast("没有可用的浏览器处理该地址") }
-                    },
-                    onCopyToken = {
-                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                            as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(
-                            android.content.ClipData.newPlainText("mcp-token", serverConfig.token),
-                        )
-                        onToast("token 已复制到剪贴板（${serverConfig.token.length} 位）")
-                    },
                     onCopyText = { text ->
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                             as android.content.ClipboardManager

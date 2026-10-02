@@ -22,7 +22,9 @@ import java.util.zip.ZipInputStream
  * 存储权限；导入时通过 SAF 拿到的那一份内容会被完整复制进来，之后即使原文件
  * 被删掉也不影响。
  *
- * **不内置任何 Skill**：首次进入就是空列表。
+ * **内置一个 Skill**：`cognitive-engine`，以 ZIP 形式放在应用 assets 里，首次启动时
+ * 解出来落进上面这个目录（见 [ensureBuiltIns]）。落盘之后就等同于用户自己导入的：
+ * 可启停、可改名、可导出、可删除，删除后不会自己长回来。
  */
 object SkillStore {
 
@@ -172,6 +174,51 @@ object SkillStore {
             refresh(context)
             readOne(dir) ?: stamped
         }
+
+    // ------------------------------------------------------------------
+    // 内置 Skill
+    // ------------------------------------------------------------------
+
+    /**
+     * 随应用预置的 Skill。
+     *
+     * 文件名即 assets 里的 zip；[source] 用于「来自…」的展示，让用户看得出这是内置的、
+     * 不是自己导入的。
+     */
+    private val BUILT_IN_SKILLS = listOf(
+        BuiltInSkill(asset = "cognitive-engine.zip", source = "内置"),
+    )
+
+    private data class BuiltInSkill(val asset: String, val source: String)
+
+    /**
+     * 把随应用预置的 Skill 落盘（幂等）。
+     *
+     * 与用户导入故意采用**两种策略**，这是有意的区分：
+     *
+     *  - **用户导入**同名时追加 `-2`、`-3`（见 [import]），因为导入是显式动作，
+     *    静默覆盖会丢掉他改过的东西；
+     *  - **内置预置**按 id 幂等——目录已在就整个跳过。否则每次升级都会多出
+     *    `cognitive-engine-2`、`-3`，越滚越多。
+     *
+     * 跳过的代价是：应用升级带来新版本 Skill 时，已装用户不会自动拿到新版。
+     * 这里选择不自动覆盖，因为用户可能改过里边的内容（例如脚本里的阈值），
+     * 未经同意覆盖掉比「用着旧版」更糟。要拿新版就让用户删掉重装一次。
+     */
+    suspend fun ensureBuiltIns(context: Context) = withContext(Dispatchers.IO) {
+        val rootDir = root(context).apply { mkdirs() }
+        BUILT_IN_SKILLS.forEach { builtIn ->
+            val id = builtIn.asset.substringBeforeLast('.')
+            if (File(rootDir, id).isDirectory) return@forEach
+            runCatching {
+                val bytes = context.assets.open("skills/${builtIn.asset}").use { it.readBytes() }
+                if (bytes.size > MAX_BYTES) error("内置 Skill 超过大小上限")
+                val draft = draftFromZip(bytes, builtIn.asset)
+                import(context, draft, builtIn.source)
+            }
+            // 单个内置 Skill 失败不该影响应用启动，静默跳过，用户仍可手动导入同一份 zip
+        }
+    }
 
     /**
      * 目录名去重。
@@ -375,7 +422,13 @@ object SkillStore {
     }
 
     /** 把 ZIP 解成 draft：以顶层 `SKILL.md` 为正文，其余按允许的子目录收集。 */
-    private fun draftFromZip(bytes: ByteArray, sourceName: String): SkillDraft {
+    /**
+     * 解析一个 Skill 压缩包。
+     *
+     * `internal` 而非 `private`：内置 Skill 的预置（[ensureBuiltIns]）与界面上的
+     * ZIP 导入走的是同一套解析，避免两处规则漂移。
+     */
+    internal fun draftFromZip(bytes: ByteArray, sourceName: String): SkillDraft {
         val files = linkedMapOf<String, String>()
         val bin = linkedMapOf<String, ByteArray>()
         ZipInputStream(bytes.inputStream()).use { zip ->

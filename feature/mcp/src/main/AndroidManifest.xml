@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MCP 客户端（对外连接）没有需要声明的组件：连接由用户在页面里手动发起，
+  进程内完成，不需要 Service 或后台常驻。原先的 McpServerService（内置 Server）
+  与其前台服务权限已随内置 Server 一并移除。
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-
-    <application>
-        <service
-            android:name=".McpServerService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-    </application>
 
 </manifest>

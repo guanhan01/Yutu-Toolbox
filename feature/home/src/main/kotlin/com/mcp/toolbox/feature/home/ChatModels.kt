@@ -127,4 +127,6 @@ data class ModelOption(
     @androidx.annotation.DrawableRes val providerIconRes: Int,
     val modelId: String,
     val isCurrent: Boolean,
+    /** 非空表示这一项来自自定义供应商，选中时要按 id 切换而不是切内置枚举。 */
+    val customId: String? = null,
 )

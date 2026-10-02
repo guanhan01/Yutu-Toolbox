@@ -76,4 +76,5 @@
     <string name="chat_step_thinking">思考中…</string>
     <string name="chat_step_thought">思考已完成</string>
     <string name="chat_tool_result">结果</string>
+    <string name="chat_attach_remove">移除附件</string>
 </resources>

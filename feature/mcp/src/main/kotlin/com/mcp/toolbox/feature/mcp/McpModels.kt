@@ -21,7 +21,6 @@ data class McpServerConfig(
     val token: String = "",
     val timeoutMs: Int = 8000,
     val autoConnect: Boolean = false,
-    val builtIn: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -32,7 +31,6 @@ data class McpServerConfig(
         put("token", token)
         put("timeoutMs", timeoutMs)
         put("autoConnect", autoConnect)
-        put("builtIn", builtIn)
         put("headers", JSONObject().also { obj -> headers.forEach { (k, v) -> obj.put(k, v) } })
     }
 
@@ -47,7 +45,6 @@ data class McpServerConfig(
             token = obj.optString("token"),
             timeoutMs = obj.optInt("timeoutMs", 8000),
             autoConnect = obj.optBoolean("autoConnect"),
-            builtIn = obj.optBoolean("builtIn"),
             headers = obj.optJSONObject("headers")?.let { h ->
                 h.keys().asSequence().associateWith { h.optString(it) }
             } ?: emptyMap(),

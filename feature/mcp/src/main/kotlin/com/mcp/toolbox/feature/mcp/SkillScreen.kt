@@ -3,6 +3,7 @@ package com.mcp.toolbox.feature.mcp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.DataObject
@@ -41,9 +44,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
@@ -59,9 +68,11 @@ import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
 import com.mcp.toolbox.core.design.component.MiuixSegmentedButton
 import com.mcp.toolbox.core.design.component.MiuixSwitch
 import com.mcp.toolbox.core.design.component.MiuixText
+import com.mcp.toolbox.core.design.component.MarkdownText
 import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.miuixClickable
 import com.mcp.toolbox.core.design.component.rememberMiuixPressState
+import com.mcp.toolbox.core.common.Formatters
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import kotlinx.coroutines.launch
 
@@ -94,6 +105,11 @@ fun SkillScreen(
     var deleting by remember { mutableStateOf<Skill?>(null) }
     var exportTarget by remember { mutableStateOf<Skill?>(null) }
 
+    // 长按唤出的溢出菜单：记住是哪一行、以及那一行在窗口里的位置。
+    // 菜单要用窗口坐标定位，所以必须把行自身的矩形带上来，不能只记 skill。
+    var menuSkill by remember { mutableStateOf<Skill?>(null) }
+    var menuAnchor by remember { mutableStateOf<Rect?>(null) }
+
     LaunchedEffect(Unit) { skills = SkillStore.refresh(context) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -112,17 +128,13 @@ fun SkillScreen(
     Box(modifier = modifier.fillMaxSize().background(colors.background)) {
         Column(Modifier.fillMaxSize()) {
             if (showTopBar) {
-                SkillTopBar(
-                    title = "Skill 工具箱",
-                    onBack = onBack,
-                    onImport = { showImport = true },
-                )
+                SkillTopBar(title = "Skill 工具箱", onBack = onBack)
             }
             if (skills.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     MiuixEmptyState(
                         title = "还没有 Skill",
-                        description = "点右上角「+」导入。支持文件、ZIP、文件夹、URL、JSON 与剪贴板。",
+                        description = "点右下角「+」导入。支持文件、ZIP、文件夹、URL、JSON 与剪贴板。",
                         icon = Icons.Outlined.Extension,
                         action = {
                             MiuixButton(
@@ -141,7 +153,8 @@ fun SkillScreen(
                         start = spacing.pageHorizontal,
                         end = spacing.pageHorizontal,
                         top = spacing.sm,
-                        bottom = 32.dp,
+                        // 留出右下角 FAB 的高度，否则最后一项会被它压住
+                        bottom = 120.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(spacing.groupGap),
                 ) {
@@ -149,7 +162,10 @@ fun SkillScreen(
                         SkillRow(
                             skill = skill,
                             onClick = { detail = skill },
-                            onLongPress = { detail = skill },
+                            onLongPress = { bounds ->
+                                menuAnchor = bounds
+                                menuSkill = skill
+                            },
                             onToggle = { checked ->
                                 scope.launch {
                                     SkillStore.setEnabled(context, skill.id, checked)
@@ -162,6 +178,27 @@ fun SkillScreen(
             }
         }
 
+        // 导入入口：右下角圆形加号（自绘）。
+        //
+        // 刻意不使用 MiuixFab：那是个「Box + clip + background + 自定义点击」的组合，
+        // 颜色还要经过主题插值链路，前几轮反复出现「圆看不见」却查不出所以然。
+        // 这里把尺寸、形状、颜色、点击全部摊平在一个 Box 上，行为完全可预期：
+        //   CircleShape 明确指定圆形（不用 percent=50 的近似写法）
+        //   颜色取 colors.primary（实测 #904A49，与背景 #FFF8F7 对比充分）
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = spacing.pageHorizontal, bottom = 88.dp)
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(colors.primary)
+                .clickable(onClick = { showImport = true })
+                .semantics { contentDescription = "导入 Skill" },
+            contentAlignment = Alignment.Center,
+        ) {
+            MiuixIcon(Icons.Outlined.Add, null, tint = colors.onPrimary, size = 26.dp)
+        }
+
         if (busy) {
             Box(
                 Modifier.fillMaxSize().background(colors.background.copy(alpha = 0.6f)),
@@ -169,6 +206,63 @@ fun SkillScreen(
             ) {
                 com.mcp.toolbox.core.design.component.MiuixInfiniteProgress()
             }
+        }
+    }
+
+    // 长按某一行的溢出菜单。菜单挂在页面顶层并按行的矩形定位，
+    // 不使用 offset/父布局定位——PopScope 是全屏的，那样算出来的位置是错的。
+    menuSkill?.let { current ->
+        MiuixOverflowMenu(
+            expanded = true,
+            onDismiss = { menuSkill = null },
+            anchor = menuAnchor,
+        ) {
+            // 文案直接说「点了会发生什么」，比用对勾表达当前状态更不容易误读
+            MiuixMenuItem(
+                text = if (current.enabled) "停用" else "启用",
+                onClick = {
+                    menuSkill = null
+                    scope.launch {
+                        SkillStore.setEnabled(context, current.id, !current.enabled)
+                        skills = SkillStore.skills.value
+                        onToast(if (current.enabled) "已停用 ${current.name}" else "已启用 ${current.name}")
+                    }
+                },
+            )
+            MiuixMenuItem(
+                text = "查看详情",
+                onClick = {
+                    detail = current
+                    menuSkill = null
+                },
+                icon = Icons.Outlined.Info,
+            )
+            MiuixMenuItem(
+                text = "重命名",
+                onClick = {
+                    renaming = current
+                    menuSkill = null
+                },
+                icon = Icons.Outlined.DriveFileRenameOutline,
+            )
+            MiuixMenuItem(
+                text = "导出为 ZIP",
+                onClick = {
+                    exportTarget = current
+                    menuSkill = null
+                    exportLauncher.launch(null)
+                },
+                icon = Icons.Outlined.Upload,
+            )
+            MiuixMenuItem(
+                text = "删除",
+                onClick = {
+                    deleting = current
+                    menuSkill = null
+                },
+                icon = Icons.Outlined.DeleteOutline,
+                danger = true,
+            )
         }
     }
 
@@ -260,12 +354,11 @@ fun SkillScreen(
     }
 }
 
-/** 二级页顶栏：返回 + 标题 + 右侧导入按钮。 */
+/** 二级页顶栏：返回 + 标题。导入入口在右下角的圆形按钮上。 */
 @Composable
 private fun SkillTopBar(
     title: String,
     onBack: () -> Unit,
-    onImport: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
@@ -290,19 +383,6 @@ private fun SkillTopBar(
             modifier = Modifier.padding(start = 8.dp).weight(1f),
             maxLines = 1,
         )
-        val addPress = rememberMiuixPressState()
-        Box(
-            modifier = Modifier.size(44.dp)
-                .miuixClickable(addPress, true, onClick = onImport),
-            contentAlignment = Alignment.Center,
-        ) {
-            MiuixIcon(
-                Icons.Outlined.Add,
-                "导入 Skill",
-                tint = MiuixTheme.colors.primary,
-                size = 24.dp,
-            )
-        }
     }
 }
 
@@ -311,14 +391,19 @@ private fun SkillTopBar(
 private fun SkillRow(
     skill: Skill,
     onClick: () -> Unit,
-    onLongPress: () -> Unit,
+    /** 长按回调带上本行的窗口矩形，供溢出菜单定位。 */
+    onLongPress: (Rect) -> Unit,
     onToggle: (Boolean) -> Unit,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
     val press = rememberMiuixPressState()
+    // 卡片自身的窗口坐标。菜单是顶层 Popup，拿不到行布局，只能在这里量好带上去。
+    var bounds by remember { mutableStateOf(Rect.Zero) }
     MiuixCard(
-        modifier = Modifier.miuixClickable(press, true, onLongClick = onLongPress, onClick = onClick),
+        modifier = Modifier
+            .onGloballyPositioned { bounds = it.boundsInWindow() }
+            .miuixClickable(press, true, onLongClick = { onLongPress(bounds) }, onClick = onClick),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(spacing.lg),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -344,7 +429,7 @@ private fun SkillRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 MiuixText(
-                    text = skill.summary,
+                    text = introOf(skill),
                     style = MiuixTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                     maxLines = 2,
@@ -576,6 +661,51 @@ private fun ImportEntry(
     }
 }
 
+/**
+ * 一句话介绍。
+ *
+ * Skill 的 description 是写给模型看的：触发条件、禁用场景、关键词都堆在同一段里，
+ * 直接铺在界面上没人读得下去。这里取第一句，列表与详情共用。
+ */
+private fun introOf(skill: Skill): String =
+    firstSentence(skill.description).ifBlank { skill.summary }
+
+/** 详情页的完整介绍：description 原样保留换行，没有描述时退回来源与大小。 */
+private fun fullIntro(skill: Skill): String =
+    skill.description.trim().ifBlank { skill.summary }
+
+/** 取第一句并压掉换行；过长时截断，避免一句话占满整屏。 */
+private fun firstSentence(raw: String): String {
+    val text = raw.trim().replace(Regex("\\s+"), " ")
+    if (text.isEmpty()) return ""
+    val stop = text.indexOfFirst { it in "。！？!?." }
+    val cut = if (stop >= 0) text.substring(0, stop + 1) else text
+    return if (cut.length > 140) cut.take(139).trimEnd() + "…" else cut
+}
+
+/**
+ * 正文里的二三级标题，作为「这份 Skill 讲了什么」的目录。
+ *
+ * 跳过代码围栏，否则脚本示例里的注释会被误当成标题；最多取 [limit] 条。
+ */
+private fun outlineOf(body: String, limit: Int = 8): List<String> {
+    val out = mutableListOf<String>()
+    var inFence = false
+    body.lineSequence().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+            inFence = !inFence
+            return@forEach
+        }
+        if (inFence || out.size >= limit) return@forEach
+        if (trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
+            val title = trimmed.removePrefix("### ").removePrefix("## ").trim()
+            if (title.isNotEmpty()) out += title
+        }
+    }
+    return out
+}
+
 /** 长按（或点击）进入的详情面板：正文、附带文件与各项操作。 */
 @Composable
 private fun SkillDetailSheet(
@@ -632,9 +762,64 @@ private fun SkillDetailSheet(
             ) {
                 MiuixCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(spacing.lg)) {
                     MiuixText(
-                        text = body?.takeIf { it.isNotBlank() } ?: "（正文为空）",
+                        text = "介绍",
+                        style = MiuixTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(spacing.sm))
+                    MiuixText(
+                        text = fullIntro(skill),
                         style = MiuixTheme.typography.bodyMedium,
                     )
+                    val outline = outlineOf(body.orEmpty())
+                    if (outline.isNotEmpty()) {
+                        Spacer(Modifier.height(spacing.md))
+                        MiuixText(
+                            text = "内容目录",
+                            style = MiuixTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(spacing.xs))
+                        outline.forEach { item ->
+                            MiuixText(
+                                text = "· $item",
+                                style = MiuixTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (skill.source.isNotBlank()) {
+                        Spacer(Modifier.height(spacing.sm))
+                        MiuixText(
+                            text = buildString {
+                                append("来自 ").append(skill.source)
+                                if (skill.importedAt > 0) {
+                                    append(" · 导入于 ").append(Formatters.relativeTime(skill.importedAt))
+                                }
+                            },
+                            style = MiuixTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(spacing.md))
+                MiuixCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(spacing.lg)) {
+                    MiuixText(
+                        text = "正文",
+                        style = MiuixTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(spacing.sm))
+                    val bodyText = body.orEmpty()
+                    if (bodyText.isBlank()) {
+                        MiuixText(
+                            text = "（正文为空）",
+                            style = MiuixTheme.typography.bodyMedium,
+                            color = colors.onSurfaceVariant,
+                        )
+                    } else {
+                        MarkdownText(text = bodyText)
+                    }
                 }
                 if (skill.files.size > 1) {
                     Spacer(Modifier.height(spacing.md))

@@ -169,9 +169,7 @@ object BuiltInToolSet {
         readOnly = false,
         dangerous = true,
         handler = { ctx, args ->
-            if (!BuiltInMcpServer.config.value.allowWrite) {
-                throw IllegalStateException("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-            }
+            WriteGuard.requireWrite()
             val file = ToolSupport.resolve(ctx, args.getString("path"))
             val raw = args.getString("content")
             val bytes = if (args.optString("encoding") == "base64") {

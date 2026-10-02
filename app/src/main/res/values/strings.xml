@@ -210,4 +210,15 @@
     <string name="ai_model_context_from_remote">Context limit (auto-filled on pull, editable)</string>
     <string name="ai_context_missing">not provided</string>
     <string name="memory_usage_hint_unknown">Model context limit unknown, so only your own limit applies; set it in AI settings → Models to tighten this automatically</string>
+    <string name="ai_section_tools">Tool permissions</string>
+    <string name="ai_allow_write">Allow write actions</string>
+    <string name="ai_allow_write_desc">When off, file writes, APK rebuilds and database writes are rejected. Read-only tools are unaffected. Off by default.</string>
+    <string name="ai_group_generic">Generic</string>
+    <string name="ai_group_vendors">Vendors</string>
+    <string name="ai_custom_add">Add custom provider</string>
+    <string name="ai_generic_hint">Pick a protocol, then fill in the endpoint and model yourself</string>
+    <string name="ai_custom_name">Display name</string>
+    <string name="ai_custom_protocol">Protocol</string>
+    <string name="ai_custom_saved_new">Saved as a new provider</string>
+    <string name="ai_delete">Delete</string>
 </resources>

@@ -36,7 +36,7 @@ class McpRpcException(val code: Int, message: String) : Exception(message)
 private fun applyCredentials(connection: HttpURLConnection, config: McpServerConfig) {
     connection.setRequestProperty("Content-Type", "application/json")
     connection.setRequestProperty("Accept", "application/json, text/event-stream")
-    connection.setRequestProperty("User-Agent", "MCPToolbox/${BuiltInMcpServer.SERVER_VERSION}")
+    connection.setRequestProperty("User-Agent", "${McpProtocol.USER_AGENT}/${McpProtocol.CLIENT_VERSION}")
     if (config.token.isNotBlank()) connection.setRequestProperty("Authorization", "Bearer ${config.token}")
     config.headers.forEach { (key, value) -> connection.setRequestProperty(key, value) }
 }
@@ -207,7 +207,7 @@ class SseTransportClient(private val config: McpServerConfig) : McpTransportClie
 object McpClient {
 
     private val INITIALIZE_PARAMS = JSONObject().apply {
-        put("protocolVersion", BuiltInMcpServer.PROTOCOL_VERSION)
+        put("protocolVersion", McpProtocol.PROTOCOL_VERSION)
         put("capabilities", JSONObject().apply {
             put("roots", JSONObject().put("listChanged", false))
             put("sampling", JSONObject())
@@ -215,7 +215,7 @@ object McpClient {
         put("clientInfo", JSONObject().apply {
             put("name", "mcp-toolbox-android")
             put("title", "MCP Toolbox")
-            put("version", BuiltInMcpServer.SERVER_VERSION)
+            put("version", McpProtocol.CLIENT_VERSION)
         })
     }
 

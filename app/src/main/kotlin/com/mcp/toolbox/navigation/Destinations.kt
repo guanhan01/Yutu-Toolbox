@@ -97,10 +97,10 @@ val DrawerNetworkChildren: List<Destination> = listOf(
 
 /** 抽屉底部固定项。 */
 val DrawerFooter: List<Destination> = listOf(
+    Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
     Destination(Routes.TOOLS, R.string.app_drawer_group_tools, Icons.Outlined.GridView),
     Destination(Routes.SKILLS, R.string.app_nav_skills, Icons.Outlined.Extension),
     Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, Icons.Outlined.AutoAwesome),
     Destination(Routes.SETTINGS, R.string.app_nav_settings, Icons.Outlined.Settings),
-    Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
 )
 

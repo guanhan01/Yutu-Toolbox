@@ -32,11 +32,7 @@ object BuiltInToolSetFs {
         fileChmod(context),
     )
 
-    private fun requireWrite() {
-        if (!BuiltInMcpServer.config.value.allowWrite) {
-            error("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-        }
-    }
+    private fun requireWrite() = WriteGuard.requireWrite()
 
     private fun digestOf(file: File, algorithm: String): String {
         val md = MessageDigest.getInstance(algorithm)

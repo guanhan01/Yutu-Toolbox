@@ -41,11 +41,7 @@ object BuiltInToolSetExtra {
     )
 
     /** 「允许写入」总开关，与 file.write 用同一个。 */
-    private fun requireWrite() {
-        if (!BuiltInMcpServer.config.value.allowWrite) {
-            error("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-        }
-    }
+    private fun requireWrite() = WriteGuard.requireWrite()
 
     /** 高权限工具的前置检查，失败信息里带上具体缺什么。 */
     private fun requirePrivilege(context: Context) {

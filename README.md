@@ -35,7 +35,7 @@ Yutu Agt 把这些能力做成**模型可调用的工具**，于是它们可以�
 | 上下文管理 | 用量比例显示、超阈值自动压缩（旧对话转摘要，原文保留可撤销） |
 | 记忆 | 核心记忆（每轮注入）+ 子记忆（模型按需创建），token 用量受模型窗口约束 |
 | 计划模式 | 先出总计划与子任务，再逐步执行，进度条常驻 |
-| Skill | 导入 Markdown / ZIP / 文件夹 / URL / JSON / 剪贴板六种来源的自定义 Skill，以「名称 + 描述」注入系统提示词，正文按需读取 |
+| Skill | 内置 `cognitive-engine`（首次启动自动预置）；也可导入 Markdown / ZIP / 文件夹 / URL / JSON / 剪贴板六种来源的自定义 Skill。以「名称 + 描述」注入系统提示词，正文按需读取 |
 | 会话 | 多会话本地保存，支持重命名、删除、消息级复制 / 重说 / 编辑 |
 
 ## 内置 MCP 工具（103 个）
@@ -52,9 +52,9 @@ Yutu Agt 把这些能力做成**模型可调用的工具**，于是它们可以�
 | 界面操作 | `ui.tap/swipe/text/key/tree/current/screenshot` |
 | 其它 | `shell.exec` `clipboard.get/set` `keystore.manage` `skill.list/read` `artifact.list` |
 
-**外部 MCP 暴露面是收窄的。** 内置 Server 只对外放出 31 个只读或低风险工具（白名单硬上限），
-`file.delete`、`app.uninstall`、`shell.exec`、`ui.tap` 这类改写与提权工具即使被猜到名字，
-`tools/call` 也会直接拒绝。模型可用的工具集与外部客户端可用的工具集是两套。
+**外部 MCP 是收窄接入的。** 外部 Server 的工具默认不对模型开放，需要在 MCP 页面
+逐个打开「接入 AI 对话」，且只有已连接的 Server 才能开启；单个 Server 最多注入
+40 个工具，避免一个巨型 Server 吃掉上下文窗口。
 
 ## 工具箱
 
@@ -187,7 +187,7 @@ feature/network/          网络工具
 feature/database/         SQLite 查看器与编辑器
 feature/decompile/        反编译引擎 + 任务中心
 feature/capture/          抓包：VPN 引擎、TLS 中间人、CA 管理、导出
-feature/mcp/              MCP 客户端 / 内置 Server / 103 个工具 / Skill 管理 / 产物目录
+feature/mcp/              MCP 客户端 / 103 个内置工具 / Skill 管理 / 产物目录
 ```
 
 设计规范见 [DESIGN.md](DESIGN.md)，版本变更见 [CHANGELOG.md](CHANGELOG.md)，

@@ -1,6 +1,7 @@
 package com.mcp.toolbox.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.horizontalScroll
@@ -28,6 +29,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +64,7 @@ import androidx.compose.material.icons.outlined.Cable
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.FileCopy
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
@@ -70,6 +73,7 @@ import androidx.compose.material.icons.outlined.FindReplace
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Http
+import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.ListAlt
@@ -79,11 +83,15 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.PieChart
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.runtime.derivedStateOf
@@ -101,6 +109,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Construction
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DriveFileMove
@@ -148,6 +157,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -288,7 +298,9 @@ fun HomeScreen(
         uri?.let {
             attachments += ChatAttachment.Folder(
                 uri = it.toString(),
-                label = it.lastPathSegment?.substringAfterLast(':') ?: "文件夹",
+                // 树 URI 能解析出目录路径就显示路径；解析不出（如存储根）退回 provider 的显示名
+                label = ChatAttachment.folderLabel(it)
+                    ?: ChatAttachment.displayName(context, it),
             )
         }
     }
@@ -564,6 +576,7 @@ fun HomeScreen(
         // 保证最后一条消息滚到底时不会被输入栏永久遮住。
         var inputBarHeightPx by remember { mutableIntStateOf(0) }
 
+
         Box(Modifier.weight(1f)) {
             // 「回到最新」浮标：用户往上翻时出现，点一下回到底部
             if (sending && !atBottom) {
@@ -723,26 +736,45 @@ fun HomeScreen(
                 }
             },
             attachmentRow = {
-                if (attachments.isNotEmpty()) {
-                    Row(
+                // 图片留在面板内：缩略图本身就是「所见即所得」的输入内容。
+                val images = attachments.withIndex().filter { it.value is ChatAttachment.Image }
+                if (images.isNotEmpty()) {
+                    FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 4.dp),
+                            .padding(bottom = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(spacing.sm),
                     ) {
-                        attachments.forEachIndexed { index, item ->
+                        images.forEach { (index, item) ->
                             if (item is ChatAttachment.Image) {
-                                ImageAttachmentChip(
+                                ImageAttachmentCard(
                                     uri = item.uri,
                                     label = item.label,
                                     onRemove = { attachments.removeAt(index) },
                                 )
-                            } else {
-                                AttachmentChip(
-                                    label = item.label,
-                                    onRemove = { attachments.removeAt(index) },
-                                )
                             }
+                        }
+                    }
+                }
+            },
+            fileRow = {
+                // 文件 / 文件夹 / 路径挪到面板之外：它们是一份待发送清单，
+                // 和输入框不是同一层，压在框里只会让输入区变高变乱。
+                val files = attachments.withIndex().filter { it.value !is ChatAttachment.Image }
+                if (files.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = spacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                    ) {
+                        files.forEach { (index, item) ->
+                            FileChip(
+                                visual = fileVisual(item),
+                                onRemove = { attachments.removeAt(index) },
+                            )
                         }
                     }
                 }
@@ -992,12 +1024,12 @@ private fun ReasoningSheet(
  * 一张就够几十 MB 的堆，几张就能把输入栏拖卡。
  */
 @Composable
-private fun ImageAttachmentChip(
+private fun ImageAttachmentCard(
     uri: String,
     label: String,
     onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val colors = MiuixTheme.colors
     val context = LocalContext.current
     // 只依赖 uri：换图时重新解码，不会沿用上一张的位图
     val thumb by produceState<android.graphics.Bitmap?>(initialValue = null, uri) {
@@ -1024,12 +1056,13 @@ private fun ImageAttachmentChip(
             }.getOrNull()
         }
     }
-
+    val shape = RoundedCornerShape(MiuixTheme.radius.md)
+    val colors = MiuixTheme.colors
     Box(
-        modifier = Modifier
-            .size(THUMB_SIZE)
-            .clip(RoundedCornerShape(MiuixTheme.radius.md))
-            .background(colors.surfaceContainerLow),
+        modifier = modifier
+            .size(ATTACH_THUMB_SIZE)
+            .clip(shape)
+            .background(colors.surfaceContainerHighest),
     ) {
         val bitmap = thumb
         if (bitmap != null) {
@@ -1040,7 +1073,7 @@ private fun ImageAttachmentChip(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            // 解码中 / 解码失败：给个占位，避免附件区高度跳一下
+            // 解码未完成时先摆一枚淡图标，占位与成品同尺寸，不跳版
             MiuixIcon(
                 Icons.Outlined.Image,
                 label,
@@ -1049,21 +1082,20 @@ private fun ImageAttachmentChip(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        // 移除按钮压在右上角：缩略图上没有放文字标签的位置，
-        // 加一层半透明底，保证在浅色图片上也看得见
+        // 移除按钮压在右上角：黑底半透明白叉，浅图深图都看得清
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(3.dp)
+                .padding(2.dp)
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(Color.Black.copy(alpha = 0.5f))
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center,
         ) {
             MiuixIcon(
                 Icons.Outlined.Close,
-                stringResource(R.string.chat_attach),
+                stringResource(R.string.chat_attach_remove),
                 tint = Color.White,
                 size = 12.dp,
             )
@@ -1071,37 +1103,146 @@ private fun ImageAttachmentChip(
     }
 }
 
-/** 缩略图边长，以及解码目标边长（按 3x 屏估算：够清晰，又不至于占内存）。 */
-private val THUMB_SIZE = 56.dp
-private const val THUMB_EDGE_PX = 168
+/** 文件类附件的外观：类型图标、图标配色、展示文案。 */
+private data class FileVisual(val icon: ImageVector, val tint: Color, val text: String)
 
-/** 已选附件的预览小块，点 × 移除。 */
+/**
+ * 算出文件 / 文件夹 / 路径附件的展示外观。
+ *
+ * 文件夹（含指向目录的手输路径）是「文件夹图标 + 路径」，单个文件是「类型图标 + 文件名」；
+ * 手输路径两个分支都用压缩后的路径——只显示末段文件名，就看不出它到底来自哪里。
+ */
 @Composable
-private fun AttachmentChip(label: String, onRemove: () -> Unit) {
+private fun fileVisual(item: ChatAttachment): FileVisual {
     val colors = MiuixTheme.colors
+    return when (item) {
+        is ChatAttachment.Folder ->
+            FileVisual(Icons.Outlined.FolderOpen, colors.primary, compactPath(item.label))
+
+        is ChatAttachment.Path -> {
+            val path = compactPath(item.path)
+            val (icon, tint) = if (item.isDirectory) {
+                Icons.Outlined.FolderOpen to colors.primary
+            } else {
+                fileTypeVisual(item.path)
+            }
+            FileVisual(icon, tint, path)
+        }
+
+        is ChatAttachment.File -> {
+            val (icon, tint) = fileTypeVisual(item.label)
+            FileVisual(icon, tint, item.label)
+        }
+
+        // 图片走 [ImageAttachmentCard]，这里只兜底，避免 when 不穷尽
+        is ChatAttachment.Image -> FileVisual(Icons.Outlined.Image, colors.primary, item.label)
+    }
+}
+
+/** 按扩展名挑图标与配色。 */
+@Composable
+private fun fileTypeVisual(name: String): Pair<ImageVector, Color> {
+    val colors = MiuixTheme.colors
+    return when (name.substringAfterLast('.', "").lowercase()) {
+        "pdf" -> Icons.Outlined.PictureAsPdf to colors.error
+        "ppt", "pptx", "keynote" -> Icons.Outlined.Slideshow to colors.warning
+        "zip", "rar", "7z", "tar", "gz", "bz2" -> Icons.Outlined.FolderZip to colors.warning
+        "ttf", "otf", "woff", "woff2" -> Icons.Outlined.FontDownload to colors.primary
+        "csv", "xls", "xlsx" -> Icons.Outlined.TableChart to colors.success
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg" ->
+            Icons.Outlined.Image to colors.primary
+        "mp4", "mkv", "mov", "avi", "webm", "flv" -> Icons.Outlined.Movie to colors.tertiary
+        "mp3", "wav", "flac", "m4a", "ogg", "aac" -> Icons.Outlined.MusicNote to colors.tertiary
+        "apk", "apks", "xapk" -> Icons.Outlined.Android to colors.success
+        "db", "sqlite", "sqlite3", "sql" -> Icons.Outlined.DataObject to colors.success
+        "pem", "der", "crt", "cer", "p12", "jks", "keystore" -> Icons.Outlined.Key to colors.warning
+        "html", "htm", "js", "ts", "jsx", "tsx", "kt", "kts", "java", "py", "sh",
+        "c", "cpp", "h", "rs", "go", "rb", "php", "xml", "json", "yml", "yaml",
+        -> Icons.Outlined.Code to colors.tertiary
+        "txt", "md", "log", "ini", "conf", "properties", "toml" ->
+            Icons.Outlined.Article to colors.onSurfaceVariant
+        else -> Icons.Outlined.InsertDriveFile to colors.onSurfaceVariant
+    }
+}
+
+/**
+ * 路径压缩：只保留末 [PATH_SEGMENTS] 段，砍掉的部分用省略号代替。
+ *
+ * 完整路径动辄五六段，铺出来 chip 会横着占满一行；只留文件名又丢掉了目录信息。
+ */
+private fun compactPath(path: String): String {
+    val parts = path.trim().trimEnd('/').split('/').filter { it.isNotBlank() }
+    val visible = parts.takeLast(PATH_SEGMENTS)
+    val text = visible.joinToString("/")
+    return if (parts.size > visible.size) "…/$text" else text.ifBlank { path }
+}
+
+/**
+ * 文件 / 文件夹 / 路径附件：浮在输入框面板外的胶囊。
+ *
+ * 类型图标垫一层同色淡染的圆角底：纯描边图标在大屏上太单薄，整块实心色又太重，
+ * 渐变染色正好落在「简洁，但有细节」的位置。
+ */
+@Composable
+private fun FileChip(visual: FileVisual, onRemove: () -> Unit) {
+    val colors = MiuixTheme.colors
+    val shape = RoundedCornerShape(percent = 50)
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.surfaceContainerLow)
-            .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            .shadow(MiuixTheme.dimens.elevation.level1, shape, clip = false)
+            .clip(shape)
+            .background(colors.surface)
+            .border(BorderStroke(1.dp, colors.outlineVariant), shape)
+            .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(MiuixTheme.radius.sm))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            visual.tint.copy(alpha = 0.30f),
+                            visual.tint.copy(alpha = 0.10f),
+                        ),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            MiuixIcon(visual.icon, null, tint = visual.tint, size = 14.dp)
+        }
+        Spacer(Modifier.width(4.dp))
         MiuixText(
-            text = label,
+            text = visual.text,
+            modifier = Modifier.widthIn(max = 112.dp),
             style = MiuixTheme.typography.labelMedium,
             color = colors.onSurface,
             maxLines = 1,
         )
-        MiuixIconButton(
-            icon = Icons.Outlined.Close,
-            contentDescription = stringResource(R.string.chat_attach),
-            onClick = onRemove,
-            buttonSize = 26.dp,
-            iconSize = 14.dp,
-        )
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center,
+        ) {
+            MiuixIcon(
+                Icons.Outlined.Close,
+                stringResource(R.string.chat_attach_remove),
+                tint = colors.onSurfaceVariant,
+                size = 13.dp,
+            )
+        }
     }
 }
+
+/** 图片缩略图边长（正方形）。 */
+private val ATTACH_THUMB_SIZE = 64.dp
+/** 路径展示保留的末段数：够看出在哪个目录，又不至于把 chip 撑满一行。 */
+private const val PATH_SEGMENTS = 3
+/** 解码目标边长（按 3x 屏估算：够清晰，又不至于占内存）。 */
+private const val THUMB_EDGE_PX = 168
 
 /** 手动输入文件路径。 */
 @Composable
@@ -1195,7 +1336,10 @@ private fun InputBar(
     providerIconLabel: String,
     reasoningActive: Boolean,
     usage: @Composable () -> Unit = {},
+    /** 图片附件：留在输入框面板内。 */
     attachmentRow: @Composable () -> Unit = {},
+    /** 文件 / 文件夹 / 路径附件：铺在输入框面板外的上方。 */
+    fileRow: @Composable () -> Unit = {},
     /** 把输入栏实测高度报出去，供外层给内容列表留出等高的底部内边距。 */
     onHeightMeasured: (Int) -> Unit = {},
 ) {
@@ -1222,159 +1366,168 @@ private fun InputBar(
                 top = spacing.sm,
                 bottom = spacing.md,
             )
-            .shadow(
-                elevation = MiuixTheme.dimens.elevation.level2,
-                shape = panelShape,
-                clip = false,
-            )
-            .clip(panelShape)
-            .background(colors.surfaceContainerLow)
-            .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 8.dp),
     ) {
-        // 上下文细线：并入底板顶部，不再单独占一行浮在框外
-        usage()
-        attachmentRow()
-        // 编辑态横条：提示正在编辑，可取消
-        if (editing) {
+        // 文件 / 文件夹 / 路径附件浮在面板之外。
+        // 面板只有自己那圈圆角不透明，上方这行 chip 才真的落在框外。
+        fileRow()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = MiuixTheme.dimens.elevation.level2,
+                    shape = panelShape,
+                    clip = false,
+                )
+                .clip(panelShape)
+                .background(colors.surfaceContainerLow)
+                .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 8.dp),
+        ) {
+            // 上下文细线：并入底板顶部，不再单独占一行浮在框外
+            usage()
+            attachmentRow()
+
+            // 编辑态横条：提示正在编辑，可取消
+            if (editing) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MiuixIcon(
+                        Icons.Outlined.Edit,
+                        null,
+                        tint = colors.primary,
+                        size = 16.dp,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    MiuixText(
+                        text = stringResource(R.string.chat_editing_hint),
+                        style = MiuixTheme.typography.labelMedium,
+                        color = colors.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onCancelEdit),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        MiuixIcon(
+                            Icons.Outlined.Close,
+                            stringResource(R.string.chat_cancel),
+                            tint = colors.onSurfaceVariant,
+                            size = 16.dp,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            // 第一行：输入
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 28.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (value.isEmpty()) {
+                    MiuixText(
+                        text = stringResource(if (editing) R.string.chat_editing_hint else R.string.chat_input_hint),
+                        style = MiuixTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                    cursorBrush = SolidColor(colors.primary),
+                    maxLines = 6,
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // 第二行：左（附件 / 思考）  右（模型 / 发送）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MiuixIcon(
-                    Icons.Outlined.Edit,
-                    null,
-                    tint = colors.primary,
-                    size = 16.dp,
-                )
-                Spacer(Modifier.width(6.dp))
-                MiuixText(
-                    text = stringResource(R.string.chat_editing_hint),
-                    style = MiuixTheme.typography.labelMedium,
-                    color = colors.primary,
-                    modifier = Modifier.weight(1f),
-                )
+                // 自己包一层：MiuixIconButton 的 modifier 不落到实际节点上，
+                // onGloballyPositioned 不会触发，anchor 就永远是 null。
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .clickable(onClick = onCancelEdit),
+                        .clickable(onClick = onAttach),
                     contentAlignment = Alignment.Center,
                 ) {
                     MiuixIcon(
-                        Icons.Outlined.Close,
-                        stringResource(R.string.chat_cancel),
-                        tint = colors.onSurfaceVariant,
-                        size = 16.dp,
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-        }
-        // 第一行：输入
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 28.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            if (value.isEmpty()) {
-                MiuixText(
-                    text = stringResource(if (editing) R.string.chat_editing_hint else R.string.chat_input_hint),
-                    style = MiuixTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
-                cursorBrush = SolidColor(colors.primary),
-                maxLines = 6,
-            )
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // 第二行：左（附件 / 思考）  右（模型 / 发送）
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // 自己包一层：MiuixIconButton 的 modifier 不落到实际节点上，
-            // onGloballyPositioned 不会触发，anchor 就永远是 null。
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onAttach),
-                contentAlignment = Alignment.Center,
-            ) {
-                MiuixIcon(
-                    Icons.Outlined.Add,
-                    stringResource(R.string.chat_attach),
-                    tint = colors.onSurfaceVariant,
-                    size = 20.dp,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onPickReasoning),
-                contentAlignment = Alignment.Center,
-            ) {
-                MiuixIcon(
-                    Icons.Outlined.Psychology,
-                    stringResource(R.string.chat_pick_reasoning),
-                    tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
-                    size = 20.dp,
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            // 模型：品牌色圆底 + 白色图形，放在发送键左侧
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onPickModel),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (providerIconRes != 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(colors.onSurface),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Image(
-                            painter = painterResource(providerIconRes),
-                            contentDescription = providerIconLabel,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                } else {
-                    MiuixIcon(
-                        Icons.Outlined.SwapHoriz,
-                        null,
+                        Icons.Outlined.Add,
+                        stringResource(R.string.chat_attach),
                         tint = colors.onSurfaceVariant,
                         size = 20.dp,
                     )
                 }
-            }
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onPickReasoning),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixIcon(
+                        Icons.Outlined.Psychology,
+                        stringResource(R.string.chat_pick_reasoning),
+                        tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
+                        size = 20.dp,
+                    )
+                }
 
-            MiuixIconButton(
-                icon = if (sending) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
-                contentDescription = stringResource(R.string.chat_send),
-                onClick = { if (sending) onStop() else onSend() },
-                filled = active || sending,
-                enabled = active || sending,
-                buttonSize = 36.dp,
-                iconSize = 18.dp,
-            )
+                Spacer(Modifier.weight(1f))
+
+                // 模型：品牌色圆底 + 白色图形，放在发送键左侧
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onPickModel),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (providerIconRes != 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(colors.onSurface),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(
+                                painter = painterResource(providerIconRes),
+                                contentDescription = providerIconLabel,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else {
+                        MiuixIcon(
+                            Icons.Outlined.SwapHoriz,
+                            null,
+                            tint = colors.onSurfaceVariant,
+                            size = 20.dp,
+                        )
+                    }
+                }
+
+                MiuixIconButton(
+                    icon = if (sending) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
+                    contentDescription = stringResource(R.string.chat_send),
+                    onClick = { if (sending) onStop() else onSend() },
+                    filled = active || sending,
+                    enabled = active || sending,
+                    buttonSize = 36.dp,
+                    iconSize = 18.dp,
+                )
+            }
         }
     }
 }
@@ -2308,16 +2461,16 @@ private fun UsageIndicator(
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 没有真实窗口就不画进度条：一条永远填不满（或永远填满）的条
-        // 比不画更容易误导
-        if (ratio != null) {
-            Box(
-                modifier = Modifier
-                    .width(56.dp)
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(colors.surfaceContainerHigh),
-            ) {
+        // 轨道常显：它就是「上下文上限」那条线，窗口未知时也不该整条消失；
+        // 只是没有真实窗口就不填充（用猜测的分母画长度会误导）
+        Box(
+            modifier = Modifier
+                .width(56.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(colors.surfaceContainerHigh),
+        ) {
+            if (ratio != null) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
@@ -2325,7 +2478,6 @@ private fun UsageIndicator(
                         .background(barColor, RoundedCornerShape(2.dp)),
                 )
             }
-            Spacer(Modifier.width(4.dp))
         }
         Spacer(Modifier.width(4.dp))
         MiuixText(

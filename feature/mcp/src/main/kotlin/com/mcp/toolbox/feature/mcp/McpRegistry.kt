@@ -14,7 +14,8 @@ object McpRegistry {
     private const val KEY_SERVERS = "servers"
     private const val KEY_LOG = "call-log"
 
-    const val BUILT_IN_ID = "builtin-local"
+    /** 旧版内置 Server 的客户端条目 id，仅用于读取时清理历史配置。 */
+    private const val LEGACY_BUILT_IN_ID = "builtin-local"
 
     val servers = MutableStateFlow<List<McpServerConfig>>(emptyList())
     val states = MutableStateFlow<Map<String, McpServerState>>(emptyMap())
@@ -37,7 +38,12 @@ object McpRegistry {
             val raw = prefs.getString(KEY_SERVERS, null)
             servers.value = runCatching {
                 val array = JSONArray(raw ?: "[]")
-                (0 until array.length()).map { McpServerConfig.fromJson(array.getJSONObject(it)) }
+                (0 until array.length())
+                    .map { array.getJSONObject(it) }
+                    // 旧版本把「本机内置 Server」写进了配置。Server 已移除，
+                    // 留着会变成一个永远连不上的死条目，读取时按旧标记直接丢弃。
+                    .filterNot { it.optBoolean("builtIn") || it.optString("id") == LEGACY_BUILT_IN_ID }
+                    .map { McpServerConfig.fromJson(it) }
             }.getOrDefault(emptyList())
         }
         if (calls.value.isEmpty()) {
@@ -47,24 +53,6 @@ object McpRegistry {
                 (0 until array.length()).map { McpCallRecord.fromJson(array.getJSONObject(it)) }
             }.getOrDefault(emptyList())
         }
-        ensureBuiltIn()
-    }
-
-    /** 内置 Server 的客户端配置始终存在，方便本机端到端自测。 */
-    fun ensureBuiltIn() {
-        if (servers.value.any { it.builtIn }) return
-        val cfg = BuiltInMcpServer.config.value
-        servers.value = listOf(
-            McpServerConfig(
-                id = BUILT_IN_ID,
-                name = "本机内置 Server",
-                transport = McpTransport.HTTP,
-                url = "http://127.0.0.1:${cfg.port}/mcp",
-                token = cfg.token,
-                timeoutMs = 6000,
-                builtIn = true,
-            ),
-        ) + servers.value
     }
 
     fun upsert(context: Context, config: McpServerConfig) {
@@ -76,25 +64,13 @@ object McpRegistry {
     }
 
     fun remove(context: Context, id: String) {
+        McpAiAccess.forget(context, id)
         servers.value = servers.value.filterNot { it.id == id }
         states.value = states.value - id
         tools.value = tools.value - id
         resources.value = resources.value - id
         prompts.value = prompts.value - id
         persistServers(context)
-    }
-
-    /** 内置 Server 的端口 / token 变化后同步客户端配置。 */
-    fun syncBuiltIn(context: Context) {
-        val cfg = BuiltInMcpServer.config.value
-        val current = servers.value.firstOrNull { it.builtIn } ?: return
-        upsert(context, current.copy(url = builtInUrlFor(current), token = cfg.token))
-    }
-
-    /** 内置 Server 端口 / token 变化时同步客户端地址；SSE 配置下保留 /sse 端点。 */
-    private fun builtInUrlFor(current: McpServerConfig): String {
-        val http = "http://127.0.0.1:${BuiltInMcpServer.config.value.port}/mcp"
-        return if (current.transport == McpTransport.SSE) http.replace("/mcp", "/sse") else http
     }
 
     fun setState(state: McpServerState) {

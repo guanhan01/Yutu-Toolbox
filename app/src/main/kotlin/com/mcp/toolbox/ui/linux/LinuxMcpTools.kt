@@ -2,7 +2,7 @@ package com.mcp.toolbox.ui.linux
 
 import android.content.Context
 import android.util.Base64
-import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
+import com.mcp.toolbox.feature.mcp.WriteGuard
 import com.mcp.toolbox.feature.mcp.Schema
 import com.mcp.toolbox.feature.mcp.ToolDef
 import com.mcp.toolbox.feature.mcp.ToolResult
@@ -264,9 +264,7 @@ object LinuxMcpTools {
         dangerous = true,
         requiresPrivilege = true,
         handler = { ctx, args ->
-            if (!BuiltInMcpServer.config.value.allowWrite) {
-                throw IllegalStateException("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-            }
+            WriteGuard.requireWrite()
             val distro = distroOf(ctx)
             requireEnv(ctx, distro)
             val rel = args.getString("path").trim().trim('/')
@@ -404,9 +402,7 @@ object LinuxMcpTools {
         dangerous = true,
         requiresPrivilege = true,
         handler = { ctx, args ->
-            if (!BuiltInMcpServer.config.value.allowWrite) {
-                throw IllegalStateException("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-            }
+            WriteGuard.requireWrite()
             val path = args.getString("path").trim()
             val source = File(path)
             if (!source.isFile) throw IllegalArgumentException("APK 不存在：$path")

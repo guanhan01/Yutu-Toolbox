@@ -3,7 +3,7 @@
 > 本文件保留项目的开发过程记录：阶段进度、构建环境细节、踩过的坑。
 > 面向使用者的说明请看根目录的 [README.md](../README.md)。
 
-> AI Agent 式开发者工具箱 + MCP 客户端 / 内置 MCP Server 的 Android 工程。
+> AI Agent 式开发者工具箱 + MCP 客户端（外部 Server 接入）的 Android 工程。
 > 应用名：Yutu Agt（工程代号 `mcp-toolbox`，Kotlin 包名 / namespace 仍是 `com.mcp.toolbox*`，
 > applicationId 为 `com.Yutu.Agent`，Beta 加 `.beta` 后缀）。
 
@@ -18,11 +18,11 @@
 | P4 | 数据库（SQLite 引擎、Schema/数据/查询三个视图、示例库） | 完成（真机验证） |
 | P5 | 抓包 | 已实现：本地 VPN + 真实 TLS 中间人解密、CA 管理、HAR / JSON 导出（`feature/capture` 约 6.5k 行，真机流程待复核） |
 | P6 | 反编译（真实引擎）+ 任务中心 | 完成（真机验证） |
-| P7 | MCP 客户端 + Schema 表单 + 内置 Server + 产物目录 + 外置 SAF 目录 | 完成（真机验证，含 streamable HTTP 与 legacy SSE） |
+| P7 | MCP 客户端 + Schema 表单 + 产物目录 + 外置 SAF 目录（内置 Server 已移除） | 完成（真机验证，含 streamable HTTP 与 legacy SSE） |
 | P8 | 打磨：动效、无障碍、性能、双语、README | 进行中 |
 | P9 | AI Agent：对话主界面、11 家服务商、工具调用、记忆、压缩、计划模式 | 完成 |
 | P10 | Linux 环境（Debian 13 / Alpine 按需安装 + 组件管理 + 终端） | 完成（运行需 Root） |
-| P11 | Skill 工具箱（六种导入源 + 注入系统提示词） | 完成 |
+| P11 | Skill 工具箱（六种导入源 + 注入系统提示词 + 内置 `cognitive-engine`） | 完成 |
 
 P8 已完成：
 
@@ -34,6 +34,46 @@ P8 已完成：
 - 本文件按真实进度对齐
 
 P8 待办：字号 1.3× 破版检查、Koin 收尾、动效统一走 `MotionTokens`、文案抽到 `strings.xml`（双语）。
+
+### 待办 · 未验证项（截至 2026-10-02）
+
+- **外部 MCP 工具接入 AI 的模型往返**：已用本地 mock 服务端（实现 Responses 协议）
+  跑通「注入 tools → 模型发起 function_call → 执行工具 → 用 call_id 回填 output →
+  第二轮收尾」，工具真实执行并回填成功。**仍未用真实服务商验证**（设备上无 API Key），
+  下列分支也没构造用例：推理摘要事件（`response.reasoning_summary_text.delta`）、
+  失败事件（`response.failed` / `incomplete`）、带图输入（`input_image`）。
+- **无障碍免 root 通道**：需在设备上实测（见 v0.1.5 记录）。
+
+### 待办 · 图标体系重做（用户已确认要做，尚未开工）
+
+**需求**（用户原话）：应用内所有图标「换更高级点，颜色丰富点，不要表情包」；可上网找参考，但不直接套用。
+
+**现状（2026-10-01 用命令核实）**：
+
+- 全部来自 `androidx.compose.material:material-icons-extended:1.7.8` 的 `Icons.Outlined.*`
+  单色细线矢量：**122 个不同符号、415 处引用、分布在 42 个文件**。
+- 品牌图标 11 个（8 个 XML + 3 个 PNG）：`app/src/main/res/drawable/ic_brand_*`，
+  由 `app/.../ui/ai/AiConfig.kt` 的 `AiProvider.iconRes` 引用。
+- 统一出口只有一处：`core/designsystem/.../component/Icons.kt` 的
+  `MiuixIcon(icon: ImageVector, contentDescription, modifier, tint, size)`。
+  除品牌图标走 `@DrawableRes` 外，所有调用点传的都是 `ImageVector`。
+- ⚠️ **`miuix-icons` 是死声明**：`gradle/libs.versions.toml:69` 声明了
+  `top.yukonga.miuix.kmp:miuix-icons:0.9.2`，但**没有任何模块 `implementation` 它、
+  也没有任何代码 import**。接手时不要以为可以直接用。
+
+**待拍板（两条路工作量与结果差别很大，未选定）**：
+
+- A. 换图标库（如 Lucide / Phosphor）：风格立刻改变。代价是逐处改 415 处引用、
+  引入新依赖、维护图标名映射表。
+- B. 保留现有矢量、给图标加彩色容器／渐变底：改动小、观感提升明显，
+  但图形本身仍是 Material 线条风。
+
+**选 A 的注意点**：`Icons.Outlined.X` 是 `ImageVector` 扩展属性，映射不能机械批量替换，
+语义并不一一对应（`Delete` ↔ `trash-2`、`DriveFileRenameOutline` ↔ `pencil-line`），
+必须逐处核对。
+
+**验收**：编译通过（构建方式见 §2，`GRADLE_USER_HOME=/storage/emulated/0/gradlehome`）
++ 真机逐页截图核对；若动 `MiuixIcon` 签名，需同步全部调用点。
 
 ## 2. 设备侧构建（本工程的实际构建方式）
 
@@ -118,7 +158,7 @@ feature/web/            WebView 多标签浏览器（真实前进后退、地址
 feature/network/        HTTP 请求、Ping、DNS、端口扫描、Whois、网络环境
 feature/database/       SQLite：Schema / 数据 / SQL 查询（只读）
 feature/decompile/      反编译（真实引擎）+ 任务中心
-feature/mcp/            MCP 客户端、内置 Server（SSE + streamable HTTP）、产物目录、Schema 表单
+feature/mcp/            MCP 客户端（外部 Server 接入）、产物目录、Schema 表单、Skill 管理
 feature/capture/        抓包（P5，暂停）
 ```
 

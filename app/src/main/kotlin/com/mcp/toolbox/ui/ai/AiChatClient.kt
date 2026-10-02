@@ -33,6 +33,10 @@ object AiChatClient {
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             validate(config)
+            // Responses 的报文与 Chat Completions 完全不同，必须单独走
+            if (config.activeProtocol == AiProtocol.RESPONSES) {
+                return@runCatching responsesComplete(context, config, history, systemPrompt)
+            }
             val payload = buildPayload(
                 config = config,
                 messages = buildMessages(context, history, systemPrompt),
@@ -82,13 +86,20 @@ object AiChatClient {
         onUsage: (promptTokens: Int, completionTokens: Int) -> Unit = { _, _ -> },
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
-        when (config.current) {
-            AiProvider.ANTHROPIC -> return@withContext anthropicStream(
+        // 按「协议」而不是「厂商」分派：自定义供应商由用户自己选协议，
+        // 选 Anthropic 就该走 anthropicStream，与它挂在哪个枚举上无关。
+        when (config.activeProtocol) {
+            AiProtocol.ANTHROPIC -> return@withContext anthropicStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
             )
 
-            AiProvider.GEMINI -> return@withContext geminiStream(
+            AiProtocol.GEMINI -> return@withContext geminiStream(
+                context, config, history, systemPrompt, enableTools,
+                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
+            )
+
+            AiProtocol.RESPONSES -> return@withContext responsesStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
             )
@@ -190,6 +201,161 @@ object AiChatClient {
             }
             error("工具调用轮数已达上限")
         }
+    }
+
+    // ---------- OpenAI Responses ----------
+
+    /**
+     * Responses API 的流式对话 + 函数调用循环。
+     *
+     * 与 [anthropicStream] 同构：每轮把「模型请求的工具调用」和「本地执行结果」
+     * 追加回 input，再发下一轮。区别在于回填字段：Responses 用 `call_id` 关联
+     * 结果，且 assistant 那侧不需要显式声明 content 数组。
+     */
+    private suspend fun responsesStream(
+        context: Context,
+        config: AiConfig,
+        history: List<ChatMessage>,
+        systemPrompt: String?,
+        enableTools: Boolean,
+        onToolCall: (Int, Int, String, String) -> Unit,
+        onToolResult: (Int, Int, String, String) -> Unit,
+        onReasoning: (Int, String) -> Unit,
+        onNarration: (Int, String) -> Unit,
+        onUsage: (Int, Int) -> Unit,
+        onDelta: (String) -> Unit,
+    ): Result<String> = runCatching {
+        validate(config)
+        // input 摊成可变数组，便于逐轮回填。
+        // 注意不能用 JSONArray(jsonArray)：org.json 的这个构造函数只接受原始数组，
+        // 传 JSONArray 会抛 "Not a primitive array"。
+        val working = JSONArray()
+        val initial = JSONObject(
+            ResponsesBackend.buildPayload(
+                context, config, history, systemPrompt, stream = true, enableTools = enableTools,
+            ),
+        ).optJSONArray("input")
+        (0 until (initial?.length() ?: 0)).forEach { working.put(initial!!.get(it)) }
+
+        var lastPrompt = 0
+        var lastCompletion = 0
+        val system = systemPrompt?.takeIf { it.isNotBlank() }
+
+        repeat(MAX_TOOL_ROUNDS) { round ->
+            val payload = JSONObject()
+                .put("model", config.model)
+                .put("input", working)
+                .put("stream", true)
+                .put("temperature", config.temperature.toDouble())
+                .put("store", false)
+                .also { root ->
+                    system?.let { root.put("instructions", it) }
+                    if (enableTools) {
+                        root.put(
+                            "tools",
+                            JSONArray().also { arr ->
+                                AiToolBridge.toolSpecs(context).forEach { spec ->
+                                    arr.put(
+                                        JSONObject()
+                                            .put("type", "function")
+                                            .put("name", spec.name)
+                                            .put("description", spec.description)
+                                            .put("parameters", spec.schema),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+
+            val conn = openRaw(
+                url = ResponsesBackend.endpoint(config),
+                payload = payload.toString(),
+                headers = ResponsesBackend.headers(config),
+                config = config,
+            )
+            val text = StringBuilder()
+            val acc = ToolCallAccumulator()
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    error("HTTP $code：${extractError(err).take(200)}")
+                }
+                conn.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { raw ->
+                        val line = raw.trim()
+                        // Responses 的 SSE 主要靠 data:；event: 行内容与 data.type 重复
+                        if (!line.startsWith("data:")) return@forEach
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isEmpty() || data == "[DONE]") return@forEach
+                        val event = ResponsesBackend.parseEvent(data, acc) ?: return@forEach
+                        if (event.reasoning.isNotEmpty()) onReasoning(round, event.reasoning)
+                        if (event.text.isNotEmpty()) {
+                            text.append(event.text)
+                            onDelta(event.text)
+                        }
+                        if (event.promptTokens > 0) lastPrompt = event.promptTokens
+                        if (event.completionTokens > 0) lastCompletion = event.completionTokens
+                        if (lastPrompt > 0 || lastCompletion > 0) {
+                            onUsage(lastPrompt, lastCompletion)
+                        }
+                    }
+                }
+            } finally {
+                conn.disconnect()
+            }
+
+            val calls = acc.calls().filter { it.name.isNotBlank() }
+            if (calls.isEmpty()) {
+                return@runCatching text.toString().ifBlank { error("回复内容为空") }
+            }
+
+            if (text.isNotBlank()) onNarration(round, text.toString())
+            ResponsesBackend.functionCallInputs(calls).forEach { working.put(it) }
+
+            val results = calls.mapIndexed { seq, c ->
+                onToolCall(round, seq, c.name, c.arguments.toString())
+                val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
+                    .take(MAX_TOOL_RESULT_CHARS)
+                onToolResult(round, seq, c.name, result)
+                Triple(c.id, c.name, result)
+            }
+            ResponsesBackend.functionCallOutputs(results).forEach { working.put(it) }
+
+            if (round == MAX_TOOL_ROUNDS - 1) {
+                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+            }
+        }
+        error("工具调用轮数已达上限")
+    }
+
+    /** 非流式 Responses 请求，供摘要压缩这类一次性调用使用。 */
+    private fun responsesComplete(
+        context: Context,
+        config: AiConfig,
+        history: List<ChatMessage>,
+        systemPrompt: String?,
+    ): String {
+        val payload = ResponsesBackend.buildPayload(
+            context, config, history, systemPrompt, stream = false, enableTools = false,
+        )
+        val conn = openRaw(
+            url = ResponsesBackend.endpoint(config),
+            payload = payload,
+            headers = ResponsesBackend.headers(config),
+            config = config,
+        )
+        val body = try {
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("HTTP $code：${extractError(text).take(200)}")
+            text
+        } finally {
+            conn.disconnect()
+        }
+        return ResponsesBackend.parseNonStream(body)
     }
 
     // ---------- Anthropic 原生 ----------
@@ -443,12 +609,19 @@ object AiChatClient {
         provider: AiProvider,
         baseUrl: String,
         apiKey: String,
+        /** 自定义供应商传入它选的协议；内置留空即按厂商推导。 */
+        protocol: AiProtocol = provider.protocol(),
     ): Result<List<RemoteModel>> {
+        // 立一条临时自定义供应商来承载 protocol：activeProtocol 会优先读它。
+        // 用固定 id 且不进列表，纯粹作为这次探测的载体。
         val probe = AiConfig(
             current = provider,
-            perProvider = mapOf(
-                provider to ProviderConfig(
-                    provider = provider,
+            currentCustomId = "probe",
+            customProviders = listOf(
+                CustomProvider(
+                    id = "probe",
+                    name = "probe",
+                    protocol = protocol,
                     baseUrl = baseUrl,
                     apiKey = apiKey,
                 ),
@@ -471,10 +644,11 @@ object AiChatClient {
     suspend fun listModels(config: AiConfig): Result<List<RemoteModel>> =
         withContext(Dispatchers.IO) {
             runCatching {
-                when (config.current) {
-                    AiProvider.ANTHROPIC -> listAnthropicModels(config)
-                    AiProvider.GEMINI -> listGeminiModels(config)
-                    else -> listOpenAiModels(config)
+                when (config.activeProtocol) {
+                    AiProtocol.ANTHROPIC -> listAnthropicModels(config)
+                    AiProtocol.GEMINI -> listGeminiModels(config)
+                    // Responses 与 Chat Completions 共用 GET /models：模型目录是同一个
+                    AiProtocol.OPENAI, AiProtocol.RESPONSES -> listOpenAiModels(config)
                 }
             }
         }
@@ -612,8 +786,8 @@ object AiChatClient {
             runCatching {
                 val model = config.model
                 require(model.isNotBlank()) { "未配置模型" }
-                when (config.current) {
-                    AiProvider.GEMINI -> {
+                when (config.activeProtocol) {
+                    AiProtocol.GEMINI -> {
                         val url = GeminiBackend.withKey(
                             GeminiBackend.baseUrl(config) + "/models/" + model,
                             config,
@@ -622,7 +796,7 @@ object AiChatClient {
                         JSONObject(body).optInt("inputTokenLimit", 0).takeIf { it > 0 }
                     }
 
-                    AiProvider.ANTHROPIC -> {
+                    AiProtocol.ANTHROPIC -> {
                         val url = "${AnthropicBackend.baseUrl(config)}/v1/models/$model"
                         val body = getJson(url, AnthropicBackend.headers(config))
                         val o = JSONObject(body)
@@ -633,8 +807,8 @@ object AiChatClient {
                     }
 
                     else -> {
-                        // OpenAI 兼容：多数网关只有 id / created / owned_by，
-                        // 少数会带 context_length 之类，有就取
+                        // OpenAI 兼容（含 Responses，模型目录同源）：多数网关只有
+                        // id / created / owned_by，少数会带 context_length 之类，有就取
                         require(config.baseUrl.isNotBlank()) { "未配置接口地址" }
                         val url = config.baseUrl.trimEnd('/') + "/models/" + model
                         val headers = mutableMapOf("Accept" to "application/json")
@@ -683,6 +857,7 @@ object AiChatClient {
         require(config.model.isNotBlank()) { "未配置模型" }
         require(config.apiKey.isNotBlank()) { "未配置 API Key" }
     }
+
 
     private fun open(config: AiConfig, payload: String): HttpURLConnection =
         (URL(config.baseUrl.trimEnd('/') + "/chat/completions").openConnection() as HttpURLConnection).apply {

@@ -27,11 +27,7 @@ object BuiltInToolSetDb {
         dbImportCsv(context),
     )
 
-    private fun requireWrite() {
-        if (!BuiltInMcpServer.config.value.allowWrite) {
-            error("内置 Server 未开启写入：请在 MCP 页面打开「允许写入」后重试")
-        }
-    }
+    private fun requireWrite() = WriteGuard.requireWrite()
 
     /** db 参数：sample / 空 表示应用示例库，其余按允许根内的路径解析。 */
     private fun dbFile(context: Context, raw: String): File {

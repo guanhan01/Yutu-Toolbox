@@ -2,6 +2,7 @@ package com.mcp.toolbox.ui.ai
 
 import android.content.Context
 import com.mcp.toolbox.feature.mcp.BuiltInToolSet
+import com.mcp.toolbox.feature.mcp.McpExternalTools
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -45,19 +46,59 @@ object AiToolBridge {
         return functionName.replace(SEPARATOR, ".")
     }
 
-    /** 供请求使用的 tools 数组。 */
+    /**
+     * 一条 provider 中立的工具描述。
+     *
+     * 三家服务商的 tools 结构不同（OpenAI 用 `function.parameters`、Anthropic 用
+     * `input_schema`、Gemini 用 `functionDeclarations[].parameters` 且 schema 要清洗），
+     * 但「有哪些工具、各自叫什么、入参 JSON Schema 是什么」是同一份数据。
+     * 统一从这里取，避免某个后端漏掉外部工具。
+     */
+    data class ToolSpec(val name: String, val description: String, val schema: JSONObject)
+
+    /**
+     * 模型当前可用的全部工具：内置 + 用户已接入的外部 MCP 工具。
+     *
+     * 外部工具只在用户显式开启且 Server 当前连通时才出现
+     * （见 [McpExternalTools.available]），这里不做额外过滤。
+     *
+     * 名称已经把点换成下划线（OpenAI 的约束），三家共用同一套名字。
+     */
+    fun toolSpecs(context: Context): List<ToolSpec> {
+        val builtIn = BuiltInToolSet.all(context).map {
+            ToolSpec(toFunctionName(it.name), it.description, it.schema)
+        }
+        val external = McpExternalTools.available(context).mapNotNull { entry ->
+            runCatching {
+                val schema = JSONObject(entry.tool.inputSchema)
+                if (!schema.has("type")) schema.put("type", "object")
+                val description = buildString {
+                    append(entry.tool.description)
+                    append("\n\n（来自外部 MCP Server「")
+                    append(entry.server.name)
+                    append("」的工具 ")
+                    append(entry.tool.name)
+                    append("）")
+                }
+                ToolSpec(entry.functionName, description, schema)
+            }.getOrNull()
+        }
+        return builtIn + external
+    }
+
+    /** 供 OpenAI 兼容协议使用的 tools 数组。 */
     fun toolsPayload(context: Context): JSONArray {
         val arr = JSONArray()
-        BuiltInToolSet.all(context).forEach { def ->
+        toolSpecs(context).forEach { spec ->
             arr.put(
                 JSONObject()
                     .put("type", "function")
                     .put(
                         "function",
                         JSONObject()
-                            .put("name", toFunctionName(def.name))
-                            .put("description", def.description)
-                            .put("parameters", def.schema),
+                            .put("name", spec.name)
+                            .put("description", spec.description)
+                            .put("parameters", spec.schema),
                     ),
             )
         }
@@ -68,24 +109,37 @@ object AiToolBridge {
     fun defFor(context: Context, functionName: String) =
         BuiltInToolSet.all(context).firstOrNull { toFunctionName(it.name) == functionName }
 
-    /** 工具总数，供界面展示。 */
-    fun toolCount(context: Context): Int = BuiltInToolSet.all(context).size
+    /** 工具总数（内置 + 已接入的外部），供界面展示。 */
+    fun toolCount(context: Context): Int = toolSpecs(context).size
 
     /**
      * 执行一次工具调用，返回给模型的文本结果。
      *
      * 任何异常都转成可读文本回填，让模型自己决定下一步，而不是中断整轮对话。
+     *
+     * 解析顺序是**先内置、后外部**，不能颠倒：内置工具名里的点会在出站时换成下划线
+     * （`file.write` -> `file_write`），反过来解析时如果把 `file_write` 当成外部工具，
+     * 就会去找一个不存在的 Server。外部工具统一带 `ext_` 前缀，排在后面判断是安全的。
+     *
+     * 是挂起函数，因为外部工具要走一次网络往返（[McpExternalTools.invoke]）。
      */
-    fun invoke(context: Context, functionName: String, argumentsJson: String?): String {
+    suspend fun invoke(context: Context, functionName: String, argumentsJson: String?): String {
         val toolName = toToolName(functionName, context)
         val def = BuiltInToolSet.all(context).firstOrNull { it.name == toolName }
-            ?: return "错误：没有名为 $toolName 的工具"
+        if (def != null) {
+            val args = runCatching {
+                JSONObject(argumentsJson?.takeIf { it.isNotBlank() } ?: "{}")
+            }.getOrElse { return "错误：参数不是合法 JSON（${it.message}）" }
+            return runCatching { def.handler(context, args).text }
+                .getOrElse { "错误：${it.message ?: it::class.simpleName}" }
+        }
 
-        val args = runCatching {
-            JSONObject(argumentsJson?.takeIf { it.isNotBlank() } ?: "{}")
-        }.getOrElse { return "错误：参数不是合法 JSON（${it.message}）" }
+        if (functionName.startsWith(McpExternalTools.PREFIX)) {
+            val entry = McpExternalTools.find(context, functionName)
+                ?: return "错误：外部工具 $functionName 当前不可用（Server 未连接，或已在 MCP 页面关闭接入）"
+            return McpExternalTools.invoke(context, entry, argumentsJson)
+        }
 
-        return runCatching { def.handler(context, args).text }
-            .getOrElse { "错误：${it.message ?: it::class.simpleName}" }
+        return "错误：没有名为 $toolName 的工具"
     }
 }

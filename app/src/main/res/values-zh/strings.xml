@@ -210,4 +210,15 @@
     <string name="ai_model_context_from_remote">上下文上限（拉取时自动填入，可手改）</string>
     <string name="ai_context_missing">未提供</string>
     <string name="memory_usage_hint_unknown">当前模型的上下文上限未知，暂只按你设定的上限计算；在「AI 设置 → 模型」里填写后会自动收紧</string>
+    <string name="ai_section_tools">工具权限</string>
+    <string name="ai_allow_write">允许写入</string>
+    <string name="ai_allow_write_desc">关闭时，文件写入、APK 重打包、数据库写入会被拒绝；只读工具不受影响。默认关闭。</string>
+    <string name="ai_group_generic">通用兼容</string>
+    <string name="ai_group_vendors">定制供应商</string>
+    <string name="ai_custom_add">新增自定义供应商</string>
+    <string name="ai_generic_hint">按协议适配，地址与模型自行填写</string>
+    <string name="ai_custom_name">显示名称</string>
+    <string name="ai_custom_protocol">协议</string>
+    <string name="ai_custom_saved_new">已保存为新供应商</string>
+    <string name="ai_delete">删除</string>
 </resources>

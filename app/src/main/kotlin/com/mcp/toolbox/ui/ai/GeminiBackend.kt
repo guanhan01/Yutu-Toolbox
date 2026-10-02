@@ -79,12 +79,13 @@ internal object GeminiBackend {
                     JSONObject().put(
                         "functionDeclarations",
                         JSONArray().also { arr ->
-                            com.mcp.toolbox.feature.mcp.BuiltInToolSet.all(context).forEach { def ->
+                            // 与 OpenAI / Anthropic 共用同一份工具清单，含已接入的外部 MCP 工具
+                            AiToolBridge.toolSpecs(context).forEach { spec ->
                                 arr.put(
                                     JSONObject()
-                                        .put("name", AiToolBridge.toFunctionName(def.name))
-                                        .put("description", def.description)
-                                        .put("parameters", sanitizeSchema(def.schema)),
+                                        .put("name", spec.name)
+                                        .put("description", spec.description)
+                                        .put("parameters", sanitizeSchema(spec.schema)),
                                 )
                             }
                         },

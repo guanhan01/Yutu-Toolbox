@@ -538,7 +538,7 @@ object ArtifactStore {
                 put("files", session.files)
                 put("bytes", session.bytes)
                 put("error", session.error)
-                put("generator", "MCP Toolbox ${BuiltInMcpServer.SERVER_VERSION}")
+                put("generator", "MCP Toolbox ${McpProtocol.CLIENT_VERSION}")
             }.toString(2),
         )
     }

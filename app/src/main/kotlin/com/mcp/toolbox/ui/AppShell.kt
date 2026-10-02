@@ -93,7 +93,6 @@ import com.mcp.toolbox.ui.ai.ReasoningEffort
 import com.mcp.toolbox.ui.ai.AiChatClient
 import com.mcp.toolbox.feature.mcp.SkillScreen
 import com.mcp.toolbox.feature.mcp.ArtifactsScreen
-import com.mcp.toolbox.feature.mcp.BuiltInMcpServer
 import com.mcp.toolbox.feature.mcp.McpConnectionState
 import com.mcp.toolbox.feature.mcp.McpRegistry
 import com.mcp.toolbox.feature.mcp.McpScreen
@@ -267,7 +266,8 @@ private fun ToolboxNavHost(
         CompressionStore.load(shellContext)
     }
 
-    val activeProvider = aiConfig.current
+    // 当前选中项可能是自定义供应商，展示名要从配置里取
+    val activeProvider = aiConfig.currentCustom ?: aiConfig.current
     val activeModel = aiConfig.model
     val activeWindow = aiConfig.active.contextWindowOrNull()
 
@@ -338,9 +338,7 @@ private fun ToolboxNavHost(
                 val homeContext = LocalContext.current
                 val mcpStates by McpRegistry.states.collectAsState()
                 val mcpCalls by McpRegistry.calls.collectAsState()
-                val builtInRunning by BuiltInMcpServer.running.collectAsState()
                 LaunchedEffect(Unit) {
-                    BuiltInMcpServer.load(homeContext)
                     McpRegistry.load(homeContext)
                 }
                 HomeScreen(
@@ -370,30 +368,57 @@ private fun ToolboxNavHost(
                         }
                     },
                     // 跨服务商的可选模型：只列出已拉取过模型列表的服务商
-                    modelOptions = aiConfig.perProvider.values
-                        .filter { it.models.isNotEmpty() }
-                        .flatMap { cfg ->
-                            cfg.models.map { entry ->
-                                com.mcp.toolbox.feature.home.ModelOption(
-                                    providerName = cfg.provider.name,
-                                    providerTitle = cfg.provider.title,
-                                    providerIconRes = cfg.provider.iconRes,
-                                    modelId = entry.id,
-                                    isCurrent = cfg.provider == aiConfig.current &&
-                                        entry.id == cfg.selectedModel,
-                                )
+                    modelOptions = buildList {
+                        aiConfig.perProvider.values
+                            .filter { it.models.isNotEmpty() }
+                            .forEach { cfg ->
+                                cfg.models.forEach { entry ->
+                                    add(
+                                        com.mcp.toolbox.feature.home.ModelOption(
+                                            providerName = cfg.provider.name,
+                                            providerTitle = cfg.provider.title,
+                                            providerIconRes = cfg.provider.iconRes,
+                                            modelId = entry.id,
+                                            isCurrent = aiConfig.currentCustomId == null &&
+                                                cfg.provider == aiConfig.current &&
+                                                entry.id == cfg.selectedModel,
+                                        ),
+                                    )
+                                }
                             }
-                        },
-                    onSelectModelOption = { option ->
-                        val target = runCatching {
-                            com.mcp.toolbox.ui.ai.AiProvider.valueOf(option.providerName)
-                        }.getOrNull()
-                        if (target != null) {
-                            AiConfigStore.selectProvider(shellContext, target)
-                            AiConfigStore.selectModel(shellContext, option.modelId)
-                        }
+                        // 自定义供应商的模型同样要出现在跨服务商列表里
+                        aiConfig.customProviders
+                            .filter { it.models.isNotEmpty() }
+                            .forEach { cp ->
+                                cp.models.forEach { entry ->
+                                    add(
+                                        com.mcp.toolbox.feature.home.ModelOption(
+                                            providerName = com.mcp.toolbox.ui.ai.AiProvider.CUSTOM.name,
+                                            providerTitle = cp.name,
+                                            providerIconRes = com.mcp.toolbox.ui.ai.AiProvider.CUSTOM.iconRes,
+                                            modelId = entry.id,
+                                            isCurrent = aiConfig.currentCustomId == cp.id &&
+                                                entry.id == cp.selectedModel,
+                                            customId = cp.id,
+                                        ),
+                                    )
+                                }
+                            }
                     },
-                    providerIconRes = aiConfig.current.iconRes,
+                    onSelectModelOption = { option ->
+                        val customId = option.customId
+                        if (customId != null) {
+                            AiConfigStore.selectCustom(shellContext, customId)
+                        } else {
+                            val target = runCatching {
+                                com.mcp.toolbox.ui.ai.AiProvider.valueOf(option.providerName)
+                            }.getOrNull()
+                            if (target != null) AiConfigStore.selectProvider(shellContext, target)
+                        }
+                        AiConfigStore.selectModel(shellContext, option.modelId)
+                    },
+                    providerIconRes = aiConfig.currentCustom?.let { com.mcp.toolbox.ui.ai.AiProvider.CUSTOM.iconRes }
+                        ?: aiConfig.current.iconRes,
                     runningText = chatRunning?.streamed,
                     // 直接映射时间线，保持思考与工具调用的先后关系
                     runningTimeline = chatRunning?.timeline?.map { step ->
@@ -524,7 +549,10 @@ private fun ToolboxNavHost(
                     AiSettingsScreen(
                         onOpenProviders = { onNavigate(Routes.AI_PROVIDERS) },
                         onOpenModels = {
-                            AiHub.pendingProvider = AiConfigStore.config.value.current.name
+                            val snapshot = AiConfigStore.config.value
+                            AiHub.pendingProvider = snapshot.current.name
+                            // 当前是自定义供应商时，模型页要改的是那一条
+                            AiHub.pendingCustomId = snapshot.currentCustomId
                             onNavigate(Routes.AI_MODELS)
                         },
                         onOpenLinux = { onNavigate(Routes.LINUX) },
@@ -559,6 +587,7 @@ private fun ToolboxNavHost(
                         providerName = AiHub.pendingProvider
                             ?: AiConfigStore.config.value.current.name,
                         onOpenModels = { onNavigate(Routes.AI_MODELS) },
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 }

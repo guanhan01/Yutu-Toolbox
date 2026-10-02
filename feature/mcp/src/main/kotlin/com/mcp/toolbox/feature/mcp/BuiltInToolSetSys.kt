@@ -402,7 +402,7 @@ object BuiltInToolSetSys {
         readOnly = false,
         requiresPrivilege = false,
         handler = { ctx, args ->
-            if (!BuiltInMcpServer.config.value.allowWrite) error("内置 Server 未开启写入：请先打开「允许写入」")
+            WriteGuard.requireWrite()
             requireUiChannel(ctx)
             val target = args.optString("path").trim().let { raw ->
                 when {

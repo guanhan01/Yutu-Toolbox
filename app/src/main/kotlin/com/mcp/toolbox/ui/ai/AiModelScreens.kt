@@ -65,11 +65,19 @@ fun AiModelScreen(
     val provider = remember(providerName) {
         runCatching { AiProvider.valueOf(providerName) }.getOrDefault(AiProvider.OPENAI)
     }
-    val cfg = config.perProvider[provider] ?: ProviderConfig(
-        provider = provider,
-        baseUrl = provider.baseUrl,
-        selectedModel = provider.defaultModel,
-    )
+    // 自定义供应商按 id 定位；其余按枚举取
+    val customId = AiHub.pendingCustomId
+    val custom = remember(customId, config.customProviders) {
+        customId?.let { id -> config.customProviders.firstOrNull { it.id == id } }
+    }
+    val cfg = custom?.toProviderConfig()
+        ?: config.perProvider[provider]
+        ?: ProviderConfig(
+            provider = provider,
+            protocol = provider.protocol(),
+            baseUrl = provider.baseUrl,
+            selectedModel = provider.defaultModel,
+        )
 
     var query by remember { mutableStateOf("") }
     var pulling by remember { mutableStateOf(false) }
@@ -78,9 +86,17 @@ fun AiModelScreen(
     var adding by remember { mutableStateOf(false) }
 
     fun updateModels(change: (List<ModelEntry>) -> List<ModelEntry>) {
+        val target = custom
+        if (target != null) {
+            AiConfigStore.updateCustom(context, target.id) {
+                it.copy(models = change(it.models))
+            }
+            return
+        }
         AiConfigStore.update(context) { c ->
             val cur = c.perProvider[provider] ?: ProviderConfig(
                 provider = provider,
+                protocol = provider.protocol(),
                 baseUrl = provider.baseUrl,
                 selectedModel = provider.defaultModel,
             )
@@ -113,8 +129,9 @@ fun AiModelScreen(
                                 scope.launch {
                                     AiChatClient.listModelsFor(
                                         provider = provider,
-                                        baseUrl = provider.baseUrl.ifBlank { cfg.baseUrl },
+                                        baseUrl = cfg.baseUrl.ifBlank { provider.baseUrl },
                                         apiKey = cfg.apiKey,
+                                        protocol = cfg.protocol,
                                     ).fold(
                                         onSuccess = { remote ->
                                             val existing = cfg.models.associateBy { it.id }
