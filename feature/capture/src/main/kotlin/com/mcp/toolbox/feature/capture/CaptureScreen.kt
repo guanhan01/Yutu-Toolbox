@@ -165,17 +165,6 @@ fun CaptureScreen(
     }
 
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
-        AnimatedVisibility(
-            visible = bannerVisible,
-            enter = expandVertically(tween(MiuixTheme.motion.fast)),
-            exit = shrinkVertically(tween(MiuixTheme.motion.fast)),
-        ) {
-            ComplianceBanner(
-                onDetail = { showGuide = true },
-                onDismiss = { bannerVisible = false },
-            )
-        }
-
         MiuixTopAppBar(
             title = str.title,
             navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -248,6 +237,19 @@ fun CaptureScreen(
                 }
             },
         )
+
+        // 合规说明横幅放在顶栏**之后**：顶栏自带状态栏内边距，
+        // 放在它前面会把横幅顶进状态栏区域，和状态栏文字重叠。
+        AnimatedVisibility(
+            visible = bannerVisible,
+            enter = expandVertically(tween(MiuixTheme.motion.fast)),
+            exit = shrinkVertically(tween(MiuixTheme.motion.fast)),
+        ) {
+            ComplianceBanner(
+                onDetail = { showGuide = true },
+                onDismiss = { bannerVisible = false },
+            )
+        }
 
         Row(
             modifier =
