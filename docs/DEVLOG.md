@@ -20,7 +20,7 @@
 | P6 | 反编译（真实引擎）+ 任务中心 | 完成（真机验证） |
 | P7 | MCP 客户端 + Schema 表单 + 产物目录 + 外置 SAF 目录（内置 Server 已移除） | 完成（真机验证，含 streamable HTTP 与 legacy SSE） |
 | P8 | 打磨：动效、无障碍、性能、双语、README | 进行中 |
-| P9 | AI Agent：对话主界面、11 家服务商、工具调用、记忆、压缩、计划模式 | 完成 |
+| P9 | AI Agent：对话主界面、服务商与自定义供应商、工具调用、记忆、压缩、计划模式 | 完成 |
 | P10 | Linux 环境（Debian 13 / Alpine 按需安装 + 组件管理 + 终端） | 完成（运行需 Root） |
 | P11 | Skill 工具箱（六种导入源 + 注入系统提示词 + 内置 `cognitive-engine`） | 完成 |
 
@@ -93,6 +93,23 @@ $GRADLE --console=plain -p <项目根> :app:assembleStableDebug :app:assembleBet
 构建请**同步执行**（同一次调用内等它跑完）。用异步后台任务时进程会被 SIGKILL（exit 137），
 单模块增量构建约 35–55s。
 
+注意两点：
+
+- **Gradle 发行版要放在 PRoot rootfs 内可访问的位置。** 若从 fuse 挂载点
+  （如 `/storage/emulated/0/...`）直接执行，Gradle 9.6 会报
+  `Could not create service of type FileSystem ... Mount point not found`
+  ——PRoot 的 `/proc/self/mountinfo` 里没有 `/` 项。把发行版复制进容器内再跑。
+- **改了资源也要 `clean`。** 增量构建可能不把 `res/values*/strings.xml` 并入
+  `resources.arsc`，表现为「代码改了、界面没变」。判据（把 `<新字符串>` 换成实际文本）：
+
+  ```sh
+  # 期望输出 True；若为 False，说明资源未并入，需要 :app:clean 后重建
+  python3 -c "import zipfile;print('<新字符串>'.encode('utf-8') in zipfile.ZipFile('<apk>').read('resources.arsc'))"
+  ```
+
+  同理，**删过类之后必须 `clean`**：旧 dex 残留会让运行时抛
+  `ClassNotFoundException`（表现为一启动就闪退，而源码里已经搜不到那个类）。
+
 ### 2.1 aapt2 的关键处理（重要）
 
 Google 只为 x86_64 发布 `aapt2`，本机是 aarch64，直接使用 SDK 内的 `aapt2` 会 `Exec format error`。
@@ -122,28 +139,75 @@ exec /usr/bin/qemu-x86_64 -L /usr/lib/x86_64-linux-gnu <工具目录>/aapt2-x86/
 
 ## 3. 权限清单（AndroidManifest）
 
-| 权限 | 用途 | 阶段 |
+清单按模块分散声明（`app` / `feature:capture` / `feature:decompile`），下表是合并后的全集。
+
+| 权限 | 用途 | 声明处 |
 |---|---|---|
-| INTERNET / ACCESS_NETWORK_STATE | MCP HTTP/SSE 传输、网络诊断、WebView | P3/P7 |
-| POST_NOTIFICATIONS / FOREGROUND_SERVICE(_DATA_SYNC) | 抓包前台服务 | P5 |
-| PACKAGE_USAGE_STATS | 应用使用统计 | P2 |
-| READ_EXTERNAL_STORAGE(≤32) / READ_MEDIA_IMAGES | 文件与媒体浏览 | P2 |
-| QUERY_ALL_PACKAGES | 应用列表与包信息 | P2 |
-| VPN_SERVICE（抓包） | HTTPS 解密走本地 VPN + CA 证书 | P5 |
+| INTERNET / ACCESS_NETWORK_STATE | MCP HTTP/SSE 传输、网络诊断、WebView | app |
+| POST_NOTIFICATIONS | 任务完成与抓包的通知 | app |
+| FOREGROUND_SERVICE(+_DATA_SYNC / _SYSTEM_EXEMPTED) | 抓包与反编译任务的前台服务 | app、capture、decompile |
+| PACKAGE_USAGE_STATS | 应用使用统计（需手动到系统设置开启） | app |
+| QUERY_ALL_PACKAGES | 应用列表与包信息 | app |
+| READ_EXTERNAL_STORAGE（`maxSdkVersion=32`） | Android 12 及以下的文件读取 | app |
+| READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_MEDIA_AUDIO | Android 13+ 的媒体读取 | app |
+| MANAGE_EXTERNAL_STORAGE | 文件页读取真实目录、产物目录直写公共存储（未授予时回退 SAF） | app |
+| moe.shizuku.manager.permission.API_V23 | Shizuku 免 root 提权后端 | app |
+
+> 抓包用的 `android.permission.BIND_VPN_SERVICE` **不是 uses-permission**，
+> 而是 `CaptureVpnService` 上的 `android:permission` 属性（系统要求，写错位置会直接
+> 装不上或起不来）。该 service 的 `foregroundServiceType` 是 `systemExempted`。
+> `com.Yutu.Agent*.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` 由 AndroidX 自动生成，
+> 不是业务权限。
 
 ## 4. 已知限制与降级
 
-- **Miuix 组件库**：未直接依赖 `top.yukonga.miuix.kmp`（其 API 在本地不可校验），
-  改为在 `core:designsystem` 内按 Miuix 视觉规范自绘一套组件，并保留同一套 Token API；
-  后续如需切换官方 Miuix，只替换 `component/` 包实现即可。
+- **Miuix 组件库**：**已直接依赖**官方 `top.yukonga.miuix.kmp:miuix-ui`（0.9.2，
+  `app` 与 `core:designsystem` 各自 `implementation`）。主题层用官方
+  `OfficialMiuixTheme` + 自绘 `MiuixColors` 桥接，组件层优先复用官方实现
+  （Switch / Slider / Dialog / BottomSheet / OverflowMenu 等），其余按 Miuix 视觉规范自绘。
+  注：早前本文写过「未直接依赖、全部自绘」，那是错误的，已按依赖实况更正。
+- **`miuix-icons` 是死声明**：`gradle/libs.versions.toml` 声明了
+  `top.yukonga.miuix.kmp:miuix-icons`，但没有任何模块依赖、也没有代码引用。
+  不要以为可以直接用它换图标。
 - **DI**：仍是最小手写容器（`ToolboxApplication`）；Koin 已在 Version Catalog 声明（4.2.2）但尚未接入。
 - **字体**：MiSans / HarmonyOS Sans 未随包分发，回退系统默认字体（Token 已预留 fontFamily）。
 - **抽屉**：实现为“按钮/边缘滑动打开 + 左滑（累积位移判定）或点遮罩关闭”，未做逐帧跟手位移。
-- **抓包（P5）**：按需求暂停，页面是明确标注阶段的占位页，不做假界面。
+- **抓包（P5）**：**已实现**，不是占位页。`feature/capture` 约 6k 行：本地 VPN
+  （`CaptureVpnService`）+ 真实 TLS 中间人解密（`MitmProxy` / `MitmCa`）、CA 管理与
+  Magisk/KernelSU 模块导出、HAR / JSON 导出，`Routes.CAPTURE` 指向真实
+  `CaptureScreen`（不在占位页集合里）。真机完整流程仍待复核。
 - **无障碍**：图标按钮触控目标已统一 48dp；`feature/web` 受父容器约束处（如 40dp 行高）已随本轮一并抬高。
 - 未实现的模块统一落到占位页，明确标注所属阶段，不做假界面。
 
-## 5. 工程结构
+## 5. 版本号与发布
+
+| 渠道 | applicationId | 当前版本 | 更新检查 |
+|---|---|---|---|
+| 正式版 stable | `com.Yutu.Agent` | 0.1.5（versionCode 6） | 开启 |
+| Beta | `com.Yutu.Agent.beta` | 0.1.5-beta（versionCode 6） | 关闭 |
+
+两个 flavor 的 `applicationId` 不同，可同机共存。**升级正式版必须保持
+`com.Yutu.Agent` 不变**，否则老用户无法覆盖安装（v0.1.5 之前曾从 `com.mcp.toolbox`
+改为 `com.Yutu.Agent`，那次是破坏性变更）。
+
+发版流程：
+
+1. 改 `app/build.gradle.kts` 的 stable `versionCode` / `versionName`（**两个都要加**，
+   versionCode 不能复用）。
+2. 在 `CHANGELOG.md` 顶部加对应版本的段落（`## v<版本>`）。CI 会从这里抽取 Release 正文。
+3. 提交并推送 `main`，然后打 annotated tag `v<版本>` 并推送——tag 会触发 CI 构建与发 Release。
+
+Release 说明的两个坑（都踩过）：
+
+- **正文**：`softprops/action-gh-release` 的 `generate_release_notes` 只会生成一行
+  compare 链接。现在改为 `body_path: dist/release-body.md`，内容由
+  `scripts/release_body.py` 从 CHANGELOG 抽取，保证仓库日志与 Release 页一致。
+- **作者**：workflow 不传 token 时用的是默认 `GITHUB_TOKEN`，Release 的 author 会显示成
+  `github-actions[bot]`。**GitHub 没有修改 author 的接口，只能删掉 Release 重建**
+  （tag 不受影响）。现在传 `secrets.RELEASE_TOKEN`（回退 `github.token`）。
+  重建时若要保住原 APK：先下载 asset、删 Release、建新 Release、再上传同一个文件。
+
+## 6. 工程结构
 
 ```
 app/                    壳工程：MainActivity、AppShell（抽屉 + 底栏 + 宽屏 NavRail）、导航图
@@ -159,10 +223,18 @@ feature/network/        HTTP 请求、Ping、DNS、端口扫描、Whois、网络
 feature/database/       SQLite：Schema / 数据 / SQL 查询（只读）
 feature/decompile/      反编译（真实引擎）+ 任务中心
 feature/mcp/            MCP 客户端（外部 Server 接入）、产物目录、Schema 表单、Skill 管理
-feature/capture/        抓包（P5，暂停）
+feature/capture/        抓包：VPN 引擎、TLS 中间人、CA 管理与模块导出、HAR/JSON 导出
 ```
 
-## 6. 设计系统速查
+工具集的两段式结构：`feature:mcp` 提供 103 个 `ToolDef`；`app` 模块通过
+`BuiltInToolSet.registerExtra { ... }` 再注入 Linux（9 个）与 Agent 状态（3 个），
+合计 115 个。这样拆分是为了避免 `feature:mcp` 反向依赖 `app` 的运行时。
+
+AI 服务商分两组（`AiProvider`）：**通用兼容** 4 个（OpenAI / OpenAI Responses /
+Gemini / Anthropic，按协议适配、地址自填）与**定制供应商** 11 家厂商预设。
+自定义供应商（`CustomProvider`）独立于枚举存在，可添加任意多条、各自选协议。
+
+## 7. 设计系统速查
 
 - 圆角：卡片 = 全局尺度（默认 20dp）、Dialog/Sheet = ×1.4、输入框 = ×0.6、卡片内圆角 = 外圆角 − 8dp
 - 间距：4dp 网格；页面水平 16dp；行高 56/64dp；分组间距 12dp
@@ -172,7 +244,7 @@ feature/capture/        抓包（P5，暂停）
 - 配色：`material-color-utilities` 的 HCT + DynamicScheme；动态取色走 Android 12+ 系统壁纸
 - 代码区：底色比内容区更暗（深色 #121212），语法高亮固定三色（关键字紫粉/字符串青绿/类型浅蓝）
 
-## 关于页：自动检查更新 + 开源项目入口（v0.1.1）
+## 8. 更新检查与关于页（v0.1.1 起）
 
 - 新增 `app/src/main/kotlin/com/mcp/toolbox/ui/UpdateChecker.kt`：
   用 `HttpURLConnection` 请求 `GET /repos/guanhan01/Yutu-Toolbox/releases/latest`，
@@ -184,3 +256,5 @@ feature/capture/        抓包（P5，暂停）
 - 新增「开源项目」卡片：项目主页与 Apache-2.0 许可，点击经 `Intent.ACTION_VIEW` 打开。
 - 开启 `buildConfig = true`，版本号改为读 `BuildConfig.VERSION_NAME`
   （原先在 `strings.xml` 硬编码为 `0.1.0-p0`，与实际版本不符）。
+- 该检查读的是 `releases/latest`，所以**发版若想被识别，必须发 Release 而不只是打 tag**
+  （见 §5 的发布流程）。
