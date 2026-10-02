@@ -19,3 +19,10 @@ build/
 # 日志与性能快照
 *.log
 *.hprof
+
+# 编辑器/工具生成的伴随文件（历史误提交过 *.kt.chars）
+*.chars
+*.bak
+*.orig
+*.rej
+*.swp
