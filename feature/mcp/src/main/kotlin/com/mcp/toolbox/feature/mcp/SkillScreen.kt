@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -109,6 +110,9 @@ fun SkillScreen(
     // 菜单要用窗口坐标定位，所以必须把行自身的矩形带上来，不能只记 skill。
     var menuSkill by remember { mutableStateOf<Skill?>(null) }
     var menuAnchor by remember { mutableStateOf<Rect?>(null) }
+    // menuSkill 收起后仍留在原位，只由 menuOpen 控制显隐——这样组件不会被立刻
+    // 移出组合，离场动画才有地方播。
+    var menuOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { skills = SkillStore.refresh(context) }
 
@@ -126,7 +130,7 @@ fun SkillScreen(
     }
 
     Box(modifier = modifier.fillMaxSize().background(colors.background)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
             if (showTopBar) {
                 SkillTopBar(title = "Skill 工具箱", onBack = onBack)
             }
@@ -165,6 +169,7 @@ fun SkillScreen(
                             onLongPress = { bounds ->
                                 menuAnchor = bounds
                                 menuSkill = skill
+                                menuOpen = true
                             },
                             onToggle = { checked ->
                                 scope.launch {
@@ -213,8 +218,8 @@ fun SkillScreen(
     // 不使用 offset/父布局定位——PopScope 是全屏的，那样算出来的位置是错的。
     menuSkill?.let { current ->
         MiuixOverflowMenu(
-            expanded = true,
-            onDismiss = { menuSkill = null },
+            expanded = menuOpen,
+            onDismiss = { menuOpen = false },
             anchor = menuAnchor,
         ) {
             // 文案直接说「点了会发生什么」，比用对勾表达当前状态更不容易误读

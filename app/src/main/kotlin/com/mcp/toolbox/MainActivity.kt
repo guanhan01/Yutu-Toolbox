@@ -3,12 +3,15 @@ package com.mcp.toolbox
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.mcp.toolbox.core.design.component.MiuixDialog
@@ -39,9 +43,47 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val controller = (application as ToolboxApplication).themeController
+        // 状态栏与导航栏图标默认按「浅色底」走深色图标。
+        // 之前没设过 SystemBarStyle，系统一直用浅色（白）图标，
+        // 于是白底页面上时间、电量几乎看不见（实测状态栏区域全白）。
+        // 真实明暗在下面的 Compose 里按主题重新校准。
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+            ),
+        )
         setContent {
             val config by controller.config.collectAsState()
             MiuixTheme(config = config) {
+                // 状态栏图标必须与页面底色相反：浅底用深色图标，深底用浅色图标。
+                // 这里以主题背景色的相对亮度为准（纯白模式与浅色调都是高亮度）。
+                val bgLuminance = MiuixTheme.colors.background.luminance()
+                val dark = bgLuminance < 0.5f
+                SideEffect {
+                    enableEdgeToEdge(
+                        statusBarStyle = if (dark) {
+                            SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.light(
+                                android.graphics.Color.TRANSPARENT,
+                                android.graphics.Color.TRANSPARENT,
+                            )
+                        },
+                        navigationBarStyle = if (dark) {
+                            SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                        } else {
+                            SystemBarStyle.light(
+                                android.graphics.Color.TRANSPARENT,
+                                android.graphics.Color.TRANSPARENT,
+                            )
+                        },
+                    )
+                }
                 val toastState: MiuixToastState = rememberMiuixToastState()
                 val revealState = rememberThemeRevealState()
                 val background = MiuixTheme.colors.background

@@ -254,8 +254,11 @@ private fun MiuixOverflowMenuOfficial(
     }
 
     var mounted by remember { mutableStateOf(expanded) }
-    val fraction = remember { Animatable(if (expanded) 1f else 0f) }
-    val alphaAnim = remember { Animatable(if (expanded) 1f else 0f) }
+    // 两个 Animatable 的初值固定为 0：若按 expanded 的当前值初始化，
+    // 调用点写成 `if (expanded) { MiuixOverflowMenu(...) }` 时首次组合的 expanded
+    // 已是 true，初值直接是 1，随后的「动画到 1」等于没动，入场动画被整段跳过。
+    val fraction = remember { Animatable(0f) }
+    val alphaAnim = remember { Animatable(0f) }
 
     // 「再点一次按钮」时序问题：点击时 Popup 先把这次点击当作「点外部」触发 onDismiss，
     // 紧接着按钮的 onClick 又把 expanded 置回 true，于是菜单看起来是重新弹出而非收回。
@@ -282,7 +285,7 @@ private fun MiuixOverflowMenuOfficial(
                 spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f),
             )
         } else {
-            if (expanded) lastDismissAt[0] = System.currentTimeMillis()
+            // 这里恒为 !expanded，原先那句 `if (expanded) lastDismissAt[0] = ...` 是死代码
             launch { alphaAnim.animateTo(0f, tween(150)) }
             fraction.animateTo(0f, tween(170))
             mounted = false

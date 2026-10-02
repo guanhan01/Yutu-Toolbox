@@ -1,6 +1,23 @@
 package com.mcp.toolbox.ui
 
+import androidx.compose.ui.draw.drawWithContent
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.view.Display
+import android.view.RoundedCorner
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.unit.Dp
+import androidx.navigation.NavController
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -77,6 +94,7 @@ import com.mcp.toolbox.ui.linux.LinuxScreen
 import com.mcp.toolbox.ui.linux.LinuxTerminalScreen
 import com.mcp.toolbox.ui.linux.LinuxDistro
 import com.mcp.toolbox.ui.linux.LinuxCheckScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
@@ -119,6 +137,68 @@ import com.mcp.toolbox.ui.linux.LinuxFilesScreen
 import com.mcp.toolbox.ui.linux.LinuxSharedScreen
 import com.mcp.toolbox.feature.home.RunningStep
 
+/** 压暗纱的不透明度，与抽屉遮罩的 0.35 取同一量级。 */
+private const val ScrimAlpha = 0.45f
+
+/** 旧页淡出后保留的不透明度：透出下方的压暗纱，读成「上一层被压暗」。 */
+private const val OldPageAlpha = 0.42f
+
+/**
+ * 该页是否需要裁圆角。
+ *
+ * 只在导航转场的那一小段非 0：二级页滑入（或被滑出）时按设备屏幕圆角裁成卡片，
+ * 转场结束归为直角。静止时必须为直角 —— 页面铺满全屏，圆角缺口会透出下层。
+ */
+/** 设备屏幕圆角半径，由 AppShell 提供。 */
+private val LocalDeviceCorner = staticCompositionLocalOf { 0.dp }
+
+/** 预测性返回手势是否进行中。 */
+private val LocalBackGesture = compositionLocalOf { false }
+
+/**
+ * 设备屏幕的物理圆角半径。
+ *
+ * 用系统 [RoundedCorner]（API 31+）取真实值，使页面圆角与手机那四个圆角一致；
+ * 取不到（老系统或圆角为 0）时返回 0，即不加圆角。
+ */
+private fun deviceCornerRadius(context: android.content.Context): androidx.compose.ui.unit.Dp {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return 0.dp
+    val px =
+        runCatching {
+            context.getSystemService(DisplayManager::class.java)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)
+                ?.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT)
+                ?.radius
+        }.getOrNull() ?: 0
+    if (px <= 0) return 0.dp
+    return (px / context.resources.displayMetrics.density).dp
+}
+
+/**
+ * 页面自裁圆角。
+ *
+ * 必须裁在**页面自己**身上：裁在 NavHost 外面那个容器上时，容器是静止的，
+ * 页面从它内部滑过，圆角只作用在屏幕四角，跟不上页面 —— 手感和观感都不对。
+ *
+ * 触发条件取「本页正在进场/退场」或「返回手势进行中」：
+ * - 转场用 [AnimatedContentScope.transition] 的真实状态判断，不用定时器猜时间
+ *   （定时器从导航回调起算，比动画早，会让圆角在盖满前就消失）。
+ * - 手势期间框架不驱动 transition（navigation 2.8.5 无 seekable 支持），
+ *   所以另由 [LocalBackGesture] 补上。
+ */
+@Composable
+private fun Modifier.pageCorners(scope: AnimatedContentScope): Modifier {
+    val r = LocalDeviceCorner.current
+    if (r.value <= 0f) return this
+    val t = scope.transition
+    val running = t.currentState != t.targetState
+    if (!running && !LocalBackGesture.current) return this
+    return clip(RoundedCornerShape(r))
+}
+
+/** 转场时长，与 NavHost 的转场配置保持一致。 */
+private const val NavTransitionMs = 500L
+
 /** 应用外壳：自绘抽屉 + 底栏 + 顶部 Toast 宿主。 抽屉支持汉堡按钮打开、左侧边缘滑动打开、面板左滑关闭、点遮罩关闭。 */
 @Composable
 fun AppShell(
@@ -131,6 +211,49 @@ fun AppShell(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.HOME
+
+
+    // 设备屏幕圆角：二级页在转场中按它裁切，与手机物理圆角对齐。
+    val appContext = LocalContext.current
+    val pageCorner = remember(appContext) { deviceCornerRadius(appContext) }
+
+    // 预测性返回手势是否进行中。
+    //
+    // 只有这一个状态需要自己维护：常规转场的圆角由页面自己的 transition 驱动
+    // （见 [pageCorners]），不依赖这里。
+    //
+    // 为什么必须自己监听手势：navigation-compose 2.8.5 没有预测返回支持
+    // （jar 里 seekable / predictive 符号数为 0），拖动期间框架不驱动 transition，
+    // 页面被卡在屏幕中间时就是个直角矩形。
+    var backGesture by remember { mutableStateOf(false) }
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    DisposableEffect(backDispatcher, navController) {
+        val callback =
+            object : OnBackPressedCallback(false) {
+                override fun handleOnBackStarted(backEvent: androidx.activity.BackEventCompat) {
+                    if (navController.previousBackStackEntry != null) backGesture = true
+                }
+
+                override fun handleOnBackProgressed(backEvent: androidx.activity.BackEventCompat) {
+                    if (navController.previousBackStackEntry != null) backGesture = true
+                }
+
+                override fun handleOnBackCancelled() {
+                    // 手势取消：页面弹回，圆角随之收起
+                    backGesture = false
+                }
+
+                override fun handleOnBackPressed() {
+                    // 手势结束：后续交给框架的 pop 转场（它自己的 transition 会带动圆角）
+                    backGesture = false
+                    isEnabled = false
+                    backDispatcher?.onBackPressed()
+                }
+            }
+        backDispatcher?.addCallback(callback)
+        callback.isEnabled = true
+        onDispose { callback.remove() }
+    }
 
     var drawerOpen by remember { mutableStateOf(false) }
     val panelWidth = 300.dp
@@ -150,29 +273,30 @@ fun AppShell(
 
     Box(modifier = modifier.fillMaxSize().background(colors.background)) {
         val wideScreen = LocalConfiguration.current.screenWidthDp >= 600
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // 压暗纱：位于所有页面**之下**，铺满整屏（含状态栏）。
+        // 静止时被不透明的页面盖住、看不见；转场时旧页部分淡出，纱从它背后透出来，
+        // 于是只有「上一层」被压暗，新推入的页面不受影响。
+        // 反过来把纱放在页面之上会连新页面一起压暗 —— 那是错的。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = ScrimAlpha)),
+        )
+
+        // 页面铺满整屏（含状态栏），留白改由各页顶栏自己负责；
+        // 否则状态栏那条没有页面覆盖，转场时会单独发灰、和内容对不上。
+        Column(Modifier.fillMaxSize()) {
             Row(Modifier.weight(1f)) {
                 if (wideScreen) {
                     MiuixNavRail(currentRoute = currentRoute, onNavigate = { navigate(it) })
                 }
-                Box(
-                    Modifier
-                        .weight(1f)
-                        // 二级页面圆角：始终圆左侧两角。
-                        // 静止时圆角处露出的是父级 colors.background，与页面自身同色，看不见；
-                        // 而二级页从右侧滑入的那 500ms 里，上一页还在下面，
-                        // 这两处圆角就把新页读成「一张推上来的卡片」。
-                        // 只在抽屉打开时圆角是错的 —— 转场发生时抽屉本来就是关的。
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = MiuixTheme.radius.dialog,
-                                bottomStart = MiuixTheme.radius.dialog,
-                            ),
-                        )
-                        .background(colors.background)
-                        // 裁切：转场滑动时页面内容（尤其顶栏 actions）不会溢出到相邻页
-                        .clipToBounds(),
-                ) {
+                Box(Modifier.weight(1f)) {
+                    // 只做溢出裁切：转场滑动时页面内容不会溢出到相邻页
+                    Box(Modifier.fillMaxSize().clipToBounds()) {
+                    CompositionLocalProvider(
+                        LocalDeviceCorner provides pageCorner,
+                        LocalBackGesture provides backGesture,
+                    ) {
                     ToolboxNavHost(
                         navController = navController,
                         config = config,
@@ -181,6 +305,8 @@ fun AppShell(
                         onOpenDrawer = { drawerOpen = true },
                         onNavigate = { navigate(it) },
                     )
+                    }
+                    }
                 }
             }
             if (!wideScreen) {
@@ -315,15 +441,24 @@ private fun ToolboxNavHost(
             )
         },
         exitTransition = {
+            // 旧页淡到 OldPageAlpha（不是淡到 0）：透出下方那层压暗纱，
+            // 读成「上一层被压暗」。新页面不吃纱，所以只有旧页变暗。
             slideOutHorizontally(
                 targetOffsetX = { -it / 4 },
                 animationSpec = tween(500, easing = NavTransitionEasing.Default),
+            ) + fadeOut(
+                tween(500, easing = NavTransitionEasing.Default),
+                targetAlpha = OldPageAlpha,
             )
         },
         popEnterTransition = {
+            // 被重新露出的那一页由暗转亮
             slideInHorizontally(
                 initialOffsetX = { -it / 4 },
                 animationSpec = tween(500, easing = NavTransitionEasing.Default),
+            ) + fadeIn(
+                tween(500, easing = NavTransitionEasing.Default),
+                initialAlpha = OldPageAlpha,
             )
         },
         popExitTransition = {
@@ -334,7 +469,7 @@ private fun ToolboxNavHost(
         },
     ) {
             composable(Routes.HOME) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 val homeContext = LocalContext.current
                 val mcpStates by McpRegistry.states.collectAsState()
                 val mcpCalls by McpRegistry.calls.collectAsState()
@@ -498,7 +633,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.MEMORY) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                     Column(Modifier.fillMaxSize()) {
                         MiuixTopBarPlaceholder(
                             title = stringResource(R.string.memory_title),
@@ -509,7 +644,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.SETTINGS_THEME) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_screen_theme),
@@ -524,11 +659,9 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.SETTINGS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
-                    MiuixTopBarPlaceholder(
-                        title = stringResource(R.string.app_screen_settings),
-                        onOpenDrawer = onOpenDrawer)
+                    CompactBackRow(onBack = { navController.popBackStack() })
                     SettingsOverview(
                         onOpenTheme = { onNavigate(Routes.SETTINGS_THEME) },
                         onOpenPrivilege = { onNavigate(Routes.SETTINGS_PRIVILEGE) },
@@ -541,11 +674,9 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.AI_SETTINGS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
-                    MiuixTopBarPlaceholder(
-                        title = stringResource(R.string.app_screen_ai),
-                        onOpenDrawer = onOpenDrawer)
+                    CompactBackRow(onBack = { navController.popBackStack() })
                     AiSettingsScreen(
                         onOpenProviders = { onNavigate(Routes.AI_PROVIDERS) },
                         onOpenModels = {
@@ -561,7 +692,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.AI_PROVIDERS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_provider_pick),
@@ -577,7 +708,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.AI_PROVIDER_DETAIL) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_provider_title),
@@ -593,7 +724,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.app_nav_linux),
@@ -620,7 +751,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX_FILES) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_browse),
@@ -631,7 +762,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX_SHARED) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_shared),
@@ -642,7 +773,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX_TERMINAL) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_open_terminal),
@@ -653,7 +784,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX_CHECK) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.linux_check_title),
@@ -664,7 +795,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.AI_MODELS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = stringResource(R.string.ai_model_manage),
@@ -678,7 +809,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.SETTINGS_PRIVILEGE) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
                     MiuixTopBarPlaceholder(
                         title = "权限检测与申请",
@@ -689,71 +820,67 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.ABOUT) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
-                    MiuixTopBarPlaceholder(
-                        title = stringResource(R.string.app_screen_about),
-                        onOpenDrawer = onOpenDrawer)
+                    CompactBackRow(onBack = { navController.popBackStack() })
                     AboutScreen(toastState = toastState)
                 }
                 }
             }
             composable(Routes.TOOLS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
-                    MiuixTopBarPlaceholder(
-                        title = stringResource(R.string.app_drawer_group_tools),
-                        onOpenDrawer = onOpenDrawer)
+                    CompactBackRow(onBack = { navController.popBackStack() })
                     ToolsScreen(onOpenTool = onNavigate)
                 }
                 }
             }
             composable(Routes.APPS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 AppsScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.CAPTURE) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 CaptureScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.DECOMPILE) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 DecompileScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.DATABASE) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 DatabaseScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.NETWORK) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 NetworkHubScreen(
                     onBack = { navController.popBackStack() }, onOpenRoute = onNavigate)
                 }
             }
             composable(Routes.NETWORK_HTTP) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 HttpRequestScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.NETWORK_PING) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 PingScreen(onBack = { navController.popBackStack() })
                 }
             }
             composable(Routes.NETWORK_DNS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) { DnsScreen(onBack = { navController.popBackStack() })                 }}
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) { DnsScreen(onBack = { navController.popBackStack() })                 }}
             composable(Routes.WEB) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 WebScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.MCP) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 McpScreen(
                     onBack = { navController.popBackStack() },
                     onToast = { toastState.show(it) },
@@ -762,7 +889,7 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.SKILLS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                     SkillScreen(
                         onBack = { navController.popBackStack() },
                         onToast = { toastState.show(it) },
@@ -770,24 +897,24 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.ARTIFACTS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 ArtifactsScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.NETWORK_PORT_SCAN) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 PortScanScreen(onBack = { navController.popBackStack() })
                 }
             }
             composable(Routes.NETWORK_WHOIS) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 WhoisScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
             }
             composable(Routes.NETWORK_ENV) {
-                Box(Modifier.fillMaxSize().background(MiuixTheme.colors.background)) {
+                Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 NetworkEnvScreen(
                     onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
                 }
@@ -809,7 +936,8 @@ private fun ToolboxNavHost(
                 }
             placeholders.forEach { destination ->
                 composable(route(destination)) {
-                    Column(Modifier.fillMaxSize()) {
+                    // 与其余页面一致：自带根背景，否则会透出上层容器
+                    Column(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                         MiuixTopBarPlaceholder(
                             title = stringResource(destination.labelRes),
                             onOpenDrawer = onOpenDrawer,
@@ -822,6 +950,33 @@ private fun ToolboxNavHost(
 }
 
 private fun route(destination: Destination): String = destination.route
+
+/**
+ * 紧凑返回行：只有一个返回箭头，没有标题。
+ *
+ * 用于页面自身已经写出标题的场景（如「应用工具」「设置」）：这些页从抽屉直接进入，
+ * 原本再压一条带标题的顶栏就是重复；完全去掉又没地方返回，
+ * 所以保留一个不占视觉重量的返回入口。
+ */
+@Composable
+private fun CompactBackRow(onBack: () -> Unit) {
+    val press = rememberMiuixPressState()
+    Box(
+        modifier =
+            Modifier.statusBarsPadding()
+                .height(44.dp)
+                .width(44.dp)
+                .miuixClickable(press, true, onClick = onBack),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiuixIcon(
+            Icons.AutoMirrored.Outlined.ArrowBack,
+            stringResource(R.string.app_action_back),
+            tint = MiuixTheme.colors.onSurface,
+            size = 22.dp,
+        )
+    }
+}
 
 /**
  * 简易顶栏：前置按钮 + 标题（各页在后续阶段会替换为各自的 AppBar）。
@@ -838,7 +993,11 @@ private fun MiuixTopBarPlaceholder(
 ) {
     val back = onBack != null
     Row(
-        modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
+        modifier =
+            Modifier.fillMaxWidth()
+                .statusBarsPadding()
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val press = rememberMiuixPressState()

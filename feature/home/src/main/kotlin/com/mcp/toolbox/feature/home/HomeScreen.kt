@@ -2061,9 +2061,9 @@ private fun MessageBubble(
     }
 
     // 用户消息长按菜单：复制 / 编辑 / 删除；锚在气泡右缘、往右错开一点
-    if (showActions && isUser) {
-        MiuixOverflowMenu(
-            expanded = showActions,
+    // 同抽屉菜单：不包 if，否则收起时组件被直接移出组合，离场动画无处播
+    MiuixOverflowMenu(
+            expanded = showActions && isUser,
             onDismiss = { showActions = false },
             anchor = bubbleAnchor.value?.let {
                 androidx.compose.ui.geometry.Rect(
@@ -2088,7 +2088,6 @@ private fun MessageBubble(
                 danger = true,
                 onClick = { showActions = false; onDelete() },
             )
-        }
     }
 }
 

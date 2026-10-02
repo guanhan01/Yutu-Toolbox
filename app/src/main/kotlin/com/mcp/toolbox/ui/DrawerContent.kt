@@ -373,12 +373,13 @@ private fun ChatHistoryRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (showMenu) {
-            MiuixOverflowMenu(
-                expanded = showMenu,
-                onDismiss = { showMenu = false },
-                alignStart = true,
-            ) {
+        // 不要用 `if (showMenu)` 包住组件：收起时组件会被整块移出组合，
+        // 来不及播离场动画。始终组合、由 expanded 驱动，进出场才都能播。
+        MiuixOverflowMenu(
+            expanded = showMenu,
+            onDismiss = { showMenu = false },
+            alignStart = true,
+        ) {
                 MiuixMenuItem(
                     text = stringResource(R.string.chat_history_rename),
                     icon = Icons.Outlined.DriveFileRenameOutline,
@@ -390,7 +391,6 @@ private fun ChatHistoryRow(
                     danger = true,
                     onClick = { showMenu = false; onDelete() },
                 )
-            }
         }
     }
 }
