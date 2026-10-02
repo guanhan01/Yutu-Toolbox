@@ -79,6 +79,8 @@ jobs:
           # 用本人账号发布，而不是 github-actions[bot]：
           # 默认的 GITHUB_TOKEN 只能代表机器人，Release 的 author 会显示成 bot；
           # 而作者无法事后修改（GitHub 没有改 author 的接口，只能删掉重建）。
-          token: ${{ secrets.RELEASE_TOKEN }}
+          # 未配置 RELEASE_TOKEN 时回退到默认 GITHUB_TOKEN：
+          # 宁可退回 bot 发布，也不要让整个发版 job 因空 token 失败。
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
           files: dist/YutuToolbox-*.apk
           body_path: dist/release-body.md
