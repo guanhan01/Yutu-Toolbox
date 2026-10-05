@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +32,7 @@ import com.mcp.toolbox.core.design.theme.MiuixTheme
 import com.mcp.toolbox.feature.home.agent.AgentText
 import com.mcp.toolbox.feature.home.agent.SystemKind
 import com.mcp.toolbox.feature.home.agent.SystemSegment
+import kotlinx.coroutines.delay
 
 
 /**
@@ -47,6 +53,8 @@ fun SystemCard(
 ) {
     val colors = MiuixTheme.colors
     val spec = SystemVisuals.of(segment.kind, colors, segment)
+    // 429 的等待倒计时（Spec 第 8.3 节：429 要展示倒计时）
+    val waitSeconds = rememberRateLimitRemaining(segment)
 
     // 中断 / 断点类给一个 1.5% 的错误色描边（Spec 第 8.2 节④）
     val bordered = segment.kind == SystemKind.Checkpoint ||
@@ -107,6 +115,7 @@ fun SystemCard(
 
         SystemActions(
             kind = segment.kind,
+            waitSeconds = waitSeconds,
             onRetry = onRetry,
             onContinue = onContinue,
             onRegenerate = onRegenerate,
@@ -125,6 +134,7 @@ fun SystemCard(
 @Composable
 private fun SystemActions(
     kind: SystemKind,
+    waitSeconds: Int,
     onRetry: () -> Unit,
     onContinue: () -> Unit,
     onRegenerate: () -> Unit,
@@ -136,7 +146,11 @@ private fun SystemActions(
         SystemKind.NetworkLost -> listOf(AgentText.ERR_RETRY to onRetry)
         SystemKind.Stall -> listOf(AgentText.ERR_RETRY to onRetry)
         SystemKind.ServerError -> listOf(AgentText.ERR_RETRY to onRetry)
-        SystemKind.RateLimited -> listOf(AgentText.ERR_RETRY to onRetry)
+        // 倒计时期间按钮本身显示剩余秒数并置灰：Spec 要求 429 展示倒计时，
+        // 而「立刻可点的重试」会把用户直接送进下一次 429。
+        SystemKind.RateLimited -> listOf(
+            (if (waitSeconds > 0) AgentText.ERR_RATE_LIMIT_WAIT.format(waitSeconds) else AgentText.ERR_RETRY) to onRetry,
+        )
         SystemKind.UserStopped -> listOf(
             AgentText.STOPPED_CONTINUE to onContinue,
             AgentText.ACTION_REGENERATE to onRegenerate,
@@ -157,31 +171,68 @@ private fun SystemActions(
     }
     if (actions.isEmpty()) return
 
+    val waiting = kind == SystemKind.RateLimited && waitSeconds > 0
+
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         actions.forEach { (label, action) ->
-            SystemTextAction(label = label, onClick = action)
+            SystemTextAction(label = label, enabled = !waiting, onClick = action)
         }
     }
 }
 
 @Composable
-private fun SystemTextAction(label: String, onClick: () -> Unit) {
+private fun SystemTextAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = MiuixTheme.colors
     val press = rememberMiuixPressState()
     Box(
         modifier = Modifier
             .heightIn(min = 32.dp)
-            .sqSurface(colors.primary.copy(alpha = 0.10f), SquircleRadii.bubbleTail)
-            .miuixClickable(press, true, onClick = onClick)
+            .sqSurface(colors.primary.copy(alpha = if (enabled) 0.10f else 0.05f), SquircleRadii.bubbleTail)
+            .miuixClickable(press, enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         MiuixText(
             text = label,
             style = MiuixTheme.typography.labelMedium,
-            color = colors.primary,
+            color = if (enabled) colors.primary else colors.primary.copy(alpha = 0.4f),
         )
     }
+}
+
+/**
+ * 429 的剩余等待秒数；不适用时为 0。
+ *
+ * 计时起点从 [SystemSegment.createdAt] 与已落盘的 `retryAfterSeconds` 推算，
+ * **不是**从「进入组合」开始计 —— 卡片会随列表滚动反复进出组合，那样一滚就跳回满值。
+ * 该时间点已过（切页回来、或从磁盘读出的旧记录）时直接返 0，界面不再显示倒计时。
+ */
+@Composable
+private fun rememberRateLimitRemaining(segment: SystemSegment): Int {
+    val total = segment.retryAfterSeconds
+    val deadline = remember(segment.id, segment.createdAt, total) {
+        if (total > 0) segment.createdAt + total * 1000L else 0L
+    }
+    var remaining by remember(segment.id, deadline) {
+        mutableIntStateOf(remainingSeconds(deadline))
+    }
+    LaunchedEffect(deadline) {
+        if (deadline <= 0L) return@LaunchedEffect
+        while (true) {
+            remaining = remainingSeconds(deadline)
+            if (remaining <= 0) break
+            delay(1_000L)
+        }
+    }
+    return remaining
+}
+
+/** 距离 [deadline] 还有几秒（不足一秒进一，归零后不再为负）。 */
+private fun remainingSeconds(deadline: Long): Int {
+    if (deadline <= 0L) return 0
+    val left = deadline - System.currentTimeMillis()
+    if (left <= 0L) return 0
+    return ((left + 999L) / 1000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 }
 
 /** 每种系统状态的图标 / 标题 / 细节 / 强调色。 */
