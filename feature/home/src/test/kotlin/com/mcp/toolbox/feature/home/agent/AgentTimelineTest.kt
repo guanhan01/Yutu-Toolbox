@@ -364,4 +364,42 @@ class AgentTimelineTest {
         t.apply(AgentEvent.ToolCallStarted(1, 0, "device.info"))
         assertFalse("没有 round=2 seq=9 这一段", t.retryTool(2, 9))
     }
+
+    @Test
+    fun `restore 之后工具卡仍可被 (round,seq) 定位`() {
+        // 回归（用户实测）：「重启后点重试没有任何反应，只弹一行提示」。
+        // restore() 里有 reset()，而 reset() 会清空 toolIndex；工具卡却靠这个索引
+        // 定位（upsertTool / retryTool 都查它）。不重建索引，恢复出来的卡就是
+        // 「看得见、改不到」—— retryTool 永远返回 false。
+        val origin = AgentTimeline()
+        origin.apply(AgentEvent.Started(round = 1))
+        origin.apply(AgentEvent.ToolCallStarted(1, 0, "device.info"))
+        origin.apply(AgentEvent.ToolCompleted(1, 0, "device.info", "型号=X", success = true))
+        origin.apply(AgentEvent.ToolCallStarted(1, 1, "linux.env"))
+        origin.apply(AgentEvent.ToolCompleted(1, 1, "linux.env", "失败", success = false))
+
+        val restored = AgentTimeline()
+        restored.restore(origin.snapshot())
+
+        assertTrue(
+            "restore 后必须能按 (round,seq) 定位到工具段",
+            restored.retryTool(1, 1),
+        )
+        val seg = restored.snapshot().filterIsInstance<ToolCallSegment>().first { it.seq == 1 }
+        assertEquals(ToolStatus.Running, seg.status)
+
+        // 相邻那张也要还在
+        assertEquals(2, restored.snapshot().filterIsInstance<ToolCallSegment>().size)
+    }
+
+    @Test
+    fun `maxRound 取已有内容里的最大轮次`() {
+        // 续写要用它当基址：新一轮若从 1 开始，会和旧工具卡撞 (round, seq)
+        val t = AgentTimeline()
+        assertEquals(0, t.maxRound())
+        t.apply(AgentEvent.Started(round = 1))
+        t.apply(AgentEvent.ThinkingDelta(2, "第二轮的思考"))
+        t.apply(AgentEvent.ThinkingDelta(3, "第三轮"))
+        assertEquals(3, t.maxRound())
+    }
 }

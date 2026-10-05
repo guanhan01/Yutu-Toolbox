@@ -648,6 +648,25 @@ private fun AnswerRow(
         onRetryTool(message.id, seg.round, seg.seq, seg.toolName, seg.argsJson)
     }
 
+    /**
+     * 这一轮是不是被异常打断的。
+     *
+     * - Running：模型可能还在跑，中途某张卡失败不代表这轮结束了
+     * - Done：已经正常答完
+     * 两者都不该给工具重试入口。Interrupted（断网 / 被后台杀 / 进程回收）
+     * 与 Failed（请求失败）才算「中断」。
+     */
+    val turnInterrupted = message.turnState == TurnState.Interrupted ||
+        message.turnState == TurnState.Failed
+
+    /**
+     * 本条消息的最后一个段。
+     *
+     * 工具重试只在「这张卡就是最后一个段」时出现——后面还有内容说明模型已经
+     * 往下答了或又调了别的工具，此时重试这一个工具改变不了已写好的后文。
+     */
+    val lastSegment = segments.lastOrNull()
+
     val rows = remember(segments) { groupSegments(segments) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
@@ -662,6 +681,8 @@ private fun AnswerRow(
                     onContinue = onContinue,
                     onRetry = onRetry,
                     onRetryTool = retryTool,
+                    canRetryTool = turnInterrupted,
+                    lastSegment = lastSegment,
                     onOpenAuth = onOpenAuth,
                     onApproveTool = onApproveTool,
                     onDenyTool = onDenyTool,
@@ -692,6 +713,8 @@ private fun AnswerRow(
                                 onContinue = onContinue,
                                 onRetry = onRetry,
                                 onRetryTool = retryTool,
+                                canRetryTool = turnInterrupted,
+                                lastSegment = lastSegment,
                                 onOpenAuth = onOpenAuth,
                                 onApproveTool = onApproveTool,
                                 onDenyTool = onDenyTool,
@@ -727,6 +750,10 @@ private fun SegmentView(
     onCopied: () -> Unit,
     /** 工具卡的「重试」：只重跑该工具。 */
     onRetryTool: (ToolCallSegment) -> Unit = {},
+    /** 这一轮是否被异常打断（仅与「这张卡是否失败」共同决定要不要给重试）。 */
+    canRetryTool: Boolean = false,
+    /** 本条消息的最后一个段，用来判断「这张卡后面还有没有内容」。 */
+    lastSegment: Segment? = null,
     isLatestTurn: Boolean = true,
     onSpeak: () -> Unit = {},
     onShareImage: (androidx.compose.ui.graphics.layer.GraphicsLayer) -> Unit = {},
@@ -781,6 +808,8 @@ private fun SegmentView(
             },
             onApprove = { onApproveTool(segment.round, segment.seq) },
             onDeny = { onDenyTool(segment.round, segment.seq) },
+            // 只有「该轮被异常打断」且「这张卡是最后一个段」才给重试。
+            canRetry = canRetryTool && segment == lastSegment,
             // 只重跑这一个工具。此前接的是 onRetry（整轮重跑），
             // 点一下就把前面的工具卡全清掉、再从头答一遍（用户实测反馈）。
             onRetry = { onRetryTool(segment) },

@@ -69,9 +69,22 @@ class AgentTimeline {
         reset()
         items.addAll(segments)
         started = true
-        currentRound = segments.filterIsInstance<ThinkingSegment>().maxOfOrNull { it.round } ?: 0
+        currentRound = maxRound()
         sawAnswer = segments.any { it is AnswerSegment && it.markdown.isNotEmpty() }
+        // ⚠️ 必须重建位置索引。
+        //
+        // reset() 会清空 toolIndex，而工具卡是靠 (round, seq) 索引定位的
+        // （upsertTool / retryTool 都查它）。不补这一步，冷启动恢复出来的工具卡
+        // 就成了「看得见、改不到」：点重试永远返回 false，界面只能弹提示。
+        // 实测反馈的「重启后点重试没有反应、只弹一行字」就是这里。
+        items.forEachIndexed { index, seg ->
+            if (seg is ToolCallSegment) toolIndex[seg.round to seg.seq] = index
+        }
     }
+
+    /** 已有内容里的最大轮次；续写时用它当基址，避免新一轮从 1 开始和旧卡撞号。 */
+    fun maxRound(): Int =
+        items.filterIsInstance<ThinkingSegment>().maxOfOrNull { it.round } ?: 0
 
     // ------------------------------------------------------------------
     // 归约

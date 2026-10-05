@@ -91,6 +91,14 @@ fun ToolCard(
     onToggleDetail: () -> Unit,
     onApprove: () -> Unit = {},
     onDeny: () -> Unit = {},
+    /**
+     * 是否显示「重试」。由调用方判定，默认 false。
+     *
+     * 只在「这一轮是被异常打断的，且这张卡是最后一个段」时才给 —— 中途某张卡
+     * 失败但后面还有内容（模型已经答下去或又调了别的工具），此时重试这一个
+     * 工具并不会改变已经写好的后文，给按钮只会让人误以为有用。
+     */
+    canRetry: Boolean = false,
     onRetry: () -> Unit = {},
     onOpenRaw: () -> Unit = {},
     onOpenSources: () -> Unit = {},
@@ -139,6 +147,7 @@ fun ToolCard(
         ) {
             ToolDetail(
                 segment = segment,
+                canRetry = canRetry,
                 onApprove = onApprove,
                 onDeny = onDeny,
                 onRetry = onRetry,
@@ -406,6 +415,7 @@ private fun String.hasMeaningfulArgs(): Boolean {
 @Composable
 private fun ToolDetail(
     segment: ToolCallSegment,
+    canRetry: Boolean,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
     onRetry: () -> Unit,
@@ -492,8 +502,8 @@ private fun ToolDetail(
             }
         }
 
-        // Failed / Timeout 的重试与忽略
-        if (segment.status == ToolStatus.Failed || segment.status == ToolStatus.Timeout) {
+        // Failed / Timeout 的重试与忽略（重试还要满足 canRetry 的上下文条件）
+        if (canRetry && (segment.status == ToolStatus.Failed || segment.status == ToolStatus.Timeout)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextAction(text = AgentText.TOOL_RETRY, iconRes = AgentIcons.ic_retry, onClick = onRetry)
                 TextAction(text = AgentText.TOOL_IGNORE, iconRes = AgentIcons.ic_close, onClick = {})
