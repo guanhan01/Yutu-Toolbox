@@ -341,7 +341,8 @@ class AgentTimeline {
 
                     is ToolCallSegment ->
                         if (seg.isRunning) {
-                            items[i] = seg.copy(status = ToolStatus.Failed, endedAt = now())
+                            // Interrupted 而不是 Failed：用户主动停止时不该出现重试按钮
+                            items[i] = seg.copy(status = ToolStatus.Interrupted, endedAt = now())
                             changed = true
                         }
 

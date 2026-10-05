@@ -101,7 +101,7 @@ class AgentTimelineTest {
     }
 
     @Test
-    fun `中断时未完成的工具标失败、正文定格`() {
+    fun `中断时未完成的工具标为已中断（不是失败）、正文定格`() {
         val t = AgentTimeline()
         t.apply(AgentEvent.Started())
         t.apply(AgentEvent.ThinkingDelta(round = 1, text = "思考中"))
@@ -113,7 +113,13 @@ class AgentTimelineTest {
         // 思考在「同轮出现工具调用」时就已经封印为 Done —— 它的**计时必须停在那里**，
         // 不能等整轮 Interrupted 才收（否则一个早就想完的胶囊会一直涨秒）。
         assertEquals(RunStatus.Done, segs.filterIsInstance<ThinkingSegment>().single().status)
-        assertEquals(ToolStatus.Failed, segs.filterIsInstance<ToolCallSegment>().single().status)
+        // 必须是 Interrupted 而不是 Failed：Failed 会让界面冒出「重试」按钮，
+        // 而用户刚刚才主动停止 —— 给他重试是错的（用户实测反馈）。
+        assertEquals(ToolStatus.Interrupted, segs.filterIsInstance<ToolCallSegment>().single().status)
+        assertFalse(
+            "已中断的工具不应算「正在执行」",
+            segs.filterIsInstance<ToolCallSegment>().single().isRunning,
+        )
         val ans = segs.filterIsInstance<AnswerSegment>().last()
         assertEquals(RunStatus.Interrupted, ans.status)
         // 已生成内容不丢

@@ -77,6 +77,22 @@ class AgentChatState internal constructor() : AgentStreamSink {
     /** 本轮是「接着已有内容续写」而不是全新一轮（见 [beginContinue]）。 */
     private var continuing = false
 
+    /**
+     * 本轮是否已收尾（停止 / 失败 / 完成）。**所有**流式事件都要先看它。
+     *
+     * 为什么必须有：`ChatRunner.stop()` 先取消协程，但协程的取消只在**挂起点**
+     * 生效，取消与「事件真正停下」之间有一段时间窗。窗口内迟到的事件会：
+     *
+     * - `onToolCall`：新建一张 Running 卡，而后续 `invoke` 在挂起点抛取消异常，
+     *   **没有任何事件再回来收尾它** → 永久转圈
+     * - `onDelta`：把 `streaming` 重新置回 true → 界面「正在生成」重新亮起
+     * - `onThinking` / `onNarration` / `onToolResult`：继续往时间线里追加内容
+     *
+     * 合起来的表现就是「点了停止但它没停」（用户实测反馈）。收尾后到达的事件
+     * 一律丢弃，是本轮唯一正确的处理——它们本来就不该再被记录。
+     */
+    private var turnClosed = false
+
     /** 本轮过程要写进哪条会话的哪条消息。由界面层在发送前绑定。 */
     var sessionId: String? by mutableStateOf(null)
         private set
@@ -165,6 +181,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     private fun resetTurn() {
+        turnClosed = false
         toolResults = emptyList()
         buffer.reset()
         chunker.reset()
@@ -262,6 +279,10 @@ class AgentChatState internal constructor() : AgentStreamSink {
         if (segments.isEmpty()) return false
         continuing = true
         started = false
+        // ⚠️ 必须一并复位：上一轮收尾时置了 true（这正是我们要续写的那一轮），
+        // 而续写路径的 onStarted 会跳过 resetTurn()，不复位就会把续写期间
+        // **所有**工具事件当「迟到事件」丢掉。
+        turnClosed = false
         turnState = TurnState.Running
         return true
     }
@@ -279,18 +300,22 @@ class AgentChatState internal constructor() : AgentStreamSink {
     // ------------------------------------------------------------------
 
     override fun onThinking(round: Int, text: String) {
+        if (turnClosed) return
         timeline.apply(AgentEvent.ThinkingDelta(round, text))
         syncList()
         schedulePersist()
     }
 
     override fun onNarration(round: Int, text: String) {
+        if (turnClosed) return
         timeline.apply(AgentEvent.Narration(round, text))
         syncList()
         schedulePersist()
     }
 
     override fun onToolCall(round: Int, seq: Int, name: String, args: String?) {
+        // 本轮已收尾：迟到的事件会把刚定型的卡又拉回「正在执行」
+        if (turnClosed) return
         timeline.apply(AgentEvent.ToolCallStarted(round, seq, name, args))
         syncList()
         schedulePersist()
@@ -303,6 +328,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
         result: String,
         success: Boolean,
     ) {
+        if (turnClosed) return
         timeline.apply(AgentEvent.ToolCompleted(round, seq, name, result, success))
         // 只记已执行完的：半途而废的调用对模型没有意义
         toolResults = toolResults + ToolTrace(name = name, argsJson = null, result = result, success = success)
@@ -317,6 +343,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
         args: String?,
         risk: String,
     ) {
+        if (turnClosed) return
         timeline.apply(AgentEvent.ToolNeedsApproval(round, seq, name, args, risk))
         syncList()
         schedulePersist()
@@ -363,6 +390,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
      * 刚冒出答案就立刻收起、用户还没看清思考摘要的抖动）。
      */
     override fun onDelta(text: String) {
+        if (turnClosed) return
         val first = !hasAnswer
         streaming = true
         hasAnswer = true
@@ -372,6 +400,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     override fun onFinished() {
+        turnClosed = true
         buffer.flush()?.let { commitAnswer(it) }
         streaming = false
         turnState = TurnState.Done
@@ -381,6 +410,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     override fun onInterrupted() {
+        turnClosed = true
         buffer.flush()?.let { commitAnswer(it) }
         streaming = false
         turnState = TurnState.Interrupted
@@ -390,6 +420,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     override fun onFailed(kind: SystemKind, message: String, retryAfterSeconds: Int) {
+        turnClosed = true
         buffer.flush()?.let { commitAnswer(it) }
         streaming = false
         turnState = TurnState.Failed
@@ -402,6 +433,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     override fun onAnomaly(kind: SystemKind, payload: String) {
+        turnClosed = true
         buffer.flush()?.let { commitAnswer(it) }
         streaming = false
         turnState = TurnState.Failed

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconRes
 import com.mcp.toolbox.core.design.component.MiuixText
+import org.json.JSONObject
 import com.mcp.toolbox.core.design.component.miuixClickable
 import com.mcp.toolbox.core.design.component.miuixTouchTarget
 import com.mcp.toolbox.core.design.component.rememberMiuixPressState
@@ -279,6 +280,14 @@ private fun ToolStatusIndicator(segment: ToolCallSegment) {
                     size = 14.dp,
                 )
 
+                // 用户主动停止：用「停止」图标 + 中性色，而不是报错语义
+                ToolStatus.Interrupted -> MiuixIconRes(
+                    iconRes = AgentIcons.ic_agent_stop,
+                    contentDescription = null,
+                    tint = colors.onSurfaceVariant,
+                    size = 14.dp,
+                )
+
                 ToolStatus.Denied -> MiuixIconRes(
                     iconRes = AgentIcons.ic_blocked,
                     contentDescription = null,
@@ -293,6 +302,7 @@ private fun ToolStatusIndicator(segment: ToolCallSegment) {
                 ToolStatus.Success -> formatToolDuration(segment.durationMs)
                 ToolStatus.Failed -> AgentText.TOOL_FAILED
                 ToolStatus.Timeout -> AgentText.TOOL_TIMEOUT
+                ToolStatus.Interrupted -> AgentText.TOOL_INTERRUPTED
                 ToolStatus.Denied -> AgentText.TOOL_DENIED
             }
             if (label.isNotEmpty()) {
@@ -373,6 +383,7 @@ private fun ToolSummaryLine(segment: ToolCallSegment) {
     val summary = when {
         segment.awaitingApproval -> segment.risk.orEmpty()
         segment.status == ToolStatus.Timeout -> AgentText.TOOL_TIMEOUT_HINT
+        segment.status == ToolStatus.Interrupted -> AgentText.TOOL_INTERRUPTED_HINT
         segment.status == ToolStatus.Denied -> AgentText.TOOL_DENIED_HINT
         segment.status == ToolStatus.Failed ->
             segment.result?.summary ?: AgentText.TOOL_FAILED
@@ -407,6 +418,60 @@ private fun String.hasMeaningfulArgs(): Boolean {
     val t = trim()
     if (t.isEmpty() || t == "{}" || t == "null") return false
     return true
+}
+
+/**
+ * 从工具参数里取出要执行的命令。
+ *
+ * 命令类工具（`shell.exec` / `linux.exec` / `linux.shell`）的参数形状统一是
+ * `{"command": "..."}`，所以直接读这个键即可。返回 null 表示这不是命令类工具，
+ * 界面据此决定要不要显示命令栏。
+ */
+private fun commandOf(argsJson: String?): String? {
+    val raw = argsJson?.takeIf { it.hasMeaningfulArgs() } ?: return null
+    return runCatching { JSONObject(raw).optString("command") }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.trim()
+}
+
+/**
+ * 终端样式的命令栏。
+ *
+ * 视觉刻意做成「终端窗口」而不是又一个信息块：深色底 + 等宽字 + 行首 `$`，
+ * 一眼能认出「这是要执行的命令」，与下面的「结果」「参数」两块拉开区分。
+ * 没有引入依赖，纯 Compose 画。
+ */
+@Composable
+private fun ShellCommandBar(command: String) {
+    val colors = MiuixTheme.colors
+    // 白底 + 深字（浅色主题下 surface 就是 0xFFFFFFFF，onSurface 是近黑）。
+    //
+    // 必须补一圈描边：页面底色本身也接近白，纯白块会"糊"在背景里分不出来。
+    val bg = colors.surface
+    val fg = colors.onSurface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .sqSurface(bg, SquircleRadii.inner)
+            .sqBorder(1.dp, colors.outlineVariant, SquircleRadii.inner)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MiuixText(
+            text = "$",
+            style = MiuixTheme.typography.code,
+            color = colors.onSurfaceVariant,
+        )
+        MiuixText(
+            text = command,
+            style = MiuixTheme.typography.code,
+            color = fg,
+            maxLines = 6,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /**
@@ -452,6 +517,14 @@ private fun ToolDetail(
         //
         // 按用户要求「展开后不必展示所有内容」：只放一段预览，
         // 完整输出仍然走「查看原始输出」的独立面板。
+        // 命令栏：这一类工具真正执行的就是一条命令，把它单独放出来，
+        // 而不是埋在下面「参数」那块 JSON 里（截图里的 {"command": "echo ..."}）。
+        //
+        // 只在「参数里确实有非空 command」时出现，所以普通工具（file.* / apk.* /
+        // web.fetch 等）不受影响，仍只显示原有各块。
+        val command = commandOf(segment.argsJson)
+        command?.let { ShellCommandBar(command = it) }
+
         segment.result?.rawText?.takeIf { it.isNotBlank() }?.let { raw ->
             LabeledBlock(
                 label = AgentText.TOOL_RESULT,
@@ -479,8 +552,13 @@ private fun ToolDetail(
         //
         // 空参数不渲染：`{}` / `null` / 纯空白占一整块，却什么信息都没有，
         // 只会把「结果」挤下去（用户实测反馈）。
-        segment.argsJson?.takeIf { it.hasMeaningfulArgs() }?.let { args ->
-            LabeledBlock(label = AgentText.TOOL_ARGS, body = args, mono = true)
+        //
+        // 命令类工具**整块不渲染**：它的参数就是那条命令，上方命令栏已经用可读的
+        // 形式表达了，再贴一遍原始 JSON（含未转义的 \n、\"）只是重复噪音。
+        if (command == null) {
+            segment.argsJson?.takeIf { it.hasMeaningfulArgs() }?.let { args ->
+                LabeledBlock(label = AgentText.TOOL_ARGS, body = args, mono = true)
+            }
         }
 
         // L2 来源 chips（网页搜索）
