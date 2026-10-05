@@ -242,6 +242,36 @@ itemSize - (viewportEnd - itemOffset).coerceIn(0, itemSize)
 `bottomPadding=166.33dp px=499` 一眼确认内缩本来就预留了，问题在判据式子；
 滚动收敛也由 `隐藏 761px → 补 → 隐藏 0px → 到底` 得到确证。日志用完已清理。
 
+### 第六轮修复（工具重试）
+
+**用户口径**：「点重试，状态栏多了一行字，但是是 bug 因为他太高了」
+→ 由此牵出真正的问题：**重试在冷启动后根本用不了**，只能弹提示。
+
+| 项 | 根因 | 修复 |
+|---|---|---|
+| 点重试没反应、只弹一行提示 | `AgentTimeline.restore()` 里调了 `reset()`，而 `reset()` 会清空 `toolIndex`；工具卡却靠这个索引定位（`upsertTool` / `retryTool` 都查它）。**收敛前重建索引这一步漏了** | `restore()` 末尾重建索引，并新增 `maxRound()`（供后续续写当轮次基址） |
+| 重试被绑死在「是不是当前轮」 | 上一轮把「能不能重试」与「是不是当前轮」判成同一件事，于是切页/重启后（`state.messageId` 已解绑）一律不可用 | 历史轮次也支持：新增 `AgentSegmentCodec.patchToolSegment` 直接改写该消息的 `segmentsJson` |
+| 工具重试期间发的消息会被静默丢弃 | `ChatRunner.runToolOnce` 复用了 `ChatRunner.job`，执行期间 `isBusy()` 为真 | 已修：工具重试改用独立 `toolJob`。**注意实际表现比「卡住」轻**——`ChatRunner.running` 只在 `start()` 里赋值，重试期间它为 null，所以界面仍显示「可发送」，只是 `start()` 在 `if (isBusy()) return` 处静默忽略，那条消息停在「正在生成」，需重发一次 |
+| 重试按钮无条件出现 | 只要 `status` 是 `Failed` / `Timeout` 就给按钮 | 改为须同时满足：①该轮被异常打断（`Interrupted` / `Failed`，`Running`、`Done` 不给）②这张卡是**最后一个段**（后面还有正文/系统卡/别的工具卡说明模型已往下答，重试改变不了后文） |
+
+**这次的教训（同类错误第二次犯）**：定位「重试没反应」时，我先基于**未经核实的假设**
+（以为历史轮次拿不到工具参数）设计了一套复杂方案，写了一半才发现：看一眼
+`AgentSegmentCodec` 就知道 `args` 一直是有落盘的。**先 grep 再设计**，成本一条命令。
+
+**负向验证**：`restore` 的回归测试做过反向确认 —— 临时移除修复后它确实失败
+（`restore 之后工具卡仍可被 (round,seq) 定位`），确认它抓的是这个 bug 而不是恒真。
+
+**另一处顺手纠错**：`AgentSegmentCodec` 的字段名与 `patchToolSegment` 写入的键逐一对过
+（`round` / `seq` / `status` / `startedAt` / `endedAt` / `result` / `awaiting` / `risk` / `toggled`），
+写入端与解码端必须一致，否则改完读不回来 —— 这类 bug 在编译期完全看不出来。
+
+**已解决**：`runToolOnce` 改用自己的 `toolJob`，与 `isBusy()` 解耦
+（`isBusy` 的语义收窄为「有没有对话在跑」）。`stop()` 会一并取消它。
+
+**触发条件（当时为什么难发现）**：需同时满足 ①在当前轮点重试 ②该工具执行耗时较长
+③这几秒内想发新消息。历史轮次的重试**不经过** `ChatRunner`，不受影响。
+表现也不是崩溃或转圈，而是「那条消息停在正在生成、重发一次就好」——所以不容易被注意到。
+
 ### 架构调整：一条消息 = 一条时间线
 
 ```
@@ -338,19 +368,20 @@ echo '\ \ / /_   _| |_ _   _'             # 正确
 
 | 项 | Spec | 要点 |
 |---|---|---|
-| **「引用回复」自定义选区 action** | §5.6 | 现在只有系统选择菜单。Spec 允许**在系统菜单之外追加**自定义 action（把选中文字作为引用插入输入框）。`SelectionContainer` 本身不提供扩展点，需走 `ActionMode` 回调注入。 |
+| **「引用回复」自定义选区 action** | §5.6 | 回答区**目前没有任何选区操作菜单**（不是「只有系统菜单」——早先这条描述有误）。Spec 允许在系统菜单之外追加自定义 action（把选中文字作为引用插入输入框）。`SelectionContainer` 本身不提供扩展点，需走 `ActionMode` 回调注入。 |
 | **正文 `[1]` 角标 ↔ 来源列表双向联动** | §5.3、§7.4 | 点角标滚到并高亮来源卡（1.2s 消退）；点来源卡跳到正文首次引用处。需给 Markdown 行内解析加「引用角标」类型 + 锚点定位。 |
 | **多答案分支切换** | §5.7 | 「1/3」页码 chip + `AnimatedContent` 横向淡入淡出。数据层要先支持「一轮多答案」。 |
 | **工具步骤 >5 时折叠最早几个** | §7.3 | 目前是**整组**折叠（`ProcessGroupCard`），没有「>5 时把最早的折成『显示前面 N 个步骤』按钮」。原 `revealedSteps` 已随重构删除。 |
-| **并行工具聚合胶囊「N 个任务进行中」** | §7.6 | 多张卡已能纵向堆叠，但头部没有聚合提示。 |
+| **并行工具聚合胶囊「N 个任务进行中」** | §7.6 | ⚠️ **先确认要不要做**：`AiChatClient` 里工具是 `forEachIndexed` **串行**执行的（全文件无 `async` / `awaitAll`），所以「并行任务」这个状态**目前不存在** —— 任何时刻最多 1 张卡是 Running，做出来只会显示「1 个任务进行中」。要真做得先把后端改成并发执行。 |
 | **审批卡真正被触发** | §7.5 | 数据层（`ToolNeedsApproval` / `awaitingApproval`）与 UI 都已就绪，但**后端从不发这个事件** —— 需要先定义「哪些工具、什么条件算危险操作」的策略。 |
-| **异常矩阵的后端分类** | §8.3 | `SystemKind` 12 种 UI 都会画，但后端只发了少数几种。**401 / 429 / 5xx / 内容安全拦截 / 长度截断** 的真实识别与分类尚未实现（现在都会落进 `ServerError` 兜底）。 |
-| **低电量 / 「减少动画」降级** | §8.3 | `LocalReduceMotion` / `LocalPowerSave` **已定义但零引用**（`AgentMotion` 读了它们，但没人提供过值）。要接 `PowerManager.isPowerSaveMode` 与 `Settings.Global.ANIMATOR_DURATION_SCALE`。 |
+| **异常矩阵：`Blocked` 与 `Truncated`**（严格说属 A 类，`Blocked` 缺判据） | §8.3 | **401 / 403 / 429 / 5xx / 超时 / 网络中断已完成**（`AiFault.kt` 的 `FaultMapper`：401、403 → `AuthRequired`；429 → `RateLimited` 并读 `Retry-After`；5xx → `ServerError`；超时 → `Stall`；IO 失败 → `NetworkLost`）。剩两类未做：`Blocked`（内容安全拦截）**各家标记不统一**——OpenAI 走 `finish_reason=content_filter`，也有服务商放在 `error.code`，无统一判据；`Truncated` 需解析流式 `finish_reason == "length"`，属响应体解析层。 |
 | **TalkBack 播报节流** | §8.3 | 「状态变化播报节流到 1 次/2s」未做；目前只有 segment 级 `contentDescription`。 |
 | **折叠屏 / 横屏锚定** | §8.3 | 旋转后按 `scrollAnchorId` 恢复位置未做。 |
 | **历史会话分页** | §8.3 | 500+ 条时 `LazyColumn` 虚拟化够用，但 Room 分页未做（且见下条 Room 的取舍）。 |
 | **Markdown 缺的结构** | §5.3 | **图片 `![]()`、脚注引用 `[1]`、LaTeX** 三种未支持；任务列表、表格、代码块、引用块已支持。 |
 | **动效逐条走查** | §10、§13 | Spec 第 13 节验收清单的「逐条打勾 + 46 项状态走查」未做。 |
+| **工具重试后的「续写」** | §8.3 | **用户已明确要求，尚未开工**。目标：被异常打断时保住「问题 + 已跑完的工具结果」，点重试后从那儿接着生成。**必须先解决的约束**：`ChatMessage.content` 只存最终正文，工具调用与结果从未进过消息历史，模型不知道自己拿到过什么，续写出来的内容会对不上。做法：给 `ChatMessage` 加「只发给模型、不上屏」的工具轨迹（建议加 `toolTrace: List<ToolTrace>` 并同步改 `ChatStore` 读写两侧，**不要**塞进 `content`），再让续写走一条**不重置时间线**的路径（`onStarted` 的 `resetTurn()` 与 `bindTurn` 的 `timeline.reset()` 都会清空既有内容），且新一轮 `round` 要用 `AgentTimeline.maxRound()` 当基址，否则与已有工具卡撞 `(round, seq)`。仍需用户确认：是「重跑工具后拿新结果续写」还是「不重跑、直接用已保存结果续写」。 |
+| **工具重试的并发保护** | —（Spec 未涉及） | 重试期间不应允许再发对话请求（会与工具卡互相打架），已由 `toolJob` + `isBusy()` 双向挡住；`stop()` 一并取消。**仅剩一点未定**：同一时刻只支持一次工具重试，连点两下第二下会被拒（返回「正在生成中」提示）——是否要给多张卡排队重试，暂无需求。 |
 | **重组次数实测** | §13 | `TokenBuffer` 单测覆盖了**提交次数**（200 token <40 次），但**Compose 真实重组计数**没有测。 |
 
 #### C. 有意的偏离（不是遗漏，别再去「补」）
@@ -359,15 +390,22 @@ echo '\ \ / /_   _| |_ _   _'             # 正确
 |---|---|---|
 | **持久化** | §8.2 Room 增量 upsert | **用 `ChatStore` + JSON 文件**达到等价语义（500ms 节流 + `onStop` 强制落库 + 断点卡片）。理由：不为持久化引 KSP/Room 全链路，且现有 JSON 方案已验证。**不要**在没有充分理由时改成 Room。 |
 | **`SavedStateHandle`** | §8.2 只存 conversationId + anchor + 草稿 | 未使用。当前时间线**随消息一起落盘**（`ChatMessage.segmentsJson`），恢复能力已覆盖它要解决的问题。 |
-| **工具 schema 全量下发** | —（Spec 未涉及） | 117 个工具的 JSON Schema 每轮固定占约 **16k prompt token**（实测 completion 只有 8–9 token 时 prompt 仍 16k）。对 1M 窗口只占 1.6%，暂时无碍；若要做**按需下发**（按会话场景筛相关工具）另开一项，不是 bug。 |
+| **工具 schema 全量下发** | —（Spec 未涉及） | 内置工具 104 个（2026-10-05 精简自 117）的 JSON Schema 每轮固定占约 **16k prompt token**（实测 completion 只有 8–9 token 时 prompt 仍 16k）。对 1M 窗口只占 1.6%，暂时无碍；若要做**按需下发**（按会话场景筛相关工具）另开一项，不是 bug。 |
 | **Squircle 圆角** | §2.1 `SmoothRoundedCornerShape` | 真 API 是 `Modifier.squircleSurface/Clip/Background/Border`（0.9.2 无形状类）。已封成 `core/designsystem/.../shape/MiuixShapes.kt` 的 `sq*` 别名。 |
 | **`folmeSpring` 参数顺序** | 全文写 `spring(response, damping)` | 真签名是 **`folmeSpring(damping, response)`**。已在 `AgentMotion` 里按真签名封装。 |
 
 ### 仍未验证（需要有真实服务商才测得出来）
 
-- **响应体解析 / 工具真实执行 / `onStall` 触发**：设备上配置的本地网关不可达。
-  已用自建 mock 覆盖到「POST 已发出、SSE 已开始流、取消时上游收到 `BrokenPipeError`」，
-  但**解析层没跑通**。mock 脚本留在 `/data/local/tmp/eta/mock_stop_server.py`。
+- **Anthropic 原生分支**：无密钥，未测。OpenAI 兼容端点与自建网关**已用真实响应验证**
+  （用户 2026-10-05 确认）。据此把早先「解析层完全没跑通」的说法更正掉——那是
+  本地网关不可达时的状态，已不再成立。
+- **工具链路是否随真机验证过**：未向用户确认。若只测了纯文本回答，则工具链
+  （`tool_call` / `tool_result` / 过程块）仍是未验证状态，别默认它通了。
+- **`onStall` 触发**：本地 mock 覆盖到「POST 已发出、SSE 已开始流、取消时上游收到
+  `BrokenPipeError`」，脚本留在 `/data/local/tmp/eta/mock_stop_server.py`。
+- **工具结果不进消息历史**：`ChatMessage.content` 只存最终正文，工具调用与结果只在
+  `segmentsJson` 里供显示。**影响**：模型在后续轮次里看不到自己调过什么工具、拿到了
+  什么结果；「重试后续写」必须先把这一条补上（见 B 类待办）。
 - **46 项状态走查**：Spec 第 11 节列了 46 项，代码里都有分支，但未逐项在真机确认。
 
 ## 2. 设备侧构建（本工程的实际构建方式）

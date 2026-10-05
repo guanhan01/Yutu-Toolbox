@@ -50,6 +50,17 @@ object ChatRunner {
     private var job: Job? = null
 
     /**
+     * 工具重试自己的任务，**与 [job] 分开**。
+     *
+     * 早先 runToolOnce 复用了 [job]，于是工具执行期间 [isBusy] 为真：
+     * 用户此刻发新消息时，界面照常显示「可发送」，但 [start] 会在
+     * `if (isBusy()) return` 处**静默忽略**，那条消息就停在「正在生成」
+     * 不动，得重发一次。两件事本来就不该共用一个 busy 判据——
+     * 「有没有对话在跑」和「有没有工具在重试」是两回事。
+     */
+    private var toolJob: Job? = null
+
+    /**
      * 「第几轮」计数。
      *
      * 停止后立刻再发一条时，被取消那轮的 finally 会晚一步跑到。它若无条件清
@@ -181,6 +192,9 @@ object ChatRunner {
         AiChatClient.abortInflight()
         job?.cancel()
         job = null
+        // 工具重试也一并取消：用户点的是「停止」，不该留下一个还在跑的工具
+        toolJob?.cancel()
+        toolJob = null
         // 号码前进一格，被取消那轮的 finally 便不再有权改写共享状态
         generation++
         AiToolBridge.sessionId = null
@@ -231,8 +245,11 @@ object ChatRunner {
         onResult: (success: Boolean, result: String) -> Unit,
         onStarted: () -> Boolean = { true },
     ): Boolean {
+        // 对话在跑时不重试：两者并发会让工具卡与回答区互相打架
         if (isBusy()) return false
-        job = scope.launch {
+        // 已经有一次重试在跑（连点两下）也拒绝
+        if (toolJob?.isActive == true) return false
+        toolJob = scope.launch {
             if (!onStarted()) return@launch
             val outcome = runCatching { AiToolBridge.invoke(context, functionName, argsJson) }
             val raw = outcome.getOrElse { "错误：${it.message ?: it::class.simpleName}" }
