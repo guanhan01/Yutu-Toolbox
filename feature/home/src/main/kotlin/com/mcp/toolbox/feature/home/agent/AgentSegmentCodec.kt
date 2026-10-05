@@ -47,6 +47,58 @@ object AgentSegmentCodec {
     }
 
     /**
+     * 按 `(round, seq)` 就地改写一条已落盘时间线里的工具段，返回新的 JSON。
+     *
+     * 给「历史轮次的工具重试」用：那些段只存在于消息的 `segmentsJson` 里（不在
+     * 内存时间线中），而 [AgentTimeline.retryTool] 只能改内存。
+     *
+     * [status] 为 null 表示开始重试（重置为 Running、清掉旧结果与耗时）；否则为收尾。
+     * 找不到对应段时返回 null —— 调用方据此放弃，而不是把整条时间线写坏。
+     */
+    fun patchToolSegment(
+        json: String?,
+        round: Int,
+        seq: Int,
+        status: ToolStatus?,
+        result: String,
+    ): String? {
+        val arr = runCatching { JSONArray(json.orEmpty()) }.getOrNull() ?: return null
+        var hit = false
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            if (o.optString(KEY_KIND) != KIND_TOOL) continue
+            if (o.optInt("round") != round || o.optInt("seq") != seq) continue
+            val now = System.currentTimeMillis()
+            if (status == null) {
+                o.put("status", ToolStatus.Running.name)
+                o.put("startedAt", now)
+                o.put("endedAt", JSONObject.NULL)
+                o.put("result", JSONObject.NULL)
+                o.put("awaiting", false)
+                o.put("risk", JSONObject.NULL)
+                o.put("toggled", false)
+            } else {
+                o.put("status", status.name)
+                o.put("endedAt", now)
+                o.put(
+                    "result",
+                    encodeResult(
+                        ToolVisuals.buildResult(
+                            toolName = o.optString("name"),
+                            raw = result,
+                            success = status == ToolStatus.Success,
+                            sources = null,
+                        ),
+                    ),
+                )
+            }
+            hit = true
+            break
+        }
+        return if (hit) arr.toString() else null
+    }
+
+    /**
      * 解析。任何一段解析失败都**跳过该段**而不是整条消息失败——
      * 一条坏记录不该让整个对话页打不开（与 `ChatStore.parse` 的处理一致）。
      */

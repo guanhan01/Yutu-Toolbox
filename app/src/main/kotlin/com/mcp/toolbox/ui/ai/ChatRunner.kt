@@ -213,19 +213,30 @@ object ChatRunner {
      * `resetTurn()` + `timeline.reset()`），用户看到的正常结果也会被抹掉。
      * 这里只调这一个工具，把新结果通过 [AgentStreamBus] 交回界面就地更新那一张卡。
      */
-    /** 返回是否真的启动了。false 表示已有一个请求在跑，调用方要撤销「正在重试」的标记。 */
+    /**
+     * 单独重跑一个工具。
+     *
+     * 结果走 [onResult] 回调而不是 [AgentStreamBus]：重试可能发生在**历史轮次**上
+     * （那条消息不是当前正在跑的那一轮），此时内存时间线里根本没有这一段，
+     * 状态层无从更新，只有界面自己知道该写回哪条消息的过程快照。
+     *
+     * @param onStarted 真正执行前调用一次；返回 false 表示这次重试作废
+     *   （例如目标消息已被删除），界面据此撤销「正在重试」的标记。
+     * @return 是否启动。false 表示已有一个请求在跑。
+     */
     fun runToolOnce(
         context: Context,
-        round: Int,
-        seq: Int,
         functionName: String,
         argsJson: String?,
+        onResult: (success: Boolean, result: String) -> Unit,
+        onStarted: () -> Boolean = { true },
     ): Boolean {
         if (isBusy()) return false
         job = scope.launch {
+            if (!onStarted()) return@launch
             val outcome = runCatching { AiToolBridge.invoke(context, functionName, argsJson) }
             val raw = outcome.getOrElse { "错误：${it.message ?: it::class.simpleName}" }
-            AgentStreamBus.emit { it.onToolRetried(round, seq, outcome.isSuccess, raw) }
+            onResult(outcome.isSuccess, raw)
         }
         return true
     }

@@ -260,10 +260,6 @@ class AgentChatState internal constructor() : AgentStreamSink {
         schedulePersist()
     }
 
-    override fun onToolRetried(round: Int, seq: Int, success: Boolean, result: String) {
-        retryTool(round, seq, success, result)
-    }
-
     override fun onToolNeedsApproval(
         round: Int,
         seq: Int,
@@ -280,42 +276,34 @@ class AgentChatState internal constructor() : AgentStreamSink {
      * 卡片上的「重试」：只重跑这一个工具，**不清空已经跑完的前面那些**。
      *
      * 与 [onToolResult] 分开是因为语义不同：[onToolResult] 把段标成 Success/Failed，
-     * 而这里必须能标成 [ToolStatus.Timeout]（前端兜底超时），
-     * 后者不是协议里的「结果」，是界面侧的判定。
+     * 而这里必须能标成 [ToolStatus.Timeout]（前端兜底超时）—— 后者不是协议里的
+     * 「结果」，是界面侧的判定，塞不进一个 `success: Boolean`。
      *
-     * 返回结果不是给模型看的（工具调用不进消息历史，见 `ChatMessage.content` 的说明）；
-     * 界面上的工具卡本身就是这次重试的产出。因此**不再**触发一轮模型续写 ——
-     * 既然模型从来没看到过这些工具结果，把它叫回来「接着上次的想」只会得到
-     * 一份上下文错位的回答。
+     * [status] 传 null 表示「开始重试」：段被重置成 Running 并清掉旧结果。
+     *
+     * 返回 false 表示内存时间线里没有这一段（这条消息不是当前正在跑的那一轮），
+     * 调用方应改为改写该消息自己的过程快照。
+     *
+     * 重试结果不写进消息历史（工具调用不进历史，见 `ChatMessage.content` 的说明），
+     * 因此**不触发一轮模型续写**：模型从没看到过这些结果，把它叫回来
+     * 「接着上次的想」只会得到一份上下文错位的回答。
      */
-    fun retryTool(round: Int, seq: Int, success: Boolean, result: String) {
-        timeline.apply(AgentEvent.ToolCompleted(round, seq, currentToolName(round, seq), result, success))
-        syncList()
-        persistNow()
-    }
-
-    /** 取某段当前的工具名；段不存在时给空串，事件本身仍能定位。 */
-    private fun currentToolName(round: Int, seq: Int): String =
-        segments.firstOrNull { it is ToolCallSegment && it.round == round && it.seq == seq }
-            ?.let { (it as ToolCallSegment).toolName }
-            .orEmpty()
-
-    fun resolveApproval(round: Int, seq: Int, allowed: Boolean) {
-        timeline.apply(AgentEvent.ToolApprovalResolved(round, seq, allowed))
-        syncList()
-        schedulePersist()
-    }
-
-    /**
-     * 把某个工具卡标成「正在重试」。返回 false 表示时间线里没有这一段。
-     */
-    fun markToolRetrying(round: Int, seq: Int): Boolean {
-        val ok = timeline.retryTool(round, seq)
+    fun markToolRetried(round: Int, seq: Int, status: ToolStatus?, result: String = ""): Boolean {
+        val ok = timeline.retryTool(round, seq, status, result)
         if (ok) {
             syncList()
             persistNow()
         }
         return ok
+    }
+
+    /** 这条消息是不是当前正在跑的那一轮。 */
+    fun ownsMessage(id: String): Boolean = messageId == id
+
+    fun resolveApproval(round: Int, seq: Int, allowed: Boolean) {
+        timeline.apply(AgentEvent.ToolApprovalResolved(round, seq, allowed))
+        syncList()
+        schedulePersist()
     }
 
     /**

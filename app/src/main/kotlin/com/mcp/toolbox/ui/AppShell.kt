@@ -567,33 +567,58 @@ private fun ToolboxNavHost(
                     },
                     onRetryTool = { messageId, round, seq, toolName, argsJson ->
                         // 返回 null 表示已启动，非 null 是要展示给用户的原因。
-                        // 先查「忙不忙」，再动状态：反过来会留下一个永久转圈的卡片。
                         if (ChatRunner.isBusy()) {
-                            "正在生成中，等这一轮结束再重试这个工具"
+                            "正在生成中，稍后再重试这个工具"
                         } else {
-                            // 只有「这条消息就是当前正在跑的那一轮」才改得到内存时间线；
-                            // 历史轮次的工具段不在里面（工具调用不进消息历史）。
-                            var live = false
+                            // 「这条消息是不是当前正在跑的那一轮」决定结果写到哪里：
+                            // 当前轮改内存时间线，历史轮次改写该消息自己的过程快照。
+                            var liveState: com.mcp.toolbox.feature.home.agent.AgentChatState? = null
                             AgentStreamBus.emit { sink ->
-                                val state = sink as? com.mcp.toolbox.feature.home.agent.AgentChatState
-                                if (state?.messageId == messageId) {
-                                    live = state.markToolRetrying(round, seq)
-                                }
+                                val st = sink as? com.mcp.toolbox.feature.home.agent.AgentChatState
+                                if (st?.ownsMessage(messageId) == true) liveState = st
                             }
-                            if (live) {
-                                // 界面上的工具名带点，出站协议用下划线，这里换回去
-                                ChatRunner.runToolOnce(
+                            val live = liveState
+                            val sid = live?.sessionId
+                            if (live != null && sid != null) {
+                                live.markToolRetried(round, seq, status = null)
+                                val started = ChatRunner.runToolOnce(
                                     context = shellContext,
-                                    round = round,
-                                    seq = seq,
                                     functionName = AiToolBridge.toFunctionName(toolName),
                                     argsJson = argsJson,
+                                    onResult = { ok, raw ->
+                                        live.markToolRetried(round, seq, retryStatusOf(ok, raw), raw)
+                                    },
                                 )
-                                // runToolOnce 自己再查一次是防御性的：上面的 isBusy 与这里
-                                // 之间有竞态。真被拒了就把卡片状态收回，别留个转圈的。
-                                null
+                                if (started) {
+                                    null
+                                } else {
+                                    // 竞态：isBusy 在这两行之间变真。把卡片收回去，
+                                    // 别留一个永远转圈的。
+                                    live.markToolRetried(
+                                        round, seq,
+                                        com.mcp.toolbox.feature.home.agent.ToolStatus.Timeout, "",
+                                    )
+                                    "正在生成中，稍后再重试这个工具"
+                                }
                             } else {
-                                "只有当前这一轮能重试工具，历史记录里的工具已不再保留"
+                                // 历史轮次：内存时间线里没有这一段，改写该消息自己的
+                                // 过程快照。会话 id 理论上必然存在（消息就挂在它下面），
+                                // 真取不到就明说，不静默失败。
+                                val historySid = ChatStore.currentId.value
+                                if (historySid == null) {
+                                    "找不到所属会话，无法重试"
+                                } else {
+                                    retryToolInHistory(
+                                        context = shellContext,
+                                        sessionId = historySid,
+                                        messageId = messageId,
+                                        round = round,
+                                        seq = seq,
+                                        toolName = toolName,
+                                        argsJson = argsJson,
+                                    )
+                                    null
+                                }
                             }
                         }
                     },
@@ -1337,5 +1362,72 @@ private fun MiuixNavRail(currentRoute: String, onNavigate: (String) -> Unit) {
                 )
             }
         }
+    }
+}
+
+
+/**
+ * 由一次工具执行结果决定卡片终态。
+ *
+ * `AiToolBridge.invoke` 把执行异常折叠成以「错误：」开头的普通字符串返回，
+ * 因此这里按该前缀区分「工具真的报错」与「没有产出（超时）」。不区分的话
+ * 超时会显示成「执行失败」，与 Spec 第 7.1 节的文案不符。
+ */
+private fun retryStatusOf(
+    success: Boolean,
+    raw: String,
+): com.mcp.toolbox.feature.home.agent.ToolStatus = when {
+    success -> com.mcp.toolbox.feature.home.agent.ToolStatus.Success
+    raw.startsWith("错误：") -> com.mcp.toolbox.feature.home.agent.ToolStatus.Failed
+    else -> com.mcp.toolbox.feature.home.agent.ToolStatus.Timeout
+}
+
+/**
+ * 在**历史轮次**上重试一个工具。
+ *
+ * 那一段只存在于该消息的 `segmentsJson` 里（工具调用不进消息历史，因此不在内存
+ * 时间线中；好在 `args` 一直有落盘，所以参数拿得到）。先标记为 Running 并落盘
+ * 让界面立刻有反馈，跑完再写回结果 —— 界面靠会话流更新自动重渲染。
+ */
+private fun retryToolInHistory(
+    context: android.content.Context,
+    sessionId: String,
+    messageId: String,
+    round: Int,
+    seq: Int,
+    toolName: String,
+    argsJson: String?,
+) {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    scope.launch {
+        val message = ChatStore.sessions.value
+            .firstOrNull { it.id == sessionId }?.messages
+            ?.firstOrNull { it.id == messageId } ?: return@launch
+
+        suspend fun write(status: com.mcp.toolbox.feature.home.agent.ToolStatus?, result: String) {
+            val updated = com.mcp.toolbox.feature.home.agent.AgentSegmentCodec.patchToolSegment(
+                json = message.segmentsJson,
+                round = round,
+                seq = seq,
+                status = status,
+                result = result,
+            ) ?: return
+            ChatStore.upsertAssistant(
+                context = context,
+                sessionId = sessionId,
+                messageId = messageId,
+                content = message.content,
+                segmentsJson = updated,
+                turnState = message.turnState,
+                time = message.time,
+            )
+        }
+
+        write(null, "")
+        val outcome = runCatching {
+            AiToolBridge.invoke(context, AiToolBridge.toFunctionName(toolName), argsJson)
+        }
+        val raw = outcome.getOrElse { "错误：${it.message ?: it::class.simpleName}" }
+        write(retryStatusOf(outcome.isSuccess, raw), raw)
     }
 }

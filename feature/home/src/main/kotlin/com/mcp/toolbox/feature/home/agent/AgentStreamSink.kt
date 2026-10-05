@@ -17,15 +17,6 @@ interface AgentStreamSink {
     fun onNarration(round: Int, text: String)
     fun onToolCall(round: Int, seq: Int, name: String, args: String?)
     fun onToolResult(round: Int, seq: Int, name: String, result: String, success: Boolean = true)
-
-    /**
-     * 用户点了工具卡上的「重试」之后，这次重跑的结果。
-     *
-     * 与 [onToolResult] 分开：那个来自模型的工具调用循环，这个来自界面上的用户动作。
-     * 它**不续写回答**——工具结果不写进消息历史，模型从没看到过，
-     * 把它叫回来「接着上次的想」只会得到上下文错位的回答。
-     */
-    fun onToolRetried(round: Int, seq: Int, success: Boolean, result: String)
     fun onToolNeedsApproval(round: Int, seq: Int, name: String, args: String?, risk: String)
     fun onDelta(text: String)
     fun onFinished()
