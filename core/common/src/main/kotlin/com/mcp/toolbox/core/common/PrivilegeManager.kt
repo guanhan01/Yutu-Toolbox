@@ -10,14 +10,17 @@ import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
 /**
- * 可用的高权限后端。
+ * 可用的 shell 执行后端。
  *
  * - ROOT：通过 `su -c` 执行，要求设备已 root 且用户在授权弹窗里同意
  * - SHIZUKU：通过 Shizuku 的 binder 执行，要求已安装 Shizuku 并授权
+ * - LOCAL：**不需要任何提权**，以应用自己的身份跑 `/system/bin/sh -c`。
+ *   权限与「Android 本机」终端窗口一致（`TermSessionStore.Env.LOCAL`），
+ *   能用的命令就是 Android 自带那套，uid 是应用自己。
  *
- * 两者都不可用时应用仍然完整可用，只是高权限工具会明确报错而不是假装成功。
+ * 三者都不可用时应用仍然完整可用，只是高权限工具会明确报错而不是假装成功。
  */
-enum class PrivilegeBackend { NONE, ROOT, SHIZUKU }
+enum class PrivilegeBackend { NONE, ROOT, SHIZUKU, LOCAL }
 
 /** 权限探测结果，供首页状态卡与设置页展示。 */
 data class PrivilegeStatus(
@@ -147,24 +150,51 @@ object PrivilegeManager {
     }
 
     /**
-     * 用高权限后端执行 shell 命令。
+     * 用可用的后端执行 shell 命令。
+     *
+     * @param allowLocal 高权限后端都不可用时，是否回退到不需要提权的 [PrivilegeBackend.LOCAL]。
+     *   默认 false —— 高权限**专用**工具必须明确失败，不能静默降级成低权限后「看起来成功」。
+     *   通用 shell 工具（`shell.exec`）传 true，让无 root 设备也有一条真正能用的终端。
      * 没有可用后端时返回带 [ShellResult.failure] 的结果而不是抛异常，调用方按失败处理即可。
      */
-    fun exec(command: String, timeoutMs: Long = 30_000L, backend: PrivilegeBackend? = null): ShellResult {
+    fun exec(
+        command: String,
+        timeoutMs: Long = 30_000L,
+        backend: PrivilegeBackend? = null,
+        allowLocal: Boolean = false,
+    ): ShellResult {
         val chosen = backend ?: when {
             probeRoot() -> PrivilegeBackend.ROOT
             shizukuAlive() && shizukuGranted() -> PrivilegeBackend.SHIZUKU
+            allowLocal -> PrivilegeBackend.LOCAL
             else -> PrivilegeBackend.NONE
         }
         return when (chosen) {
             PrivilegeBackend.ROOT -> execRoot(command, timeoutMs)
             PrivilegeBackend.SHIZUKU -> execShizuku(command, timeoutMs)
+            PrivilegeBackend.LOCAL -> execLocal(command, timeoutMs)
             PrivilegeBackend.NONE -> ShellResult(
                 code = -1, stdout = "", stderr = "", backend = PrivilegeBackend.NONE,
                 failure = "没有可用的高权限后端：未获得 root 授权，且 Shizuku 不可用",
             )
         }
     }
+
+    /**
+     * 以应用自身身份执行命令，不需要任何提权。
+     *
+     * 与「Android 本机」终端窗口（`TermSessionStore.Env.LOCAL`）同一条路：`/system/bin/sh -c`，
+     * 因此 uid 是应用自己、能用的命令是 Android 自带那套。
+     * 需要提权才看得到的内容（别的进程、`dumpsys` 敏感段）这里拿不到，属预期行为，不伪装成功。
+     */
+    private fun execLocal(command: String, timeoutMs: Long): ShellResult =
+        runCatching {
+            collect(
+                ProcessBuilder("/system/bin/sh", "-c", command).start(),
+                timeoutMs,
+                PrivilegeBackend.LOCAL,
+            )
+        }.getOrElse { ShellResult(-1, "", "", false, PrivilegeBackend.LOCAL, "LOCAL 执行失败：${it.message}") }
 
     private fun execRoot(command: String, timeoutMs: Long): ShellResult =
         runCatching { collect(ProcessBuilder("su", "-c", command).start(), timeoutMs, PrivilegeBackend.ROOT) }

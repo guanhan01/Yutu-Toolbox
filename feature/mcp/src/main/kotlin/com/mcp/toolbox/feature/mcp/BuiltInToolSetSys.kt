@@ -4,8 +4,6 @@ import android.app.ActivityManager
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
-import android.os.Environment
-import android.os.StatFs
 import com.mcp.toolbox.core.common.PrivilegeManager
 import com.mcp.toolbox.core.common.ToolboxAccessibilityService
 import org.json.JSONArray
@@ -14,7 +12,11 @@ import java.io.File
 
 /**
  * 真正能「动手机」的一组工具：界面层级、点击、滑动、输入、按键、截图，
- * 以及电池 / 内存 / 存储 / 进程 / 通知 / 传感器 / 电源 / Wi-Fi 等系统状态。
+ * 以及内存 / 传感器读数与结束进程。
+ *
+ * 纯 `dumpsys` / `getprop` / `ps` / `logcat` 之类的系统状态读取工具已移除——
+ * 那些用 [BuiltInToolSetExtra.shellExec] 一条命令即可等价完成；
+ * 而 [systemMemory] / [systemSensors] 走 Java API、不需要任何权限，故保留。
  *
  * 界面类操作有两条通道，**优先走无障碍（免 root）**：
  *  1. 无障碍服务：`dispatchGesture` / `ACTION_SET_TEXT` / `takeScreenshot`，
@@ -32,14 +34,8 @@ object BuiltInToolSetSys {
         uiText(context),
         uiKey(context),
         uiScreenshot(context),
-        systemBattery(context),
         systemMemory(context),
-        systemStorage(context),
-        systemTop(context),
-        systemNotifications(context),
         systemSensors(context),
-        systemPower(context),
-        systemWifi(context),
         systemKill(context),
     )
 
@@ -448,37 +444,6 @@ object BuiltInToolSetSys {
         },
     )
 
-    private fun systemBattery(context: Context) = ToolDef(
-        name = "system.battery",
-        title = "电池与充电状态",
-        description = "读取 dumpsys battery 的真实数据：电量、温度、电压、充电方式、健康状态、是否省电模式。",
-        schema = Schema.obj(emptyList()),
-        handler = { ctx, _ ->
-            val result = exec("dumpsys battery", 20000L)
-            val map = JSONObject()
-            result.first.lineSequence().forEach { line ->
-                val m = Regex("^\\s*([a-zA-Z ]+):\\s*(.+)$").find(line) ?: return@forEach
-                map.put(m.groupValues[1].trim(), m.groupValues[2].trim())
-            }
-            val level = map.optString("level").toIntOrNull()
-            val temperature = map.optString("temperature").toDoubleOrNull()?.div(10)
-            val structured = JSONObject().apply {
-                put("level", level ?: JSONObject.NULL)
-                put("status", map.optString("status", ""))
-                put("plugged", map.optString("plugged", ""))
-                put("health", map.optString("health", ""))
-                put("temperatureC", temperature ?: JSONObject.NULL)
-                put("voltageMv", map.optString("voltage").toIntOrNull() ?: JSONObject.NULL)
-                put("powerSave", map.optString("Power save mode", ""))
-                put("raw", map)
-            }
-            if (level == null && map.length() == 0) {
-                throw IllegalStateException("读取电池信息失败：${result.first.take(200)}")
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
     private fun systemMemory(context: Context) = ToolDef(
         name = "system.memory",
         title = "内存占用",
@@ -502,103 +467,6 @@ object BuiltInToolSetSys {
                 put("appHeapUsedBytes", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
                 put("appHeapMaxBytes", Runtime.getRuntime().maxMemory())
                 put("cachedProcesses", mgr.runningAppProcesses?.size ?: 0)
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun systemStorage(context: Context) = ToolDef(
-        name = "system.storage",
-        title = "存储占用",
-        description = "返回数据分区与外置存储的真实容量（StatFs）以及关键挂载点的 df 输出，用于判断空间是否吃紧。",
-        schema = Schema.obj(emptyList()),
-        handler = { ctx, _ ->
-            val data = StatFs(Environment.getDataDirectory().path)
-            val ext = runCatching { StatFs(Environment.getExternalStorageDirectory().path) }.getOrNull()
-            val df = exec("df -h 2>/dev/null | head -20", 15000L)
-            val structured = JSONObject().apply {
-                put("dataTotalBytes", data.totalBytes)
-                put("dataFreeBytes", data.availableBytes)
-                put("dataTotalHuman", ToolSupport.human(data.totalBytes))
-                put("dataFreeHuman", ToolSupport.human(data.availableBytes))
-                put("externalTotalHuman", ext?.let { ToolSupport.human(it.totalBytes) } ?: JSONObject.NULL)
-                put("externalFreeHuman", ext?.let { ToolSupport.human(it.availableBytes) } ?: JSONObject.NULL)
-                put("externalState", Environment.getExternalStorageState())
-                put("df", df.first.lineSequence().take(20).joinToString("\n"))
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun systemTop(context: Context) = ToolDef(
-        name = "system.top",
-        title = "内存占用最高的进程",
-        description = "按 RSS 排序列出占用最高的进程（真实 ps 输出），可用来找吃内存的应用。",
-        schema = Schema.obj(
-            listOf("limit" to Schema.integer("最多返回数量", default = 15, min = 1, max = 60)),
-        ),
-        handler = { ctx, args ->
-            val limit = args.optInt("limit", 15).coerceIn(1, 60)
-            val result = exec("ps -A -o PID,RSS,NAME | sort -k2 -rn | head -60", 20000L)
-            val lines = result.first.lineSequence().filter { it.isNotBlank() }.toList()
-            val rows = JSONArray()
-            lines.drop(1).take(limit).forEach { line ->
-                val parts = line.trim().split(Regex("\\s+"))
-                if (parts.size >= 3) {
-                    val rssKb = parts[1].toLongOrNull() ?: return@forEach
-                    rows.put(
-                        JSONObject().apply {
-                            put("pid", parts[0])
-                            put("rssBytes", rssKb * 1024)
-                            put("rssHuman", ToolSupport.human(rssKb * 1024))
-                            put("name", parts.drop(2).joinToString(" "))
-                        },
-                    )
-                }
-            }
-            val structured = JSONObject().apply {
-                put("count", rows.length())
-                put("processes", rows)
-                put("backend", result.third)
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun systemNotifications(context: Context) = ToolDef(
-        name = "system.notifications",
-        title = "当前通知",
-        description = "读取通知栏里正在显示的通知（dumpsys notification），返回包名、标题与正文片段，可替代手工看通知栏。",
-        schema = Schema.obj(
-            listOf("limit" to Schema.integer("最多返回条数", default = 20, min = 1, max = 100)),
-        ),
-        handler = { ctx, args ->
-            val limit = args.optInt("limit", 20).coerceIn(1, 100)
-            val result = exec("dumpsys notification --noredact 2>/dev/null", 25000L)
-            val text = result.first
-            if (text.isBlank()) throw IllegalStateException("读取通知失败（高权限后端不可用）")
-            val blocks = text.split(Regex("NotificationRecord\\("))
-            val rows = JSONArray()
-            blocks.drop(1).take(limit).forEach { block ->
-                val pkg = Regex("pkg=([a-zA-Z0-9_.]+)").find(block)?.groupValues?.get(1)
-                val channel = Regex("channel=([a-zA-Z0-9_.-]+)").find(block)?.groupValues?.get(1)
-                val title = Regex("android\\.title=(.+)").find(block)?.groupValues?.get(1)?.trim()
-                val body = Regex("android\\.text=(.+)").find(block)?.groupValues?.get(1)?.trim()
-                if (pkg != null) {
-                    rows.put(
-                        JSONObject().apply {
-                            put("package", pkg)
-                            put("channel", channel ?: JSONObject.NULL)
-                            put("title", title ?: JSONObject.NULL)
-                            put("text", body?.take(200) ?: JSONObject.NULL)
-                        },
-                    )
-                }
-            }
-            val structured = JSONObject().apply {
-                put("count", rows.length())
-                put("notifications", rows)
-                put("backend", result.third)
             }
             ToolResult(structured, structured.toString(2))
         },
@@ -628,46 +496,6 @@ object BuiltInToolSetSys {
             val structured = JSONObject().apply {
                 put("count", rows.length())
                 put("sensors", rows)
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun systemPower(context: Context) = ToolDef(
-        name = "system.power",
-        title = "电源与亮屏状态",
-        description = "读取亮屏 / 熄屏、唤醒锁与最近唤醒原因，用于判断设备是否处于可用状态。",
-        schema = Schema.obj(emptyList()),
-        handler = { ctx, _ ->
-            val result = exec("dumpsys power 2>/dev/null | grep -m12 -E 'mWakefulness|mScreenOn|Display Power|mHoldingWakeLockSuspendBlocker'", 20000L)
-            val wakefulness = Regex("mWakefulness=([A-Za-z]+)").find(result.first)?.groupValues?.get(1)
-            val structured = JSONObject().apply {
-                put("wakefulness", wakefulness ?: JSONObject.NULL)
-                put("screenOn", wakefulness?.equals("Awake", true) ?: false)
-                put("raw", result.first.lineSequence().filter { it.isNotBlank() }.take(12).joinToString("\n"))
-                put("backend", result.third)
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun systemWifi(context: Context) = ToolDef(
-        name = "system.wifi",
-        title = "Wi-Fi 连接详情",
-        description = "读取当前 Wi-Fi 的 SSID、BSSID、频段、链路速率、信号强度与 IP（cmd wifi status + dumpsys wifi 解析）。",
-        schema = Schema.obj(emptyList()),
-        handler = { ctx, _ ->
-            val status = exec("cmd wifi status 2>/dev/null", 20000L)
-            val text = status.first
-            val structured = JSONObject().apply {
-                put("raw", text.lineSequence().filter { it.isNotBlank() }.take(15).joinToString("\n"))
-                put("ssid", Regex("SSID:\\s*\"?([^\"\\n,]+)\"?").find(text)?.groupValues?.get(1)?.trim() ?: JSONObject.NULL)
-                put("bssid", Regex("BSSID:\\s*([0-9a-fA-F:]{17})").find(text)?.groupValues?.get(1) ?: JSONObject.NULL)
-                put("ip", Regex("IP:\\s*([0-9.]+)").find(text)?.groupValues?.get(1) ?: JSONObject.NULL)
-                put("rssi", Regex("RSSI:\\s*(-?\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: JSONObject.NULL)
-                put("linkSpeed", Regex("Link speed:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: JSONObject.NULL)
-                put("frequency", Regex("Frequency:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: JSONObject.NULL)
-                put("backend", status.third)
             }
             ToolResult(structured, structured.toString(2))
         },

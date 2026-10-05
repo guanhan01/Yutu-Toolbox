@@ -3,22 +3,21 @@ package com.mcp.toolbox.feature.mcp
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.os.Build
 import android.provider.Settings
 import com.mcp.toolbox.core.common.PrivilegeManager
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.net.NetworkInterface
 import java.util.Collections
 
 /**
- * 内置 Server 的第二批工具：写操作、系统信息与高权限执行。
+ * 内置 Server 的第二批工具：写操作与命令执行。
  *
- * 与 [BuiltInToolSet] 的分工是这里有副作用。写工具一律 `readOnly = false`，
- * 依赖 root/Shizuku 的再额外标 `requiresPrivilege = true`；
+ * 系统信息类工具（getprop / ps / logcat / dumpsys package 等）已移除，
+ * 由本文件的 [shellExec] 以一条命令等价覆盖；
+ * [netInfo] 走 NetworkInterface、不需要任何权限，故保留。
+ *
+ * 与 [BuiltInToolSet] 的分工是这里有副作用。写工具一律 `readOnly = false`；
  * 缺权限时返回明确的错误结果，不做假成功。
  */
 object BuiltInToolSetExtra {
@@ -27,29 +26,16 @@ object BuiltInToolSetExtra {
         fileDelete(context),
         fileMkdir(context),
         fileSearch(context),
-        systemProp(context),
-        processList(context),
-        logcatRead(context),
         settingsGet(context),
         settingsPut(context),
         netInfo(context),
         clipboardGet(context),
         clipboardSet(context),
-        packageInfo(context),
-        packageForceStop(context),
         shellExec(context),
     )
 
     /** 「允许写入」总开关，与 file.write 用同一个。 */
     private fun requireWrite() = WriteGuard.requireWrite()
-
-    /** 高权限工具的前置检查，失败信息里带上具体缺什么。 */
-    private fun requirePrivilege(context: Context) {
-        val status = PrivilegeManager.status(context)
-        if (!status.usable) {
-            error("需要高权限后端（${status.detail}）：请在设置页完成 root 授权，或安装并启动 Shizuku 后重试")
-        }
-    }
 
     private fun fileDelete(context: Context) = ToolDef(
         name = "file.delete",
@@ -148,103 +134,8 @@ object BuiltInToolSetExtra {
         },
     )
 
-    private fun systemProp(context: Context) = ToolDef(
-        name = "system.prop",
-        title = "系统属性",
-        description = "读取 getprop 属性；传 key 返回单条，不传返回全部（键值对）。",
-        schema = Schema.obj(listOf("key" to Schema.string("属性名，例如 ro.build.version.sdk"))),
-        handler = { _, args ->
-            val key = args.optString("key")
-            val result = PrivilegeManager.exec(
-                if (key.isBlank()) "getprop" else "getprop ${shellQuote(key)}",
-                timeoutMs = 15_000L,
-            )
-            if (key.isBlank()) {
-                val map = JSONObject()
-                result.stdout.lineSequence().forEach { line ->
-                    val m = Regex("^\\\\[(.+?)\\\\]: \\\\[(.*)\\\\]$").find(line.trim()) ?: return@forEach
-                    map.put(m.groupValues[1], m.groupValues[2])
-                }
-                if (map.length() == 0) throw IllegalStateException(result.output.ifBlank { "getprop 无输出" })
-                ToolResult(JSONObject().put("count", map.length()).put("props", map), map.toString(2))
-            } else {
-                val value = result.stdout.trim()
-                val structured = JSONObject().apply {
-                    put("key", key)
-                    put("value", value)
-                    put("found", value.isNotEmpty())
-                }
-                ToolResult(structured, structured.toString(2))
-            }
-        },
-    )
-
     /** 单引号包裹，避免参数里的空格或特殊字符被 shell 拆开。 */
     private fun shellQuote(raw: String): String = "'" + raw.replace("'", "'\\\\''") + "'"
-
-    /**
-     * 先走高权限后端，失败再退回普通子进程。
-     * 部分信息（进程名、自己应用的日志）不要 root 也能读到，没必要因为没授权就整个不可用。
-     */
-    private fun execPreferPrivilege(command: String, timeoutMs: Long): Pair<String, String> {
-        val privileged = PrivilegeManager.exec(command, timeoutMs)
-        if (privileged.ok && privileged.stdout.isNotBlank()) return privileged.stdout to privileged.backend.name
-        val plain = runCatching {
-            val process = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
-            val text = process.inputStream.bufferedReader().use { it.readText() }
-            process.waitFor()
-            text
-        }.getOrDefault("")
-        return plain to "SHELL"
-    }
-
-    private fun processList(context: Context) = ToolDef(
-        name = "process.list",
-        title = "进程列表",
-        description = "列出运行中的进程。有高权限时能看到完整列表，否则退回普通子进程（信息较少）。",
-        schema = Schema.obj(listOf("filter" to Schema.string("按进程名过滤的关键词"))),
-        handler = { _, args ->
-            val filter = args.optString("filter")
-            val (text, source) = execPreferPrivilege(
-                if (filter.isBlank()) "ps -A" else "ps -A | grep -i ${shellQuote(filter)}",
-                20_000L,
-            )
-            val lines = text.lineSequence().filter { it.isNotBlank() }.toList()
-            val structured = JSONObject().apply {
-                put("source", source)
-                put("lineCount", lines.size)
-                put("raw", lines.take(400).joinToString("\n"))
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun logcatRead(context: Context) = ToolDef(
-        name = "logcat.read",
-        title = "读取日志",
-        description = "读取最近日志（logcat -d）；有高权限时可读全部，否则仅本应用相关。",
-        schema = Schema.obj(
-            listOf(
-                "lines" to Schema.integer("最多返回行数", default = 200),
-                "filter" to Schema.string("过滤关键词（在已读日志中做文本匹配）"),
-            ),
-        ),
-        handler = { _, args ->
-            val lines = args.optInt("lines", 200).coerceIn(10, 2000)
-            val (text, source) = execPreferPrivilege("logcat -d -t $lines", 25_000L)
-            val filter = args.optString("filter")
-            val kept = text.lineSequence().filter { it.isNotBlank() }
-                .let { seq -> if (filter.isBlank()) seq else seq.filter { it.contains(filter, ignoreCase = true) } }
-                .toList()
-            val structured = JSONObject().apply {
-                put("source", source)
-                put("lineCount", kept.size)
-                put("filter", filter)
-                put("raw", kept.takeLast(2000).joinToString("\n"))
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
 
     private fun settingsGet(context: Context) = ToolDef(
         name = "settings.get",
@@ -402,69 +293,13 @@ object BuiltInToolSetExtra {
         },
     )
 
-    private fun packageInfo(context: Context) = ToolDef(
-        name = "package.info",
-        title = "应用详情",
-        description = "返回包名的版本、安装时间、uid、targetSdk、标志位、APK 路径与申请权限。",
-        schema = Schema.obj(
-            listOf("package" to Schema.string("目标包名")),
-            required = listOf("package"),
-        ),
-        handler = { ctx, args ->
-            val pkg = args.getString("package")
-            val info = ctx.packageManager.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS)
-            val app = info.applicationInfo ?: error("无法读取应用信息：$pkg")
-            val structured = JSONObject().apply {
-                put("package", pkg)
-                put("versionName", info.versionName ?: "")
-                put("versionCode", if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong())
-                put("firstInstallTime", info.firstInstallTime)
-                put("lastUpdateTime", info.lastUpdateTime)
-                put("uid", app.uid)
-                put("targetSdk", app.targetSdkVersion)
-                put("minSdk", if (Build.VERSION.SDK_INT >= 24) app.minSdkVersion else 0)
-                put("debuggable", (app.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
-                put("system", (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0)
-                put("enabled", app.enabled)
-                put("apkPath", app.sourceDir)
-                put("dataDir", app.dataDir)
-                put("permissions", JSONArray(info.requestedPermissions?.toList() ?: emptyList<String>()))
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
-    private fun packageForceStop(context: Context) = ToolDef(
-        name = "package.forceStop",
-        title = "强制停止应用",
-        description = "通过 am force-stop 停止目标应用。需要高权限后端与「允许写入」。",
-        schema = Schema.obj(
-            listOf("package" to Schema.string("目标包名")),
-            required = listOf("package"),
-        ),
-        readOnly = false,
-        dangerous = true,
-        requiresPrivilege = true,
-        handler = { ctx, args ->
-            requireWrite()
-            requirePrivilege(ctx)
-            val pkg = args.getString("package")
-            val result = PrivilegeManager.exec("am force-stop ${shellQuote(pkg)}", 20_000L)
-            if (!result.ok) throw IllegalStateException("force-stop 失败：${result.output.ifBlank { "无输出" }}")
-            val structured = JSONObject().apply {
-                put("package", pkg)
-                put("backend", result.backend.name)
-                put("stopped", true)
-            }
-            ToolResult(structured, structured.toString(2))
-        },
-    )
-
     private fun shellExec(context: Context) = ToolDef(
         name = "shell.exec",
         title = "执行 shell 命令",
-        description = "以高权限后端执行任意 shell 命令，返回 stdout/stderr 与退出码。" +
-            "需要 root 或 Shizuku，并且需要开启「允许写入」与相应的高权限开关。",
+        description = "执行任意 shell 命令，返回 stdout/stderr 与退出码。" +
+            "有 root 或 Shizuku 时用高权限执行（能看别的进程、改系统设置）；" +
+            "都没有时退回**应用自身身份**的 Android shell（与「Android 本机」终端窗口同一个环境，" +
+            "能跑 ls/ps/dumpsys/pm 那套，但看不到需要提权的内容）。需要开启「允许写入」。",
         schema = Schema.obj(
             listOf(
                 "command" to Schema.string("要执行的命令"),
@@ -474,13 +309,12 @@ object BuiltInToolSetExtra {
         ),
         readOnly = false,
         dangerous = true,
-        requiresPrivilege = true,
         handler = { ctx, args ->
             requireWrite()
-            requirePrivilege(ctx)
             val command = args.getString("command")
             val timeout = args.optInt("timeoutMs", 30_000).coerceIn(1_000, 120_000).toLong()
-            val result = PrivilegeManager.exec(command, timeout)
+            // allowLocal：高权限后端缺席时不当失败，改以应用身份执行，保证无 root 设备也有一条真终端。
+            val result = PrivilegeManager.exec(command, timeout, allowLocal = true)
             val structured = JSONObject().apply {
                 put("command", command)
                 put("backend", result.backend.name)
