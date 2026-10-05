@@ -45,6 +45,20 @@ data class ChatMessage(
     /** AI 消息：这一轮的过程时间线（JSON 数组）。由 `AgentSegmentCodec` 编解码。 */
     val segmentsJson: String? = null,
 
+    /**
+     * 这一轮里**已执行完**的工具轨迹，只用来拼发给模型的请求，不上屏。
+     *
+     * 存在的理由：`content` 只保留最终正文，工具调用与结果从来没进过消息历史，
+     * 于是「中断后重试续写」时模型不知道自己拿到过什么，续出来的内容会对不上。
+     * 这里按顺序留一份「调了什么、参数是什么、返回了什么」。
+     *
+     * 只记已执行完的（Running / 等待授权中的不算）—— 任务被中断那一刻，
+     * 半途而废的调用对模型没有意义。
+     *
+     * 不放进 `segmentsJson`：那是展示用的过程时间线，与「模型该看到什么」是两件事。
+     */
+    val toolTrace: List<ToolTrace> = emptyList(),
+
     /** AI 消息：这一轮的终态。用于渲染断点卡片、区分正常完成与中断。 */
     val turnState: TurnState = TurnState.Done,
 
@@ -124,9 +138,35 @@ data class AttachmentRef(
  * 只影响发给模型的请求，不动界面渲染与落盘的数据——
  * 这样「界面上看到一条干净的用户消息」与「模型拿到完整附件上下文」可以同时成立。
  */
-fun List<ChatMessage>.forModel(): List<ChatMessage> = map { m ->
-    val extra = m.modelContext?.takeIf { it.isNotBlank() }
-    if (extra == null) m else m.copy(content = m.content + "\n\n" + extra)
+fun List<ChatMessage>.forModel(): List<ChatMessage> = map { m -> m.forModel() }
+
+/** 单条消息的模型视图：主体 + 附件上下文 + 工具轨迹（后两者都不上屏）。 */
+fun ChatMessage.forModel(): ChatMessage {
+    val parts = listOfNotNull(
+        content.takeIf { it.isNotBlank() },
+        modelContext?.takeIf { it.isNotBlank() },
+        toolTracePrompt(toolTrace),
+    )
+    return copy(content = parts.joinToString("\n\n"))
+}
+
+/**
+ * 把工具轨迹折成一段给模型看的文字。
+ *
+ * 用文字而不是原生 `tool_calls` / `tool_use` 结构：本工程要同时喂四家协议
+ * （OpenAI 兼容 / Anthropic / Gemini / Responses），原生结构各家字段不同，
+ * 而这里要的只是「让模型知道自己拿到过什么」这一件事，文字描述足够且零适配成本。
+ */
+internal fun toolTracePrompt(trace: List<ToolTrace>): String? {
+    if (trace.isEmpty()) return null
+    return buildString {
+        append("[本轮已执行过的工具调用]")
+        trace.forEach { t ->
+            append("\n- ").append(t.name)
+            t.argsJson?.takeIf { it.isNotBlank() }?.let { append("  参数：").append(it) }
+            append("  结果：").append(if (t.success) t.result else "执行失败——${t.result}")
+        }
+    }
 }
 
 /** 一次对话（会话），包含其全部消息。 */
@@ -171,4 +211,17 @@ data class ModelOption(
     val isCurrent: Boolean,
     /** 非空表示这一项来自自定义供应商，选中时要按 id 切换而不是切内置枚举。 */
     val customId: String? = null,
+)
+
+/**
+ * 一条已执行完的工具调用（见 [ChatMessage.toolTrace]）。
+ *
+ * [success] 为 false 时 [result] 是失败原因；两者都原样交给模型，
+ * 让它自己决定换参数、换工具还是直接说明做不了。
+ */
+data class ToolTrace(
+    val name: String,
+    val argsJson: String?,
+    val result: String,
+    val success: Boolean,
 )

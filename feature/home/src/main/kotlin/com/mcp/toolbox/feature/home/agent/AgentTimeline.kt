@@ -82,9 +82,18 @@ class AgentTimeline {
         }
     }
 
-    /** 已有内容里的最大轮次；续写时用它当基址，避免新一轮从 1 开始和旧卡撞号。 */
-    fun maxRound(): Int =
-        items.filterIsInstance<ThinkingSegment>().maxOfOrNull { it.round } ?: 0
+    /**
+     * 已有内容里的最大轮次；续写时用它当基址，避免新一轮从 0 开始和旧卡撞号。
+     *
+     * **必须同时看工具段**：有轮次里只有工具调用、没有思考（模型直接调工具，
+     * 一句思考都没吐），只看 ThinkingSegment 会漏，基址偏低就仍会撞号。
+     */
+    fun maxRound(): Int {
+        val thinking = items.filterIsInstance<ThinkingSegment>().maxOfOrNull { it.round } ?: 0
+        val tools = items.filterIsInstance<ToolCallSegment>().maxOfOrNull { it.round } ?: 0
+        val narration = items.filterIsInstance<NarrationSegment>().maxOfOrNull { it.round } ?: 0
+        return maxOf(thinking, tools, narration)
+    }
 
     // ------------------------------------------------------------------
     // 归约

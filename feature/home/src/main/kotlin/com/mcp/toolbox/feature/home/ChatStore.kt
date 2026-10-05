@@ -329,7 +329,23 @@ object ChatStore {
                         .put("attachments", m.attachments.takeIf { it.isNotEmpty() }
                             ?.let { AttachmentRef.encode(it) } ?: JSONObject.NULL)
                         .put("modelContext", m.modelContext ?: JSONObject.NULL)
-                        .put("segments", m.segmentsJson ?: JSONObject.NULL),
+                        .put("segments", m.segmentsJson ?: JSONObject.NULL)
+                        .put(
+                            "toolTrace",
+                            m.toolTrace.takeIf { it.isNotEmpty() }?.let { list ->
+                                JSONArray().also { arr ->
+                                    list.forEach { t ->
+                                        arr.put(
+                                            JSONObject()
+                                                .put("n", t.name)
+                                                .put("a", t.argsJson ?: JSONObject.NULL)
+                                                .put("r", t.result)
+                                                .put("ok", t.success),
+                                        )
+                                    }
+                                }
+                            } ?: JSONObject.NULL,
+                        ),
                 )
             }
             arr.put(
@@ -372,6 +388,18 @@ object ChatStore {
                     // 全量读回来会让冷启动变慢，而用户真正会看的是结尾。
                     segmentsJson = m.optString("segments").takeIf { it.isNotBlank() && it != "null" }
                         ?.let(::trimSegments),
+                    toolTrace = m.optJSONArray("toolTrace")?.let { a ->
+                        (0 until a.length()).mapNotNull { k ->
+                            a.optJSONObject(k)?.let { o ->
+                                ToolTrace(
+                                    name = o.optString("n"),
+                                    argsJson = o.optString("a").takeIf { it.isNotBlank() && it != "null" },
+                                    result = o.optString("r"),
+                                    success = o.optBoolean("ok", true),
+                                )
+                            }
+                        }
+                    }.orEmpty(),
                     // 旧数据没有这个字段：默认 Done，避免把历史消息全判成「未完成」
                     turnState = runCatching {
                         TurnState.valueOf(m.optString("turnState"))

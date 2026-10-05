@@ -84,11 +84,27 @@ object ChatRunner {
         assistantMessageId: String,
         history: List<ChatMessage>,
         onFallbackReply: String,
+        /**
+         * 续写：轮次基址。null = 全新一轮。
+         *
+         * 工具重试后会带着它再跑一次，让新一轮的轮次编号接着已有内容往后排。
+         * 否则新一轮的 `(0,0)` 会命中上一轮留下的工具卡，只更新旧卡、不新建。
+         */
+        continueFrom: Int? = null,
     ) {
         if (isBusy()) return
         _running.value = Running(sessionId = sessionId, messageId = assistantMessageId)
+        // 轮次编号要接在已有内容之后，否则新一轮的 (round, seq) 会命中上一轮留下的
+        // 工具卡（只更新旧卡、不新建——「第二个问题没有工具界面」的同一成因）。
+        //
+        // 两个编号的含义不同，别混：
+        // · roundOffset 给模型循环用，那边是 0 起算（全新一轮的首轮是 0）
+        // · startedRound 给回答区用，那边 1 起算（全新一轮的首轮是 1）
+        // 续写时两者必须指向**同一个轮次**，否则 currentRound 与首个思考段会对不上。
+        val roundOffset = continueFrom?.let { it + 1 } ?: 0
+        val startedRound = if (continueFrom == null) 1 else roundOffset
         // 回答区先把乐观占位卡摆上屏（Spec 第 5.2 节：避免发送后 200ms 毫无反应）
-        AgentStreamBus.emit { it.onStarted() }
+        AgentStreamBus.emit { it.onStarted(startedRound) }
         // 让 memory.write / memory.delete 知道自己属于哪个会话。
         AiToolBridge.sessionId = sessionId
         val myGeneration = ++generation
@@ -100,6 +116,7 @@ object ChatRunner {
                     history = history,
                     systemPrompt = buildSystemPrompt(context, config),
                     enableTools = true,
+                    roundOffset = roundOffset,
                     // 旧回答 UI 的思考 / 工具 / 旁白时间线已移除；这些回调暂时只做
                     // 用量统计与正文累积，等重构方案定了再决定新的呈现方式。
                     onDelta = { delta ->

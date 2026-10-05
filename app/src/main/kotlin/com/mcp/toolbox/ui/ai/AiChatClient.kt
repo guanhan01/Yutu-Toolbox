@@ -100,6 +100,15 @@ object AiChatClient {
         history: List<ChatMessage>,
         systemPrompt: String? = config.systemPrompt.takeIf { it.isNotBlank() },
         enableTools: Boolean = true,
+        /**
+         * 轮次编号的起点。
+         *
+         * 工具卡按 `(round, seq)` 在时间线里定位（`AgentChatState` 那条消息已有的段
+         * 也在这个索引里）。**续写**时若仍从 0 开始，新一轮的 `(0,0)` 会命中上一轮
+         * 留下的那张卡 —— 只更新旧卡、不新建，正是「第二个问题没有工具界面」的成因。
+         * 因此续写要传入 `AgentTimeline.maxRound()`，让编号接着已有的往后排。
+         */
+        roundOffset: Int = 0,
         onToolCall: (round: Int, seq: Int, name: String, arguments: String) -> Unit =
             { _, _, _, _ -> },
         onToolResult: (round: Int, seq: Int, name: String, result: String) -> Unit =
@@ -141,16 +150,19 @@ object AiChatClient {
             AiProtocol.ANTHROPIC -> return@withContext anthropicStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
+                roundOffset,
             )
 
             AiProtocol.GEMINI -> return@withContext geminiStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
+                roundOffset,
             )
 
             AiProtocol.RESPONSES -> return@withContext responsesStream(
                 context, config, history, systemPrompt, enableTools,
                 onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
+                roundOffset,
             )
 
             else -> Unit // OpenAI 兼容协议继续走下面的实现
@@ -163,7 +175,8 @@ object AiChatClient {
             var lastCompletion = 0
             // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
             var toolChars = 0
-            repeat(MAX_TOOL_ROUNDS) { round ->
+            repeat(MAX_TOOL_ROUNDS) { loopRound ->
+                val round = loopRound + roundOffset
                 val payload = buildPayload(
                     config = config,
                     messages = messages,
@@ -304,6 +317,7 @@ object AiChatClient {
         onUsage: (Int, Int) -> Unit,
         onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
+        roundOffset: Int = 0,
     ): Result<String> = runCatching {
         validate(config)
         // input 摊成可变数组，便于逐轮回填。
@@ -323,7 +337,8 @@ object AiChatClient {
 
         // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
         var toolChars = 0
-        repeat(MAX_TOOL_ROUNDS) { round ->
+        repeat(MAX_TOOL_ROUNDS) { loopRound ->
+            val round = loopRound + roundOffset
             val payload = JSONObject()
                 .put("model", config.model)
                 .put("input", working)
@@ -461,6 +476,7 @@ object AiChatClient {
         onUsage: (Int, Int) -> Unit,
         onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
+        roundOffset: Int = 0,
     ): Result<String> = runCatching {
         // 把历史摊成可变列表，便于逐轮回填
         val working = JSONArray()
@@ -476,7 +492,8 @@ object AiChatClient {
 
         // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
         var toolChars = 0
-        repeat(MAX_TOOL_ROUNDS) { round ->
+        repeat(MAX_TOOL_ROUNDS) { loopRound ->
+            val round = loopRound + roundOffset
             val payload = JSONObject()
                 .put("model", config.model)
                 .put("max_tokens", 4096)
@@ -598,6 +615,7 @@ object AiChatClient {
         onUsage: (Int, Int) -> Unit,
         onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
+        roundOffset: Int = 0,
     ): Result<String> = runCatching {
         val working = JSONArray()
         val initial = JSONObject(
@@ -609,7 +627,8 @@ object AiChatClient {
 
         // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
         var toolChars = 0
-        repeat(MAX_TOOL_ROUNDS) { round ->
+        repeat(MAX_TOOL_ROUNDS) { loopRound ->
+            val round = loopRound + roundOffset
             val payload = JSONObject()
                 .put("contents", working)
                 .put(

@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
 import com.mcp.toolbox.core.design.component.MdBlock
 import com.mcp.toolbox.core.design.component.parseMarkdown
+import com.mcp.toolbox.feature.home.ToolTrace
 import com.mcp.toolbox.feature.home.TurnState
 import com.mcp.toolbox.feature.home.agent.stream.AutoScrollTracker
 import com.mcp.toolbox.feature.home.agent.stream.MarkdownChunker
@@ -47,6 +48,15 @@ class AgentChatState internal constructor() : AgentStreamSink {
     var segments: List<Segment> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * 本轮**已执行完**的工具轨迹，随本轮消息落盘，续写时喂给模型。
+     *
+     * 为什么必须留着：`content` 只装最终正文，工具结果从来没进过消息历史。
+     * 中断后续写时模型看不到自己拿到过什么，续出来的内容会对不上。
+     */
+    var toolResults: List<ToolTrace> by mutableStateOf(emptyList())
+        private set
+
     private val timeline = AgentTimeline()
     private val buffer = TokenBuffer()
     private val chunker = MarkdownChunker()
@@ -63,6 +73,9 @@ class AgentChatState internal constructor() : AgentStreamSink {
 
     /** 本轮是否已被打开过（决定要不要落盘占位）。 */
     private var started = false
+
+    /** 本轮是「接着已有内容续写」而不是全新一轮（见 [beginContinue]）。 */
+    private var continuing = false
 
     /** 本轮过程要写进哪条会话的哪条消息。由界面层在发送前绑定。 */
     var sessionId: String? by mutableStateOf(null)
@@ -135,7 +148,13 @@ class AgentChatState internal constructor() : AgentStreamSink {
      */
     override fun onStarted(round: Int) {
         started = true
-        resetTurn()
+        if (continuing) {
+            // 续写：刚恢复的正文与工具轨迹必须留着，只把本轮状态归位
+            continuing = false
+            banner = null
+        } else {
+            resetTurn()
+        }
         turnState = TurnState.Running
         timeline.apply(AgentEvent.Started(round))
         syncList()
@@ -146,6 +165,7 @@ class AgentChatState internal constructor() : AgentStreamSink {
     }
 
     private fun resetTurn() {
+        toolResults = emptyList()
         buffer.reset()
         chunker.reset()
         streamTail = ""
@@ -226,6 +246,34 @@ class AgentChatState internal constructor() : AgentStreamSink {
         syncList()
     }
 
+    /**
+     * 接着已有内容继续生成（工具重试后的「续写」）。
+     *
+     * 与 [restore] 的关键差别：**不清空时间线**。[restore] 里的 `resetTurn()` 会
+     * 把正文缓冲、展开态、工具轨迹全丢掉 —— 那是「从磁盘恢复来显示」该做的，
+     * 而续写要的是「在已有内容上接着写」。
+     *
+     * 同时把 `started` 置回 false，让随后到达的 [onStarted] 能真正生效
+     * （它开头的 `resetTurn()` 因此也要跳过，见那个方法里的 `continuing` 判断）。
+     *
+     * @return 是否真的可以续 —— 没有任何已恢复内容时为 false，调用方应退回普通重跑。
+     */
+    fun beginContinue(): Boolean {
+        if (segments.isEmpty()) return false
+        continuing = true
+        started = false
+        turnState = TurnState.Running
+        return true
+    }
+
+    /**
+     * 为续写准备的轮次基址：已有内容里的最大轮次。
+     *
+     * 新一轮若仍从 0 开始，它的 `(0,0)` 会命中上一轮留下的工具卡，
+     * 于是只更新旧卡、不新建（「第二个问题没有工具界面」就是同一成因）。
+     */
+    fun continueRoundBase(): Int = timeline.maxRound()
+
     // ------------------------------------------------------------------
     // 流式事件
     // ------------------------------------------------------------------
@@ -256,6 +304,8 @@ class AgentChatState internal constructor() : AgentStreamSink {
         success: Boolean,
     ) {
         timeline.apply(AgentEvent.ToolCompleted(round, seq, name, result, success))
+        // 只记已执行完的：半途而废的调用对模型没有意义
+        toolResults = toolResults + ToolTrace(name = name, argsJson = null, result = result, success = success)
         syncList()
         schedulePersist()
     }

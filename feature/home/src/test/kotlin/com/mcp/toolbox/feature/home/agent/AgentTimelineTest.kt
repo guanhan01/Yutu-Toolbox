@@ -402,4 +402,34 @@ class AgentTimelineTest {
         t.apply(AgentEvent.ThinkingDelta(3, "第三轮"))
         assertEquals(3, t.maxRound())
     }
+
+    @Test
+    fun `续写基址要接着已有工具轮次，否则新一轮会撞卡`() {
+        // 「一轮里只有工具调用、没有思考」（模型直接调工具，一句思考都没吐）
+        // 时，若 maxRound 只看 ThinkingSegment 就会漏，基址偏低 → 新一轮的
+        // (round, seq) 命中旧卡、只更新不新建。
+        val t = AgentTimeline()
+        t.apply(AgentEvent.Started(round = 1))
+        t.apply(AgentEvent.ToolCallStarted(2, 0, "device.info"))
+        t.apply(AgentEvent.ToolCompleted(2, 0, "device.info", "x", success = true))
+
+        assertEquals("maxRound 必须把工具轮次算进去", 2, t.maxRound())
+    }
+
+    @Test
+    fun `续写的轮次要整体排在已有内容之后`() {
+        val t = AgentTimeline()
+        t.apply(AgentEvent.Started(round = 1))
+        t.apply(AgentEvent.ToolCallStarted(1, 0, "a"))
+        assertEquals(1, t.maxRound())
+
+        // 模拟续写：偏移 1，于是新一轮从 2 开始
+        t.apply(AgentEvent.Started(round = 2))
+        t.apply(AgentEvent.ThinkingDelta(2, "续写的思考"))
+        t.apply(AgentEvent.ToolCallStarted(2, 0, "b"))
+
+        val tools = t.snapshot().filterIsInstance<ToolCallSegment>()
+        assertEquals("旧卡与新卡应并存，而不是被覆盖", 2, tools.size)
+        assertEquals(setOf(1, 2), tools.map { it.round }.toSet())
+    }
 }

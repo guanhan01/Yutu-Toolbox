@@ -114,6 +114,7 @@ import com.mcp.toolbox.feature.home.agent.AgentStreamBus
 import com.mcp.toolbox.ui.ai.AiToolBridge
 import com.mcp.toolbox.feature.home.ChatUsageStore
 import com.mcp.toolbox.feature.home.ChatMessage
+import com.mcp.toolbox.feature.home.forModel
 import com.mcp.toolbox.ui.ai.AiMemoryScreen
 import com.mcp.toolbox.ui.ai.ChatRunner
 import com.mcp.toolbox.ui.ai.ReasoningEffort
@@ -587,6 +588,10 @@ private fun ToolboxNavHost(
                                     argsJson = argsJson,
                                     onResult = { ok, raw ->
                                         live.markToolRetried(round, seq, retryStatusOf(ok, raw), raw)
+                                        // 重试成功 → 接着往下答（用户要的「续写」）。
+                                        // 失败则不续：基于一次失败的调用继续写没有意义，
+                                        // 卡片上仍留着「重试」，用户可以再试一次。
+                                        if (ok) continueAfterToolRetry(shellContext, sid, messageId)
                                     },
                                 )
                                 if (started) {
@@ -1430,4 +1435,41 @@ private fun retryToolInHistory(
         val raw = outcome.getOrElse { "错误：${it.message ?: it::class.simpleName}" }
         write(retryStatusOf(outcome.isSuccess, raw), raw)
     }
+}
+
+
+/**
+ * 工具重试成功后，接着已有内容继续生成。
+ *
+ * 要点是**不重置**：走 [com.mcp.toolbox.feature.home.agent.AgentChatState.beginContinue]
+ * （而不是 `bindTurn`），时间线、已写正文、工具轨迹全部保留，只让模型把剩下的答完。
+ *
+ * 轮次基址取 `continueRoundBase()`：新一轮若仍从 0 开始，它的 `(0,0)` 会命中
+ * 上一轮留下的工具卡，只更新旧卡不新建（「第二个问题没有工具界面」的同一成因）。
+ *
+ * **不调 `ChatStore.upsertAssistant`**：内容由回答区持时间线后统一落盘，
+ * 这里再写一次会落成两条记录。
+ */
+private fun continueAfterToolRetry(
+    context: android.content.Context,
+    sessionId: String,
+    messageId: String,
+) {
+    val state = AgentStreamBus.sink as? com.mcp.toolbox.feature.home.agent.AgentChatState
+        ?: return
+    val config = AiConfigStore.config.value
+    if (!config.ready) return
+    val session = ChatStore.sessions.value.firstOrNull { it.id == sessionId } ?: return
+    // 基址要在 beginContinue 之前取：它读的是当时的 timeline
+    val base = state.continueRoundBase()
+    if (!state.beginContinue()) return
+    ChatRunner.start(
+        context = context,
+        config = config,
+        sessionId = sessionId,
+        assistantMessageId = messageId,
+        history = session.messages.forModel(),
+        onFallbackReply = "",
+        continueFrom = base,
+    )
 }
