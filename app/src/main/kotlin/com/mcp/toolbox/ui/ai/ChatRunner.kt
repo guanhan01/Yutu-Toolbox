@@ -1,6 +1,8 @@
 package com.mcp.toolbox.ui.ai
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.mcp.toolbox.feature.home.ChatMessage
 import com.mcp.toolbox.feature.home.agent.AgentStreamBus
 import com.mcp.toolbox.feature.home.agent.SystemKind
@@ -133,8 +135,13 @@ object ChatRunner {
                 // 冲刷残缓冲正文 + 把仍在 Running 的段定型
                 AgentStreamBus.emitFinished()
             } else {
+                val cause = result.exceptionOrNull()
+                // 同一个「失败」按状态码 / 异常类型落到不同的系统卡：
+                // 401 → 「去设置」入口，429 → 带等待时长，5xx 与其余 → 重试。
+                // UI 侧本就按 kind 分派文案与按钮，之前接不上是因为这里一律写死了 ServerError。
+                val kind = if (isOffline(context)) SystemKind.Offline else FaultMapper.classify(cause)
                 AgentStreamBus.emit {
-                    it.onFailed(SystemKind.ServerError, result.exceptionOrNull()?.message.orEmpty(), 0)
+                    it.onFailed(kind, cause?.message.orEmpty(), FaultMapper.retryAfterSeconds(cause))
                 }
             }
             } catch (t: Throwable) {
@@ -197,6 +204,19 @@ object ChatRunner {
                 }
             }
         }
+    }
+
+    /**
+     * 当前有没有可用网络。
+     *
+     * [java.net.UnknownHostException] 既可能是「本机断网」也可能是「域名解析失败 / 服务端不可达」，
+     * 两者该显示不同的话：前者让人去开网络，后者是服务端的事。只有真的没有可用网络才算 [SystemKind.Offline]。
+     */
+    private fun isOffline(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = cm.activeNetwork ?: return true
+        val caps = cm.getNetworkCapabilities(network) ?: return true
+        return !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     /**

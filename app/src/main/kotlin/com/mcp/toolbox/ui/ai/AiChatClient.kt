@@ -178,7 +178,7 @@ object AiChatClient {
                     val code = conn.responseCode
                     if (code !in 200..299) {
                         val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                        error("HTTP $code：${extractError(err).take(200)}")
+                        throw AiHttpException(code, extractError(err).take(200), retryAfterHeader(conn))
                     }
                     // stall watchdog：60s 收不到任何数据就主动上报，界面据此停止等待。
                     // 用 lastEventAt 而不是「读超时」：HttpURLConnection 的 readTimeout
@@ -362,7 +362,7 @@ object AiChatClient {
                 val code = conn.responseCode
                 if (code !in 200..299) {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    error("HTTP $code：${extractError(err).take(200)}")
+                    throw AiHttpException(code, extractError(err).take(200), retryAfterHeader(conn))
                 }
                 conn.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { raw ->
@@ -438,7 +438,7 @@ object AiChatClient {
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(text).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(text).take(200), retryAfterHeader(conn))
             text
         } finally {
             conn.disconnect()
@@ -517,7 +517,7 @@ object AiChatClient {
                 val code = conn.responseCode
                 if (code !in 200..299) {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    error("HTTP $code：${extractError(err).take(200)}")
+                    throw AiHttpException(code, extractError(err).take(200), retryAfterHeader(conn))
                 }
                 conn.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { raw ->
@@ -637,7 +637,7 @@ object AiChatClient {
                 val code = conn.responseCode
                 if (code !in 200..299) {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    error("HTTP $code：${extractError(err).take(200)}")
+                    throw AiHttpException(code, extractError(err).take(200), retryAfterHeader(conn))
                 }
                 conn.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { raw ->
@@ -777,7 +777,7 @@ object AiChatClient {
             val code = conn.responseCode
             val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(body).take(200), retryAfterHeader(conn))
             val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
             val seen = mutableSetOf<String>()
             return (0 until data.length()).mapNotNull { i ->
@@ -818,7 +818,7 @@ object AiChatClient {
             val code = conn.responseCode
             val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(body).take(200), retryAfterHeader(conn))
             val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
             return (0 until data.length()).mapNotNull { i ->
                 val o = data.optJSONObject(i) ?: return@mapNotNull null
@@ -858,7 +858,7 @@ object AiChatClient {
             val code = conn.responseCode
             val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(body).take(200), retryAfterHeader(conn))
             val data = JSONObject(body).optJSONArray("models") ?: JSONArray()
             return (0 until data.length()).mapNotNull { i ->
                 val o = data.optJSONObject(i) ?: return@mapNotNull null
@@ -950,7 +950,7 @@ object AiChatClient {
             val code = conn.responseCode
             val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(body).take(200), retryAfterHeader(conn))
             body
         } finally {
             conn.disconnect()
@@ -1047,7 +1047,7 @@ object AiChatClient {
             val code = conn.responseCode
             val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) error("HTTP $code：${extractError(body).take(200)}")
+            if (code !in 200..299) throw AiHttpException(code, extractError(body).take(200), retryAfterHeader(conn))
             body
         } finally {
             conn.disconnect()
@@ -1221,6 +1221,14 @@ object AiChatClient {
             (bitmap.height * ratio).toInt().coerceAtLeast(1),
             true,
         )
+    }
+
+    /**
+     * 读 `Retry-After` 响应头（延迟秒数）。不合法或缺失时返回 0，由 [FaultMapper] 给兜底值。
+     */
+    private fun retryAfterHeader(conn: HttpURLConnection): Int {
+        val raw = runCatching { conn.getHeaderField("Retry-After") }.getOrNull()?.trim() ?: return 0
+        return raw.toIntOrNull()?.coerceIn(0, 3600) ?: 0
     }
 
     private fun extractError(body: String): String = runCatching {
