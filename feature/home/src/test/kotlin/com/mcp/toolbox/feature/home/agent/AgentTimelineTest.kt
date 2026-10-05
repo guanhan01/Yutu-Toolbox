@@ -3,6 +3,7 @@ package com.mcp.toolbox.feature.home.agent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -320,5 +321,47 @@ class AgentTimelineTest {
         t.apply(AgentEvent.AnswerDelta("A"))
         t.apply(AgentEvent.Started())
         assertEquals(1, t.snapshot().filterIsInstance<AnswerSegment>().size)
+    }
+
+    @Test
+    fun `retryTool 只重置目标那一段，其它过程原样保留`() {
+        // 回归：工具卡上的「重试」此前接的是整轮重跑（startNewTurn），
+        // 点一下就把已经跑完的工具卡全清掉、再从头答一遍（用户实测反馈）。
+        // 这里钉住真正该有的行为：就地重跑一个工具，其余段一动不动。
+        val t = AgentTimeline()
+        t.apply(AgentEvent.Started(round = 1))
+        t.apply(AgentEvent.ToolCallStarted(1, 0, "device.info"))
+        t.apply(AgentEvent.ToolCompleted(1, 0, "device.info", "型号=X", success = true))
+        t.apply(AgentEvent.ToolCallStarted(1, 1, "linux.env"))
+        t.apply(AgentEvent.ToolCompleted(1, 1, "linux.env", "长时间没有返回", success = false))
+
+        val before = t.snapshot()
+        assertEquals("开始前应有两张工具卡", 2, before.size)
+
+        assertTrue("重试应命中已存在的段", t.retryTool(1, 1))
+
+        val after = t.snapshot()
+        assertEquals("段数不能变：重试不是重来一轮", before.size, after.size)
+
+        // 目标段被重置为「正在执行」，旧结果清掉
+        val target = after[1] as ToolCallSegment
+        assertEquals(ToolStatus.Running, target.status)
+        assertNull("重试后不应还挂着上一次的结果", target.result)
+        assertTrue(target.isRunning)
+
+        // 前面那张卡必须原样保留 —— 这正是这个 bug 的核心
+        val untouched = after[0] as ToolCallSegment
+        assertEquals("device.info", untouched.toolName)
+        assertEquals(ToolStatus.Success, untouched.status)
+        assertEquals("型号=X", untouched.result?.summary)
+        assertEquals((before[0] as ToolCallSegment).createdAt, untouched.createdAt)
+    }
+
+    @Test
+    fun `retryTool 对不存在的段返回 false`() {
+        val t = AgentTimeline()
+        t.apply(AgentEvent.Started(round = 1))
+        t.apply(AgentEvent.ToolCallStarted(1, 0, "device.info"))
+        assertFalse("没有 round=2 seq=9 这一段", t.retryTool(2, 9))
     }
 }

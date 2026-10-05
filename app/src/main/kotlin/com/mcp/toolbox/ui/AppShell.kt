@@ -111,6 +111,7 @@ import kotlinx.coroutines.CoroutineScope
 import com.mcp.toolbox.feature.home.ChatMemoryStore
 import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.feature.home.agent.AgentStreamBus
+import com.mcp.toolbox.ui.ai.AiToolBridge
 import com.mcp.toolbox.feature.home.ChatUsageStore
 import com.mcp.toolbox.feature.home.ChatMessage
 import com.mcp.toolbox.ui.ai.AiMemoryScreen
@@ -562,6 +563,38 @@ private fun ToolboxNavHost(
                                 history = history,
                                 onFallbackReply = errNetwork,
                             )
+                        }
+                    },
+                    onRetryTool = { messageId, round, seq, toolName, argsJson ->
+                        // 返回 null 表示已启动，非 null 是要展示给用户的原因。
+                        // 先查「忙不忙」，再动状态：反过来会留下一个永久转圈的卡片。
+                        if (ChatRunner.isBusy()) {
+                            "正在生成中，等这一轮结束再重试这个工具"
+                        } else {
+                            // 只有「这条消息就是当前正在跑的那一轮」才改得到内存时间线；
+                            // 历史轮次的工具段不在里面（工具调用不进消息历史）。
+                            var live = false
+                            AgentStreamBus.emit { sink ->
+                                val state = sink as? com.mcp.toolbox.feature.home.agent.AgentChatState
+                                if (state?.messageId == messageId) {
+                                    live = state.markToolRetrying(round, seq)
+                                }
+                            }
+                            if (live) {
+                                // 界面上的工具名带点，出站协议用下划线，这里换回去
+                                ChatRunner.runToolOnce(
+                                    context = shellContext,
+                                    round = round,
+                                    seq = seq,
+                                    functionName = AiToolBridge.toFunctionName(toolName),
+                                    argsJson = argsJson,
+                                )
+                                // runToolOnce 自己再查一次是防御性的：上面的 isBusy 与这里
+                                // 之间有竞态。真被拒了就把卡片状态收回，别留个转圈的。
+                                null
+                            } else {
+                                "只有当前这一轮能重试工具，历史记录里的工具已不再保留"
+                            }
                         }
                     },
                     // 跨服务商的可选模型：只列出已拉取过模型列表的服务商

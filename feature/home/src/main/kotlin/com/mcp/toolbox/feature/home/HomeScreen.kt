@@ -126,6 +126,21 @@ fun HomeScreen(
      */
     onStart: (sessionId: String, assistantMessageId: String, history: List<ChatMessage>) -> Unit =
         { _, _, _ -> },
+    /**
+     * 单独重跑一个工具（工具卡的「重试」）。
+     *
+     * 必须与 [onStart] 分开：后者走 [startNewTurn]，会清空整条时间线，
+     * 于是「重试一个工具」变成了「把前面的过程全删掉重跑一轮」（用户实测反馈）。
+     * 返回 null 表示已启动重试；非 null 是要展示给用户的原因（例如这条消息
+     * 不是当前轮、或已有请求在跑）—— 明确告知，而不是静默什么都不做。
+     */
+    onRetryTool: (
+        messageId: String,
+        round: Int,
+        seq: Int,
+        toolName: String,
+        argsJson: String?,
+    ) -> String? = { _, _, _, _, _ -> null },
     /** 是否已有请求在执行。 */
     running: Boolean = false,
     onStop: () -> Unit = {},
@@ -591,6 +606,13 @@ fun HomeScreen(
                     val lastAssistant = session?.messages
                         ?.lastOrNull { it.role == ChatMessage.Role.ASSISTANT }?.id
                     scope.launch { startNewTurn(sid, agent, context, lastAssistant) }
+                },
+                // 工具重试：只重跑那一个工具，前面的过程原样保留。
+                // 若这条消息不是当前轮，宿主改不到它，就明确告知而不是假装成功。
+                onRetryTool = { messageId, round, seq, toolName, argsJson ->
+                    // null = 已启动；非 null 是要告诉用户的原因
+                    onRetryTool(messageId, round, seq, toolName, argsJson)?.let { toast.show(it) }
+                    null
                 },
                 onOpenAuth = {},
                 onApproveTool = { round, seq -> agent.resolveApproval(round, seq, allowed = true) },

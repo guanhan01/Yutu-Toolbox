@@ -114,6 +114,13 @@ fun AgentMessageList(
     onOpenSource: (url: String) -> Unit = {},
     onContinue: () -> Unit,
     onRetry: () -> Unit,
+    /**
+     * 工具卡上的「重试」：只重跑那一个工具，前面的过程原样保留。
+     *
+     * 返回 null 表示已启动重试（界面会自己刷新）；非 null 是要展示给用户的原因
+     * （这条消息不是当前轮、或已有请求在跑）—— 宿主据此提示，而不是静默忽略。
+     */
+    onRetryTool: (messageId: String, round: Int, seq: Int, toolName: String, argsJson: String?) -> String? = { _, _, _, _, _ -> null },
     onOpenAuth: () -> Unit,
     onApproveTool: (round: Int, seq: Int) -> Unit,
     onDenyTool: (round: Int, seq: Int) -> Unit,
@@ -300,6 +307,7 @@ fun AgentMessageList(
                     onOpenSource = onOpenSource,
                     onContinue = onContinue,
                     onRetry = onRetry,
+                    onRetryTool = onRetryTool,
                     onOpenAuth = onOpenAuth,
                     onApproveTool = onApproveTool,
                     onDenyTool = onDenyTool,
@@ -481,6 +489,7 @@ private fun TurnRow(
     onOpenSource: (String) -> Unit,
     onContinue: () -> Unit,
     onRetry: () -> Unit,
+    onRetryTool: (messageId: String, round: Int, seq: Int, toolName: String, argsJson: String?) -> String?,
     onOpenAuth: () -> Unit,
     onApproveTool: (round: Int, seq: Int) -> Unit,
     onDenyTool: (round: Int, seq: Int) -> Unit,
@@ -528,6 +537,7 @@ private fun TurnRow(
                 onDeleteAnswer = onDeleteAnswer,
                 onContinue = onContinue,
                 onRetry = onRetry,
+                onRetryTool = onRetryTool,
                 onOpenAuth = onOpenAuth,
                 onApproveTool = onApproveTool,
                 onDenyTool = onDenyTool,
@@ -590,6 +600,7 @@ private fun AnswerRow(
     onDeleteAnswer: (String) -> Unit,
     onContinue: () -> Unit,
     onRetry: () -> Unit,
+    onRetryTool: (messageId: String, round: Int, seq: Int, toolName: String, argsJson: String?) -> String?,
     onOpenAuth: () -> Unit,
     onApproveTool: (round: Int, seq: Int) -> Unit,
     onDenyTool: (round: Int, seq: Int) -> Unit,
@@ -631,6 +642,12 @@ private fun AnswerRow(
         return
     }
 
+    // 工具重试：把「哪条消息、哪个工具」绑好交给宿主。
+    // 同一张卡要同时服务「当前轮」与「历史轮」，判断留给宿主（它知道当前轮是谁）。
+    val retryTool: (ToolCallSegment) -> Unit = { seg ->
+        onRetryTool(message.id, seg.round, seg.seq, seg.toolName, seg.argsJson)
+    }
+
     val rows = remember(segments) { groupSegments(segments) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
@@ -644,6 +661,7 @@ private fun AnswerRow(
                     onDeleteAnswer = onDeleteAnswer,
                     onContinue = onContinue,
                     onRetry = onRetry,
+                    onRetryTool = retryTool,
                     onOpenAuth = onOpenAuth,
                     onApproveTool = onApproveTool,
                     onDenyTool = onDenyTool,
@@ -673,6 +691,7 @@ private fun AnswerRow(
                                 onDeleteAnswer = onDeleteAnswer,
                                 onContinue = onContinue,
                                 onRetry = onRetry,
+                                onRetryTool = retryTool,
                                 onOpenAuth = onOpenAuth,
                                 onApproveTool = onApproveTool,
                                 onDenyTool = onDenyTool,
@@ -706,6 +725,8 @@ private fun SegmentView(
     onApproveTool: (round: Int, seq: Int) -> Unit,
     onDenyTool: (round: Int, seq: Int) -> Unit,
     onCopied: () -> Unit,
+    /** 工具卡的「重试」：只重跑该工具。 */
+    onRetryTool: (ToolCallSegment) -> Unit = {},
     isLatestTurn: Boolean = true,
     onSpeak: () -> Unit = {},
     onShareImage: (androidx.compose.ui.graphics.layer.GraphicsLayer) -> Unit = {},
@@ -760,7 +781,9 @@ private fun SegmentView(
             },
             onApprove = { onApproveTool(segment.round, segment.seq) },
             onDeny = { onDenyTool(segment.round, segment.seq) },
-            onRetry = { onRetry() },
+            // 只重跑这一个工具。此前接的是 onRetry（整轮重跑），
+            // 点一下就把前面的工具卡全清掉、再从头答一遍（用户实测反馈）。
+            onRetry = { onRetryTool(segment) },
         )
 
         is NarrationSegment -> NarrationLine(text = segment.text)

@@ -207,6 +207,30 @@ object ChatRunner {
     }
 
     /**
+     * 单独重跑一个工具 —— 工具卡上「重试」的后端。
+     *
+     * 刻意**不走** [start]：那条路会把整条时间线清空重来（`bindTurn` 里的
+     * `resetTurn()` + `timeline.reset()`），用户看到的正常结果也会被抹掉。
+     * 这里只调这一个工具，把新结果通过 [AgentStreamBus] 交回界面就地更新那一张卡。
+     */
+    /** 返回是否真的启动了。false 表示已有一个请求在跑，调用方要撤销「正在重试」的标记。 */
+    fun runToolOnce(
+        context: Context,
+        round: Int,
+        seq: Int,
+        functionName: String,
+        argsJson: String?,
+    ): Boolean {
+        if (isBusy()) return false
+        job = scope.launch {
+            val outcome = runCatching { AiToolBridge.invoke(context, functionName, argsJson) }
+            val raw = outcome.getOrElse { "错误：${it.message ?: it::class.simpleName}" }
+            AgentStreamBus.emit { it.onToolRetried(round, seq, outcome.isSuccess, raw) }
+        }
+        return true
+    }
+
+    /**
      * 当前有没有可用网络。
      *
      * [java.net.UnknownHostException] 既可能是「本机断网」也可能是「域名解析失败 / 服务端不可达」，

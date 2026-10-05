@@ -366,6 +366,32 @@ class AgentTimeline {
      * 只留一行「已思考 24s · 3 次工具调用」摘要 chip。
      * **跳过 `userToggled == true` 的段**——用户手动展开过就不再自动收，尊重用户。
      */
+    /**
+     * 把某个工具段重置为「正在执行」，用于卡片上的「重试」。
+     *
+     * 纯状态改写：只动这一段，**其余段一律不动** —— 前面的思考、旁白、
+     * 相邻工具卡与已有正文都保持在原位。这是它与「整轮重跑」的根本区别：
+     * 后者会清空整条时间线（见 `bindTurn` 的 resetTurn + timeline.reset）。
+     *
+     * 找不到该段时返回 false，调用方据此判断这条消息是否就是当前正在跑的那条。
+     */
+    fun retryTool(round: Int, seq: Int): Boolean {
+        val index = toolIndex[round to seq] ?: return false
+        val seg = items.getOrNull(index) as? ToolCallSegment ?: return false
+        items[index] = seg.copy(
+            status = ToolStatus.Running,
+            startedAt = now(),
+            endedAt = null,
+            result = null,
+            // 等待授权与「用户干预过」的标记一并清掉：重试是从头跑一次，
+            // 不继承上一次的终态。
+            awaitingApproval = false,
+            risk = null,
+            userToggled = false,
+        )
+        return true
+    }
+
     fun autoCollapseProcess(): Boolean {
         var changed = false
         for (i in items.indices) {
