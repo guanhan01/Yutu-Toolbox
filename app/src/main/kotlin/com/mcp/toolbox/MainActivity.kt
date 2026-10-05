@@ -42,6 +42,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // debug 专用：从启动 Intent 里读演示脚本开关（见 DemoRunner 注释）。
+        // 放在这里而不是 Compose 里，是为了让「读 Intent」这件事只发生一次。
+        if (BuildConfig.DEBUG) {
+            intent?.getStringExtra(com.mcp.toolbox.feature.home.agent.DemoRunner.EXTRA)?.let {
+                com.mcp.toolbox.feature.home.agent.DemoRunner.pending = it
+            }
+        }
         val controller = (application as ToolboxApplication).themeController
         // 状态栏与导航栏图标默认按「浅色底」走深色图标。
         // 之前没设过 SystemBarStyle，系统一直用浅色（白）图标，

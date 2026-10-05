@@ -16,13 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ArrowForward
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material.icons.outlined.TableChart
-import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +31,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
 import com.mcp.toolbox.core.design.component.MiuixDialog
@@ -128,7 +122,7 @@ fun DbDataTab(
             title = "没有可浏览的数据表",
             modifier = modifier,
             description = "当前数据库没有用户表",
-            icon = Icons.Outlined.TableChart,
+            iconRes = AgentIcons.ic_table,
         )
         return
     }
@@ -180,20 +174,20 @@ fun DbDataTab(
             }
             Spacer(Modifier.width(8.dp))
             MiuixIconButton(
-                icon = Icons.Outlined.Sort,
+                iconRes = AgentIcons.ic_sort,
                 contentDescription = "排序设置",
                 onClick = { sortMenu = true },
                 modifier = Modifier.onGloballyPositioned { sortAnchor = it.boundsInWindow() },
             )
             Spacer(Modifier.weight(1f))
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowBack,
+                iconRes = AgentIcons.ic_chevron_left,
                 contentDescription = "上一页",
                 enabled = offset > 0 && !loading,
                 onClick = { offset = (offset - pageSize).coerceAtLeast(0) },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowForward,
+                iconRes = AgentIcons.ic_arrow_right,
                 contentDescription = "下一页",
                 enabled = !loading && offset + pageSize < page.total,
                 onClick = { offset += pageSize },
@@ -231,7 +225,7 @@ fun DbDataTab(
             )
             Spacer(Modifier.width(8.dp))
             MiuixIconButton(
-                icon = Icons.Outlined.FileDownload,
+                iconRes = AgentIcons.ic_download,
                 contentDescription = "导出本页",
                 onClick = {
                     val result = QueryResult(columns = page.columns, rows = page.rows)
@@ -246,7 +240,7 @@ fun DbDataTab(
             MiuixEmptyState(
                 title = "该表没有数据",
                 description = "可以点「新增行」插入一条真实记录",
-                icon = Icons.Outlined.ViewColumn,
+                iconRes = AgentIcons.ic_split_view,
                 modifier = Modifier.weight(1f),
             )
         } else {

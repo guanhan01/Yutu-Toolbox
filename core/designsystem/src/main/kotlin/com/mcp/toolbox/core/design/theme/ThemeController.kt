@@ -81,6 +81,7 @@ class ThemeController(
     private fun Preferences.read(): ThemeConfig = ThemeConfig(
         darkMode = enumOr(this[KeyDarkMode], DarkModeSetting.FOLLOW_SYSTEM),
         perModuleDark = this[KeyPerModuleDark]?.split(',')?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
+        colorCustomize = this[KeyColorCustomize] ?: false,
         customSeedArgb = this[KeySeed] ?: ThemeConfig.BrandSeedArgb,
         dynamicEnabled = this[KeyDynamic] ?: true,
         amoled = this[KeyAmoled] ?: false,
@@ -94,6 +95,7 @@ class ThemeController(
     private fun MutablePreferences.write(config: ThemeConfig) {
         this[KeyDarkMode] = config.darkMode.name
         this[KeyPerModuleDark] = config.perModuleDark.joinToString(",")
+        this[KeyColorCustomize] = config.colorCustomize
         this[KeySeed] = config.customSeedArgb
         this[KeyDynamic] = config.dynamicEnabled
         this[KeyAmoled] = config.amoled
@@ -112,6 +114,7 @@ class ThemeController(
 
         private val KeyDarkMode = stringPreferencesKey("dark_mode")
         private val KeyPerModuleDark = stringPreferencesKey("per_module_dark")
+        private val KeyColorCustomize = booleanPreferencesKey("color_customize")
         private val KeySeed = longPreferencesKey("custom_seed")
         private val KeyAmoled = booleanPreferencesKey("amoled")
         private val KeyPureWhite = booleanPreferencesKey("pure_white")

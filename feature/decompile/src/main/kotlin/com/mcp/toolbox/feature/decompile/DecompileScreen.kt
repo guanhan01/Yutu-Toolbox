@@ -1,5 +1,6 @@
 package com.mcp.toolbox.feature.decompile
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -32,28 +33,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Article
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -84,10 +63,6 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.ZoomIn
-import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
@@ -96,6 +71,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
 import kotlin.math.abs
 import androidx.core.content.ContextCompat
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -305,11 +281,11 @@ fun DecompileScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "反编译",
-                navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                navigationIconRes = AgentIcons.ic_chevron_left,
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                             MiuixMenuItem(
                                 "来源与概览",
@@ -317,7 +293,7 @@ fun DecompileScreen(
                                     menuOpen = false
                                     overviewOpen = true
                                 },
-                                icon = Icons.Outlined.Widgets,
+                                iconRes = AgentIcons.ic_svc_project_board,
                             )
                             MiuixMenuItem(
                                 "全局搜索",
@@ -325,7 +301,7 @@ fun DecompileScreen(
                                     menuOpen = false
                                     searchOpen = true
                                 },
-                                icon = Icons.Outlined.Search,
+                                iconRes = AgentIcons.ic_search,
                             )
                             MiuixMenuItem(
                                 "重新分析当前 APK",
@@ -333,7 +309,7 @@ fun DecompileScreen(
                                     menuOpen = false
                                     launchTask(DecompileTaskService.ACTION_ANALYZE, null)
                                 },
-                                icon = Icons.Outlined.PlayArrow,
+                                iconRes = AgentIcons.ic_play_circle,
                             )
                             MiuixMenuItem(
                                 "生成 smali（baksmali）",
@@ -342,7 +318,7 @@ fun DecompileScreen(
                                     view = DecompileView.SMALI
                                     launchTask(DecompileTaskService.ACTION_SMALI, null)
                                 },
-                                icon = Icons.Outlined.Terminal,
+                                iconRes = AgentIcons.ic_terminal,
                             )
                             MiuixMenuItem(
                                 "生成 Java 源码（jadx）",
@@ -351,7 +327,7 @@ fun DecompileScreen(
                                     view = DecompileView.JAVA
                                     launchTask(DecompileTaskService.ACTION_JAVA, null)
                                 },
-                                icon = Icons.Outlined.Code,
+                                iconRes = AgentIcons.ic_code,
                             )
                             MiuixMenuItem(
                                 "导出清单 / 类表 / 字符串",
@@ -373,7 +349,7 @@ fun DecompileScreen(
                                         }
                                     }
                                 },
-                                icon = Icons.Outlined.Download,
+                                iconRes = AgentIcons.ic_download,
                             )
                             MiuixMenuItem(
                                 "引擎状态",
@@ -388,7 +364,7 @@ fun DecompileScreen(
                                         append(DecompileEngine.workDir(context).absolutePath)
                                     }
                                 },
-                                icon = Icons.Outlined.Memory,
+                                iconRes = AgentIcons.ic_memory,
                             )
                             MiuixMenuItem(
                                 "清理任务中心",
@@ -397,7 +373,7 @@ fun DecompileScreen(
                                     DecompileHub.clearTasks(context)
                                     onToast("任务中心已清空")
                                 },
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                             )
                             MiuixMenuItem(
                                 "清空产物目录",
@@ -413,7 +389,7 @@ fun DecompileScreen(
                                         onToast(if (removed) "产物目录已清空" else "清理失败")
                                     }
                                 },
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                                 danger = true,
                             )
                         }
@@ -483,7 +459,7 @@ fun DecompileScreen(
                     engineNote?.let { note ->
                         MiuixCard(contentPadding = PaddingValues(spacing.md)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                MiuixIcon(Icons.Outlined.ErrorOutline, null, tint = colors.warning, size = 18.dp)
+                                MiuixIcon(AgentIcons.ic_error, null, tint = colors.warning, size = 18.dp)
                                 Spacer(Modifier.width(spacing.sm))
                                 MiuixText(note, style = MiuixTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                             }
@@ -493,12 +469,12 @@ fun DecompileScreen(
                     MiuixEmptyState(
                         title = "还没有分析结果",
                         description = "选好来源跑一次分析，结果会在这里按包名展开成可折叠的目录树。",
-                        icon = Icons.Outlined.Widgets,
+                        iconRes = AgentIcons.ic_svc_project_board,
                         action = {
                             MiuixButton(
                                 "选择来源",
                                 { overviewOpen = true },
-                                leadingIcon = Icons.Outlined.FolderOpen,
+                                leadingIconRes = AgentIcons.ic_folder,
                             )
                         },
                     )
@@ -531,7 +507,7 @@ fun DecompileScreen(
                     engineNote?.let { note ->
                         MiuixCard(contentPadding = PaddingValues(spacing.md)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                MiuixIcon(Icons.Outlined.ErrorOutline, null, tint = colors.warning, size = 18.dp)
+                                MiuixIcon(AgentIcons.ic_error, null, tint = colors.warning, size = 18.dp)
                                 Spacer(Modifier.width(spacing.sm))
                                 MiuixText(note, style = MiuixTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                             }
@@ -541,7 +517,7 @@ fun DecompileScreen(
                     MiuixEmptyState(
                         title = if (view == DecompileView.JAVA) "尚未生成 Java 源码" else "尚未生成 smali",
                         description = "点下面的按钮在后台任务里生成，进度会显示在通知栏与任务中心。",
-                        icon = Icons.Outlined.Code,
+                        iconRes = AgentIcons.ic_code,
                         action = {
                             MiuixButton(
                                 if (view == DecompileView.JAVA) "生成 Java 源码（jadx）" else "生成 smali（baksmali）",
@@ -551,7 +527,7 @@ fun DecompileScreen(
                                         null,
                                     )
                                 },
-                                leadingIcon = Icons.Outlined.PlayArrow,
+                                leadingIconRes = AgentIcons.ic_play_circle,
                             )
                         },
                     )
@@ -773,13 +749,13 @@ private fun CodeDetailPanel(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MiuixIconButton(Icons.Outlined.ZoomOut, "缩小字号", onClick = { onZoom(quantizeZoom(zoom / 1.15f)) }, buttonSize = 34.dp, iconSize = 17.dp)
-                MiuixIconButton(Icons.Outlined.ZoomIn, "放大字号", onClick = { onZoom(quantizeZoom(zoom * 1.15f)) }, buttonSize = 34.dp, iconSize = 17.dp)
+                MiuixIconButton(AgentIcons.ic_fullscreen, "缩小字号", onClick = { onZoom(quantizeZoom(zoom / 1.15f)) }, buttonSize = 34.dp, iconSize = 17.dp)
+                MiuixIconButton(AgentIcons.ic_fullscreen, "放大字号", onClick = { onZoom(quantizeZoom(zoom * 1.15f)) }, buttonSize = 34.dp, iconSize = 17.dp)
                 if (editing) {
-                    MiuixIconButton(Icons.Outlined.Close, "放弃修改", onClick = onCancelEdit, buttonSize = 34.dp, iconSize = 17.dp)
-                    MiuixIconButton(Icons.Outlined.Save, "保存", onClick = onSave, buttonSize = 34.dp, iconSize = 17.dp)
+                    MiuixIconButton(AgentIcons.ic_close, "放弃修改", onClick = onCancelEdit, buttonSize = 34.dp, iconSize = 17.dp)
+                    MiuixIconButton(AgentIcons.ic_snapshot, "保存", onClick = onSave, buttonSize = 34.dp, iconSize = 17.dp)
                 } else {
-                    MiuixIconButton(Icons.Outlined.Edit, "编辑", onClick = { onStartEdit(-1) }, buttonSize = 34.dp, iconSize = 17.dp)
+                    MiuixIconButton(AgentIcons.ic_edit, "编辑", onClick = { onStartEdit(-1) }, buttonSize = 34.dp, iconSize = 17.dp)
                 }
             }
         }
@@ -936,8 +912,8 @@ private fun TreeHandle(
                 .fillMaxHeight()
                 .background(colors.outlineVariant),
         )
-        MiuixIcon(
-            icon = if (open) Icons.AutoMirrored.Outlined.KeyboardArrowLeft else Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+        MiuixIconRes(
+            iconRes = if (open) AgentIcons.ic_chevron_left else AgentIcons.ic_chevron_right,
             contentDescription = if (open) "收起侧边栏" else "展开侧边栏",
             tint = colors.onSurfaceVariant,
             size = 17.dp,
@@ -958,7 +934,7 @@ private fun SourcePicker(
     val spacing = MiuixTheme.dimens.spacing
     MiuixCard(contentPadding = PaddingValues(spacing.md)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            MiuixIcon(Icons.Outlined.FolderOpen, null, tint = colors.primary, size = 20.dp)
+            MiuixIcon(AgentIcons.ic_folder, null, tint = colors.primary, size = 20.dp)
             Spacer(Modifier.width(spacing.sm))
             Column(Modifier.weight(1f)) {
                 MiuixText("目标 APK", style = MiuixTheme.typography.titleSmall)
@@ -982,7 +958,7 @@ private fun SourcePicker(
             text = if (running != null) "分析中 ${(running.progress * 100).toInt()}%" else "开始分析",
             onClick = { if (running == null) onAnalyze() },
             modifier = Modifier.fillMaxWidth(),
-            leadingIcon = Icons.Outlined.PlayArrow,
+            leadingIconRes = AgentIcons.ic_play_circle,
         )
     }
 }
@@ -1052,7 +1028,7 @@ private fun ManifestPane(session: DecompileSession) {
         MiuixEmptyState(
             title = "清单解析失败",
             description = "该 APK 没有 AndroidManifest.xml，或 AXML 结构不受支持。",
-            icon = Icons.Outlined.ErrorOutline,
+            iconRes = AgentIcons.ic_error,
         )
         return
     }
@@ -1104,7 +1080,7 @@ private fun ResourcePane(session: DecompileSession, onShow: (String) -> Unit) {
         MiuixEmptyState(
             title = "没有资源表",
             description = "该 APK 没有 resources.arsc（可能是纯 dex 或 split APK）。",
-            icon = Icons.Outlined.ErrorOutline,
+            iconRes = AgentIcons.ic_error,
         )
         return
     }
@@ -1115,7 +1091,7 @@ private fun ResourcePane(session: DecompileSession, onShow: (String) -> Unit) {
                     MiuixListItem(
                         title = type,
                         subtitle = "$count 项",
-                        leadingIcon = Icons.AutoMirrored.Outlined.Article,
+                        leadingIconRes = AgentIcons.ic_file_text,
                         onClick = { onShow("资源类型 $type 共 $count 项") },
                     )
                 }
@@ -1173,7 +1149,7 @@ private fun SearchPane(
                     MiuixListItem(
                         title = hit.text.take(120),
                         subtitle = "${hit.kind} · ${hit.owner} · ${hit.detail}",
-                        leadingIcon = Icons.Outlined.Search,
+                        leadingIconRes = AgentIcons.ic_search,
                         onClick = { onShow(hit) },
                     )
                 }
@@ -1200,7 +1176,7 @@ private fun TaskCenter(
             .padding(vertical = spacing.md),
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = spacing.md), verticalAlignment = Alignment.CenterVertically) {
-            MiuixIcon(Icons.Outlined.Terminal, null, tint = colors.primary, size = 20.dp)
+            MiuixIcon(AgentIcons.ic_terminal, null, tint = colors.primary, size = 20.dp)
             Spacer(Modifier.width(spacing.md))
             Column(Modifier.weight(1f)) {
                 MiuixText("任务中心", style = MiuixTheme.typography.titleSmall)
@@ -1212,7 +1188,7 @@ private fun TaskCenter(
                 )
             }
             MiuixIconButton(
-                icon = if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowUp,
+                iconRes = if (expanded) AgentIcons.ic_chevron_down else AgentIcons.ic_chevron_up,
                 contentDescription = "展开或收起",
                 onClick = onToggle,
             )
@@ -1236,11 +1212,11 @@ private fun TaskCenter(
                 }
                 tasks.take(6).forEach { task ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                        MiuixIcon(
-                            icon = when (task.state) {
-                                TaskState.DONE -> Icons.Outlined.CheckCircle
-                                TaskState.FAILED -> Icons.Outlined.ErrorOutline
-                                else -> Icons.Outlined.Terminal
+                        MiuixIconRes(
+                            iconRes = when (task.state) {
+                                TaskState.DONE -> AgentIcons.ic_success
+                                TaskState.FAILED -> AgentIcons.ic_error
+                                else -> AgentIcons.ic_terminal
                             },
                             contentDescription = null,
                             tint = when (task.state) {
@@ -1314,7 +1290,7 @@ private fun InstalledAppSheet(
                     MiuixListItem(
                         title = entry.appLabel + if (entry.isSelf) "（本应用）" else "",
                         subtitle = entry.packageName,
-                        leadingIcon = Icons.Outlined.Widgets,
+                        leadingIconRes = AgentIcons.ic_svc_project_board,
                         onClick = { onPick(entry) },
                         showDivider = true,
                     )

@@ -126,7 +126,12 @@ object LinuxRuntime {
             append("[ -n \"\$D\" ] || D=223.5.5.5; ")
             append("printf 'nameserver %s\\nnameserver 223.5.5.5\\nnameserver 119.29.29.29\\n' \"\$D\" > \"\$R/etc/resolv.conf\" 2>/dev/null; ")
             append("cd \"\$R").append(workingDir).append("\" 2>/dev/null || cd \"\$R\" 2>/dev/null; ")
-            append("HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
+            // TMPDIR 必须指向 rootfs 内的 /tmp：继承宿主的 TMPDIR 会指向应用缓存
+            // 目录，在 chroot 里不存在，apt 的 postinst 会因 mktemp 失败而卡在半配置
+            // （与 AiShellSession 里同一处坑）。
+            // DEBIAN_FRONTEND 同理：没有终端，debconf 的各种前端都会报错。
+            append("HOME=/root TMPDIR=/tmp DEBIAN_FRONTEND=noninteractive ")
+            append("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
             append("TERM=xterm-256color LANG=C.UTF-8 ")
             // chroot 并不会改变工作目录，而宿主视角的 <rootfs>/root 在新根里并不存在，
             // 结果 pwd 会落在 /。所以在 chroot 内部再 cd 一次。
@@ -252,7 +257,9 @@ object LinuxRuntime {
         val args = when (component) {
             LinuxComponent.PYTHON -> "uv --version 2>/dev/null || true"
             LinuxComponent.NODE -> "node --version 2>/dev/null || true"
-            LinuxComponent.SSH -> "ssh -V 2>&1 || ssh-keygen --help 2>/dev/null | head -1 || true"
+            // 与探针一致：sshd 就位后取 OpenSSH 版本。
+            // 先试 sshd -V，再退回 ssh -V（同属一个 openssh 版本号）。
+            LinuxComponent.SSH -> "sshd -V 2>&1 | head -n 1 || ssh -V 2>&1 | head -n 1 || true"
             LinuxComponent.JAVA -> "java -version 2>&1 | head -n 1 || true"
             LinuxComponent.APK -> "apktool --version 2>/dev/null || true"
             LinuxComponent.GIT -> "git --version 2>/dev/null || true"

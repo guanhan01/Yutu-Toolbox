@@ -1,0 +1,17 @@
+<!-- ic_voice_wave -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:fillType="evenOdd"
+        android:pathData="M4,11V13M7.6,8.4V15.6M11.2,5.8V18.2M14.8,8.4V15.6M18.4,11V13" />
+
+</vector>

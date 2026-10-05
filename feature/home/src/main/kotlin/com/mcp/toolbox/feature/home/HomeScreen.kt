@@ -3,29 +3,9 @@ package com.mcp.toolbox.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.runtime.produceState
-import android.net.Uri
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,163 +22,90 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.AccountTree
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.BatteryFull
-import androidx.compose.material.icons.outlined.Cable
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.FontDownload
-import androidx.compose.material.icons.outlined.FileCopy
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.FindInPage
-import androidx.compose.material.icons.outlined.FindReplace
-import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.FolderZip
-import androidx.compose.material.icons.outlined.Http
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.ListAlt
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material.icons.outlined.ManageSearch
-import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.PictureAsPdf
-import androidx.compose.material.icons.outlined.PieChart
-import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.PowerSettingsNew
-import androidx.compose.material.icons.outlined.QueryStats
-import androidx.compose.material.icons.outlined.Slideshow
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Checklist
-import androidx.compose.material.icons.outlined.Compress
-import androidx.compose.material.icons.outlined.PlayCircleOutline
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.RemoveCircleOutline
-import androidx.compose.material.icons.outlined.AddComment
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ArrowUpward
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Construction
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DataObject
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.DriveFileMove
-import androidx.compose.material.icons.outlined.DriveFileRenameOutline
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.SwapHoriz
-import androidx.compose.material.icons.outlined.SdCard
-import androidx.compose.material.icons.outlined.Sensors
-import androidx.compose.material.icons.outlined.ShowChart
-import androidx.compose.material.icons.outlined.Router
-import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material.icons.outlined.Screenshot
-import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.Swipe
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.TableChart
-import androidx.compose.material.icons.outlined.TouchApp
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Unarchive
-import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material.icons.outlined.Stop
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.mcp.toolbox.feature.home.agent.FeedbackComposer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.platform.LocalClipboardManager
+import com.mcp.toolbox.feature.home.agent.AgentSegmentCodec
+import com.mcp.toolbox.feature.home.agent.DemoRunner
+import com.mcp.toolbox.feature.home.agent.rememberAgentChatState
+import com.mcp.toolbox.feature.home.agent.ui.AgentMessageList
+import com.mcp.toolbox.feature.home.agent.ui.rememberClipboardWriter
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
-import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
+import com.mcp.toolbox.core.design.component.MiuixDivider
+import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixMenuDivider
 import com.mcp.toolbox.core.design.component.MiuixMenuGroupLabel
 import com.mcp.toolbox.core.design.component.MiuixMenuItem
 import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
 import com.mcp.toolbox.core.design.component.MiuixSlider
+import com.mcp.toolbox.core.design.component.MiuixSwitch
 import com.mcp.toolbox.core.design.component.MiuixText
+import com.mcp.toolbox.core.design.shape.sqSurface
 import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixTopAppBar
-import com.mcp.toolbox.core.design.component.MarkdownText
-import com.mcp.toolbox.core.design.component.MiuixSwitch
 import com.mcp.toolbox.core.design.theme.MiuixTheme
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.runtime.produceState
+import android.net.Uri
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import kotlin.math.roundToInt
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 
 /**
- * 首页：AI Agent 对话界面。
+ * 首页：AI 对话界面。
  *
- * 会话与消息由 [ChatStore] 本地保管；真正的模型调用通过 [onSend] 注入，
+ * 会话与消息由 [ChatStore] 本地保管；真正的模型调用通过 [onStart] 注入，
  * 由宿主（app 模块）决定用哪个服务商与密钥，本模块不依赖具体实现。
+ *
+ * 注意：AI 回答区（回答正文 / 思考步骤 / 工具调用卡片 / 压缩摘要 / 计划面板）正在重构，
+ * 相关 UI 已全部移除，消息区暂时是空占位。输入栏、顶栏与侧边栏对话记录不受影响。
  */
 @Composable
 fun HomeScreen(
@@ -207,19 +114,19 @@ fun HomeScreen(
     /** 打开终端。由宿主导航，本模块不依赖具体路由。 */
     onOpenTerminal: () -> Unit = {},
     /**
+     * 用**内置浏览器**打开一个链接（AI 回答里的链接走这里）。
+     *
+     * 宿主决定用哪个页面承载；本模块只把地址交出去，
+     * 所以不依赖 `:feature:web`，也不假设一定有浏览器。
+     */
+    onOpenWeb: (String) -> Unit = {},
+    /**
      * 启动一次请求。实现方应在应用级作用域里执行，
      * 这样离开页面或进后台都不会中断。
      */
-    onStart: (sessionId: String, history: List<ChatMessage>) -> Unit = { _, _ -> },
-    /** 当前正在流式接收的文本；未进行时为 null。 */
-    runningText: String? = null,
-    /**
-     * 本轮回复的时间线（实时更新，结束时才落盘成正式消息）。
-     *
-     * 思考与工具调用按发生顺序混排，因此「工具之后继续思考」会自然排在工具下面。
-     */
-    runningTimeline: List<RunningStep> = emptyList(),
-    /** 是否已有请求在执行（可能刚发出、还没有增量）。 */
+    onStart: (sessionId: String, assistantMessageId: String, history: List<ChatMessage>) -> Unit =
+        { _, _, _ -> },
+    /** 是否已有请求在执行。 */
     running: Boolean = false,
     onStop: () -> Unit = {},
     currentModel: String = "",
@@ -241,13 +148,6 @@ fun HomeScreen(
      * 一个看着精确、其实错误的比例。
      */
     contextWindow: Int? = null,
-    /** 计划模式开关状态。 */
-    planEnabled: Boolean = false,
-    onTogglePlan: (Boolean) -> Unit = {},
-    /** 压缩当前会话的较早历史（由宿主调模型执行）。 */
-    onCompress: (() -> Unit)? = null,
-    /** 压缩进行中。 */
-    compressing: Boolean = false,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -261,16 +161,9 @@ fun HomeScreen(
     val sending = running
     var picker by remember { mutableStateOf<PickerKind?>(null) }
     var showOverflow by remember { mutableStateOf(false) }
-    var showPlan by remember { mutableStateOf(false) }
-    // 加号按钮在窗口中的位置，用作溢出菜单的锚点
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
     val attachments = remember { mutableStateListOf<ChatAttachment>() }
-    val clipboard = LocalClipboardManager.current
-    /** 长按弹出的消息操作菜单目标；编辑弹层复用同一个目标。 */
-    var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
-    /** 正在编辑的用户消息：非空时输入栏处于编辑态。 */
-    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
 
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -304,127 +197,228 @@ fun HomeScreen(
             )
         }
     }
-    val listState = rememberLazyListState()
-    /**
-     * 过程块的展开状态，key = 该段过程在本会话里的序号（"p0"、"p1"…）。
-     *
-     * 必须放会话级：放在 ProcessBlock 内部时，LazyColumn 滑出屏幕回收 item 就会
-     * 连同状态一起丢掉，表现出来就是「手动展开后一滚出屏幕就自己缩回去」。
-     * 用序号当 key 还顺手解决第二个坑：运行中那段和落盘后那段是同一个序号，
-     * 所以回复生成完、实时块换成历史块时**展开状态不会重置**。
-     */
-    val processExpanded = remember(session?.id) { mutableStateMapOf<String, Boolean>() }
-    // 用户往上翻时不再强制滚到底，改为露出「回到最新」
-    val atBottom by remember {
-        derivedStateOf {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-            last == null || last.index >= listState.layoutInfo.totalItemsCount - 1
-        }
+
+    // 必须先完成加载：`load()` 是无条件 `_sessions.value = parsed`，
+    // 两个独立的 LaunchedEffect 谁先跑不确定，演示若先建会话就会被它覆盖掉。
+    var storeLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        ChatStore.load(context)
+        storeLoaded = true
     }
 
-    LaunchedEffect(Unit) { ChatStore.load(context) }
-
-    val messageCount = session?.messages?.size ?: 0
-    LaunchedEffect(messageCount) {
-        // 只在用户本来就贴着底部时跟随；翻看历史时不打断
-        if (messageCount > 0 && atBottom) listState.animateScrollToItem(messageCount - 1)
-    }
-
-    // 上下文用量与压缩记录都来自 store；后者决定「哪几条历史已被摘要替换」
+    // 输入栏里那个上下文用量条用的数据（旧回答 UI 的用量统计不受影响）
     val usageMap by ChatUsageStore.usage.collectAsState()
-    val compressStates by CompressionStore.states.collectAsState()
-    val compression = session?.id?.let { compressStates[it] }
     val used = session?.id?.let { id ->
         usageMap[id]?.promptTokens?.takeIf { it > 0 }
     } ?: ChatUsageStore.estimate(context, session, null)
     val hasRealUsage = session?.id?.let { ChatUsageStore.hasRealValue(it) } == true
 
-    // 超过阈值自动压缩一次，同一会话只自动触发一次，避免连环压
-    var autoCompressed by remember(session?.id) { mutableStateOf(false) }
-    val planMap by PlanStore.plans.collectAsState()
-    val plan = session?.id?.let { planMap[it] }?.takeIf { !it.isEmpty }
+    val newChatTitle = stringResource(R.string.chat_title)
+    val attachContext = stringResource(R.string.chat_attach_context)
 
-    // 每段压缩的「第一条仍在历史里的消息」id -> 该段记录。
-    // 段首被删掉时摘要块顺延到下一条，不会整段消失。
-    val summaryAnchors = remember(session?.messages, compression) {
-        val messages = session?.messages.orEmpty()
-        compression?.ranges.orEmpty().mapNotNull { range ->
-            messages.firstOrNull { it.id in range.messageIds }?.let { it.id to range }
-        }.toMap()
+    // ── 回答区状态 ──
+    // 放在页面这一层而不是 LazyColumn 里：切页 / 进后台时时间线不丢，
+    // 与 ChatRunner 运行在应用级作用域是同一个理由。
+    val agent = rememberAgentChatState()
+
+    /**
+     * 正在编辑的消息 id。非空即进入编辑态。
+     *
+     * 编辑语义（与 `chat_editing_hint` 的文案一致）：
+     * 原提问回到输入框 → 用户改（还可以通过 + 追加附件）→ 点发送生效。
+     * 生效时把原提问**之后**的消息全部作废，再用新内容重跑一轮。
+     */
+    var editingMessageId by remember { mutableStateOf<String?>(null) }
+    /** 编辑态下点发送会走「应用编辑」而不是「新提问」。 */
+    val editing = editingMessageId != null
+    /** 进入编辑态后请求一次输入框焦点；消费掉即复位，避免反复抢焦点。 */
+    var focusInput by remember { mutableStateOf(false) }
+    val inputFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    // 进入编辑态后把焦点交给输入框（消费掉标记，避免每次重组都抢焦点）
+    LaunchedEffect(focusInput) {
+        if (focusInput) {
+            inputFocus.requestFocus()
+            focusInput = false
+        }
+    }
+
+    // 回答区的落盘出口：把「本轮时间线 + 正文 + 终态」写回会话。
+    // 用回调注入而不是让 state 直接依赖 ChatStore，状态层因此保持可单测。
+    LaunchedEffect(agent) {
+        agent.persist = { segments, answer, turnState ->
+            val sid = agent.sessionId
+            val mid = agent.messageId
+            // 没绑定轮次（还没发送 / 已切会话）就没什么可写的
+            if (sid != null && mid != null) {
+                scope.launch {
+                    ChatStore.upsertAssistant(
+                        context = context,
+                        sessionId = sid,
+                        messageId = mid,
+                        content = answer,
+                        segmentsJson = AgentSegmentCodec.encode(segments),
+                        turnState = turnState,
+                    )
+                }
+            }
+        }
+    }
+
+    // 注意：这里**不要**在 currentId 变化时自动 detachTurn()。
+    // 发送时先落占位消息（会让 currentId 变化）、再 bindTurn，而 LaunchedEffect
+    // 的执行时机与 bindTurn 谁先谁后不确定；一旦它跑在后面，就会把刚绑上的轮次
+    // 解绑掉，进度再也写不回那条消息（实测：新建会话的第一条回答过程必丢）。
+    // 不同会话的过程本来就是各写各的消息 id，不存在互相污染。
+
+    // 进后台强制落盘一次：进程可能随时被杀
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) agent.onBackground()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val writeClipboard = rememberClipboardWriter()
+    /** 轻量提示（复制成功、分享失败等）。 */
+    val toast = com.mcp.toolbox.core.design.component.rememberMiuixToastState()
+    /** 反馈草稿；非空即弹出确认层。**先让用户过目再发**，不静默上报。 */
+    var feedbackDraft by remember { mutableStateOf<String?>(null) }
+
+    // debug 专用：若启动 Intent 带了演示开关就播一遍（见 DemoRunner 注释）。
+    // 不占任何界面元素，release 里 DemoRunner.enabled 恒为 false。
+    LaunchedEffect(storeLoaded) {
+        if (storeLoaded) DemoRunner.runPending(context, agent)
+    }
+
+
+    /**
+     * 开一轮新的 AI 回答（重新生成 / 继续生成 / 重试都用它）。
+     *
+     * 先落一条 `Running` 占位并绑定，这样过程与中断都有落点；
+     * 再把已有的会话历史交给 `ChatRunner` 重跑。
+     */
+    /**
+     * 重跑一轮回答。
+     *
+     * - [reuseMessageId] 非空：**原地重来**——把这条 AI 消息的内容与时间线清空，
+     *   过程重新写进同一条（「重新生成」和「继续生成 / 重试」都是这个语义）
+     * - [reuseMessageId] 为空：新建一条 AI 消息
+     */
+    suspend fun startNewTurn(
+        sessionId: String,
+        agent: com.mcp.toolbox.feature.home.agent.AgentChatState,
+        context: android.content.Context,
+        reuseMessageId: String? = null,
+    ) {
+        val session = ChatStore.sessions.value.firstOrNull { it.id == sessionId }
+        val history = session?.messages.orEmpty()
+        val assistantId = reuseMessageId ?: java.util.UUID.randomUUID().toString()
+        // 原地重来要**清空**旧内容与旧时间线。早先这里把旧的 segmentsJson 原样带回去，
+        // 于是「重新生成」被解读成「在刚刚的回答下面继续思考」。
+        ChatStore.upsertAssistant(
+            context = context,
+            sessionId = sessionId,
+            messageId = assistantId,
+            content = "",
+            segmentsJson = null,
+            turnState = TurnState.Running,
+        )
+        agent.bindTurn(sessionId, assistantId)
+        onStart(sessionId, assistantId, history.forModel())
     }
 
     /**
-     * 消息区真正要渲染的项。
+     * 进入编辑态：把这条提问的原文放回输入框。
      *
-     * 不能直接按 messages 逐条渲染：一个过程块会吃掉七八条消息，逐条渲染时被跳过的
-     * 那些仍然占着一个 item（内容为空，但照样参与 Arrangement.spacedBy 的间距），
-     * 于是「步骤块」和「回答」之间凭空多出几十 dp 的空隙。先在数据层把过程段折叠成
-     * 一项，渲染层就没有空 item 了。
+     * 只做「回到输入框」这一件事——真正的生效发生在用户点发送时（[applyEdit]），
+     * 这样用户可以在里面继续追加附件、改措辞，中途反悔还能取消。
      */
-    val chatItems = remember(session?.messages, compression) {
-        val msgs = session?.messages.orEmpty()
-        val out = mutableListOf<ChatItem>()
-        var i = 0
-        var ordinal = 0
-        while (i < msgs.size) {
-            val msg = msgs[i]
-            val range = compression?.rangeOf(msg.id)
-            if (range != null) {
-                summaryAnchors[msg.id]?.let { anchored ->
-                    out += ChatItem.Summary(
-                        key = "s-$" + "{anchored.id}",
-                        range = anchored,
-                        original = msgs.filter { it.id in anchored.messageIds },
-                        position = compression?.ranges?.indexOf(anchored)?.takeIf { it >= 0 } ?: 0,
-                    )
-                }
-                i++
-                continue
-            }
-            if (msg.isProcessMessage()) {
-                val start = i
-                while (i < msgs.size && msgs[i].isProcessMessage() &&
-                    compression?.rangeOf(msgs[i].id) == null
-                ) {
-                    i++
-                }
-                out += ChatItem.Process(
-                    key = "p$ordinal",
-                    steps = msgs.subList(start, i).map { it.toProcessStep(context) },
-                )
-                ordinal++
-            } else {
-                out += ChatItem.Single(key = msg.id, message = msg)
-                i++
+    fun beginEdit(message: ChatMessage) {
+        if (sending) return
+        editingMessageId = message.id
+        input = message.content
+        // 原消息带的附件也一并回到待发送清单，编辑才是「所见即所得」
+        attachments.clear()
+        attachments += message.attachments.map { ref ->
+            when (ref.kind) {
+                AttachmentRef.Kind.FILE -> ChatAttachment.File("", ref.label)
+                AttachmentRef.Kind.FOLDER -> ChatAttachment.Folder("", ref.label)
+                AttachmentRef.Kind.PATH -> ChatAttachment.Path(ref.label)
+                AttachmentRef.Kind.IMAGE -> ChatAttachment.Image("", ref.label)
             }
         }
-        out
+        focusInput = true
     }
 
-    /** 运行中那一段的序号 = 已有段数，于是它落盘后正好接管同一个 key。 */
-    val liveProcessKey = "p" + chatItems.count { it is ChatItem.Process }
+    /**
+     * 应用编辑：改写原提问，作废它之后的一切，然后用新内容重跑。
+     *
+     * 「作废它之后的」是必须的：原来的回答是针对旧措辞生成的，
+     * 留着会与新提问对不上（用户实测反馈的连带关系）。
+     */
+    suspend fun applyEdit(
+        messageId: String,
+        newContent: String,
+        attached: List<ChatAttachment>,
+    ) {
+        val sid = session?.id ?: return
+        val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
+        val textAttachments = attached.filterNot { it is ChatAttachment.Image }
+        val modelContext = textAttachments
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("\n\n") { it.toContext(context) }
+            ?.let { attachContext + "\n" + it }
 
-    // 压缩后不能再自动触发：阈值会被压下去，否则会立刻又压一次
-    val overThreshold = contextWindow != null && contextWindow > 0 &&
-        used.toFloat() / contextWindow >= ChatUsageStore.COMPRESS_THRESHOLD
-    LaunchedEffect(session?.id, overThreshold, sending) {
-        if (overThreshold && !autoCompressed && !sending && onCompress != null && !compressing) {
-            autoCompressed = true
-            onCompress()
-        }
+        // 1) 改写原提问
+        ChatStore.updateMessage(
+            context = context,
+            sessionId = sid,
+            messageId = messageId,
+            content = newContent,
+            imageUris = imageUris,
+        )
+        // 2) 补充 modelContext 与附件展示信息（updateMessage 不管这两项）
+        ChatStore.patchUserExtras(
+            context = context,
+            sessionId = sid,
+            messageId = messageId,
+            attachments = attached.map { it.toRef() },
+            modelContext = modelContext,
+        )
+        // 3) 作废它之后的消息，拿到可用的历史
+        val kept = ChatStore.truncateAfter(context, sid, messageId)
+        // 4) 新开一轮（复用 truncate 后的历史）
+        val assistantId = java.util.UUID.randomUUID().toString()
+        ChatStore.upsertAssistant(
+            context = context,
+            sessionId = sid,
+            messageId = assistantId,
+            content = "",
+            segmentsJson = null,
+            turnState = TurnState.Running,
+        )
+        agent.bindTurn(sid, assistantId)
+        onStart(sid, assistantId, kept.forModel())
     }
-
-    val newChatTitle = stringResource(R.string.chat_title)
-
-    val attachContext = stringResource(R.string.chat_attach_context)
-    val toolRunning = stringResource(R.string.chat_tool_running)
 
     fun submit(text: String) {
         val content = text.trim()
         if ((content.isEmpty() && attachments.isEmpty()) || sending) return
         val attached = attachments.toList()
+        val editId = editingMessageId
         input = ""
         attachments.clear()
+        editingMessageId = null
+
+        // ── 编辑态：作废原提问之后的消息，再用新内容重跑 ──
+        if (editId != null) {
+            scope.launch { applyEdit(editId, content, attached) }
+            return
+        }
+
         scope.launch {
             val title = content.ifBlank { attached.firstOrNull()?.label ?: "附件" }
             val target = session ?: ChatStore.newSession(context, title.take(24))
@@ -433,99 +427,71 @@ fun HomeScreen(
             val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
             val textAttachments = attached.filterNot { it is ChatAttachment.Image }
 
+            // ── 一条用户消息承载全部输入 ──
+            // 早先附件上下文被当成第二条 `role = USER` 的消息塞进会话，
+            // 界面上于是出现两个用户气泡，第二个还是一大段原始上下文。
+            // 现在附件只作为展示信息 + 一条仅发给模型的 modelContext。
+            val modelContext = textAttachments
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString("\n\n") { it.toContext(context) }
+                ?.let { attachContext + "\n" + it }
+
             val userMessage = ChatMessage(
                 role = ChatMessage.Role.USER,
                 content = content,
                 imageUris = imageUris,
+                attachments = attached.map { it.toRef() },
+                modelContext = modelContext,
             )
-            // 落盘只留文本，避免临时 URI 进会话记录
-            ChatStore.append(context, target.id, userMessage.copy(imageUris = emptyList()))
+            ChatStore.append(context, target.id, userMessage)
 
-            val withAttachments = if (textAttachments.isEmpty()) {
-                listOf(userMessage)
+            // ── 本轮 AI 消息先落一条 Running 占位 ──
+            // 这样「切后台被回收 → 再进来」能知道上次没跑完，过程也不会丢。
+            val assistantId = java.util.UUID.randomUUID().toString()
+            ChatStore.upsertAssistant(
+                context = context,
+                sessionId = target.id,
+                messageId = assistantId,
+                content = "",
+                segmentsJson = null,
+                turnState = TurnState.Running,
+            )
+            // 回答区把过程写给这条消息
+            agent.bindTurn(target.id, assistantId)
+
+            // 交给外部任务持有者执行，离开页面也不会中断。
+            // 历史用 forModel() 把 modelContext 拼进正文，界面与落盘都不受影响。
+            onStart(target.id, assistantId, (target.messages + userMessage).forModel())
+        }
+    }
+
+    /**
+     * 链接点击的落点。
+     *
+     * 只有 http/https 走内置浏览器；`mailto:`、`tel:` 交给系统更合适
+     * （内置 WebView 打不开它们）。判断放在这里而不是渲染层：
+     * 「什么链接去哪」是宿主的决定，Markdown 只负责把 URL 递出来。
+     */
+    val linkOpener: (String) -> Unit = remember {
+        { url ->
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                onOpenWeb(url)
             } else {
-                listOf(
-                    userMessage,
-                    ChatMessage(
-                        role = ChatMessage.Role.USER,
-                        content = attachContext + "\n" +
-                            textAttachments.joinToString("\n\n") { it.toContext(context) },
-                    ),
-                )
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url),
+                        ),
+                    )
+                }.onFailure { toast.show("无法打开链接") }
             }
-            val history = (target.messages + withAttachments)
-                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-            // 交给外部任务持有者执行，离开页面也不会中断
-            onStart(target.id, history)
         }
     }
 
-    /** 从某条用户消息重新生成：截断它之后的全部消息，把含它的历史交回模型。 */
-    fun regenerateFrom(userMessage: ChatMessage) {
-        val current = session ?: return
-        if (userMessage.role != ChatMessage.Role.USER) return
-        scope.launch {
-            val kept = ChatStore.truncateFrom(context, current.id, userMessage.id)
-            val history = (kept + userMessage)
-                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-            if (history.isNotEmpty()) onStart(current.id, history)
-        }
-    }
-
-    /** 应用用户编辑：更新消息文本与图片，并从这条消息重新生成回复。 */
-    fun applyEdit(message: ChatMessage, newText: String, newImages: List<String>) {
-        val current = session ?: return
-        scope.launch {
-            // 先删掉这条之后的回复（保留它自己），再按 id 就地更新，最后重发
-            val kept = ChatStore.truncateAfter(context, current.id, message.id)
-            ChatStore.updateMessage(
-                context, current.id, message.id,
-                content = newText,
-                imageUris = newImages,
-            )
-            val updated = kept.map { m ->
-                if (m.id == message.id) {
-                    m.copy(content = newText, imageUris = newImages, edited = true)
-                } else {
-                    m
-                }
-            }
-            val history = updated
-                .filter { it.role != ChatMessage.Role.SYSTEM || it.content.isNotBlank() }
-            if (history.isNotEmpty()) onStart(current.id, history)
-        }
-    }
-
-    /** 进入编辑态：内容预填进输入栏，附件可经加号菜单追加，点发送确认。 */
-    fun beginEdit(message: ChatMessage) {
-        editingMessage = message
-        input = message.content
-        attachments.clear()
-    }
-
-    /** 确认编辑：输入栏内容 +（可选）附件写回消息并重新生成。 */
-    fun confirmEdit() {
-        val message = editingMessage ?: return
-        val content = input.trim()
-        if (content.isEmpty() || sending) return
-        val attached = attachments.toList()
-        input = ""
-        attachments.clear()
-        editingMessage = null
-        val imageUris = attached.filterIsInstance<ChatAttachment.Image>().map { it.uri }
-        val textAttachments = attached.filterNot { it is ChatAttachment.Image }
-        val finalContent = if (textAttachments.isEmpty()) content
-        else content + "\n\n" + attachContext + "\n" +
-            textAttachments.joinToString("\n\n") { it.toContext(context) }
-        scope.launch { applyEdit(message, finalContent, imageUris) }
-    }
-
-    fun cancelEdit() {
-        editingMessage = null
-        input = ""
-        attachments.clear()
-    }
-
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.mcp.toolbox.core.design.component.LocalLinkOpener provides linkOpener,
+    ) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -536,12 +502,12 @@ fun HomeScreen(
             // 摆在中间既占地方又容易被长标题截断成「检查所有工…」。
             title = session?.displayTitle ?: stringResource(R.string.chat_title),
             showTitle = false,
-            navigationIcon = Icons.Outlined.Menu,
+            navigationIconRes = AgentIcons.ic_menu,
             onNavigationClick = onOpenDrawer,
             actions = {
                 // 终端：放在「新建对话」左侧，两个按钮各自 40dp，触控区不会互相挤占
                 MiuixIconButton(
-                    icon = Icons.Outlined.Terminal,
+                    iconRes = AgentIcons.ic_terminal,
                     contentDescription = stringResource(R.string.chat_terminal),
                     onClick = onOpenTerminal,
                     buttonSize = 40.dp,
@@ -549,7 +515,7 @@ fun HomeScreen(
                 )
                 // 新建对话
                 MiuixIconButton(
-                    icon = Icons.Outlined.AddComment,
+                    iconRes = AgentIcons.ic_chat,
                     contentDescription = stringResource(R.string.chat_new),
                     onClick = {
                         if (!sending) scope.launch { ChatStore.newSession(context, newChatTitle) }
@@ -560,13 +526,6 @@ fun HomeScreen(
             },
         )
 
-        // 计划条：只占一行；完整计划在弹层里看
-        if (planEnabled && plan != null) {
-            Row(modifier = Modifier.padding(horizontal = spacing.pageHorizontal, vertical = 2.dp)) {
-                PlanBar(plan = plan, onClick = { showPlan = true })
-            }
-        }
-
         // 输入栏要「浮」在内容之上，而不是与内容平级。
         //
         // 原来是 Column 里两个兄弟：列表底边 = 输入栏顶边，形成一条硬裁切线，
@@ -576,210 +535,184 @@ fun HomeScreen(
         // 保证最后一条消息滚到底时不会被输入栏永久遮住。
         var inputBarHeightPx by remember { mutableIntStateOf(0) }
 
-
         Box(Modifier.weight(1f)) {
-            // 「回到最新」浮标：用户往上翻时出现，点一下回到底部
-            if (sending && !atBottom) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp)
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(colors.surfaceContainerHigh)
-                        .clickable {
-                            scope.launch {
-                                listState.animateScrollToItem(session!!.messages.size + 8)
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    MiuixIcon(
-                        Icons.Outlined.ArrowDownward,
-                        stringResource(R.string.chat_jump_latest),
-                        tint = colors.onSurfaceVariant,
-                        size = 20.dp,
+            // ── AI 回答区 ──
+            // 用户气泡 + AI 回答区（思考块 / 工具卡 / 正文 / 系统卡）由 AgentMessageList 渲染。
+            // 顶栏与输入栏结构未动，只在此处接上流式联动。
+            AgentMessageList(
+                state = agent,
+                messages = session?.messages.orEmpty(),
+                bottomPadding = with(LocalDensity.current) { inputBarHeightPx.toDp() } + spacing.md,
+                // 重新生成 / 继续生成 / 重试：都用当前会话已有的历史再跑一轮。
+                // 截断由 ChatStore 负责（见其 truncateFrom / truncateAfter），
+                // 这里不复制一套历史改写逻辑。
+                onRegenerate = {
+                    val sid = session?.id ?: return@AgentMessageList
+                    // 重新生成：作废最后一条 AI 回答（清空内容与过程），原地重来
+                    val lastAssistant = session?.messages
+                        ?.lastOrNull { it.role == ChatMessage.Role.ASSISTANT }?.id
+                    scope.launch { startNewTurn(sid, agent, context, lastAssistant) }
+                },
+                onDeleteAnswer = { id ->
+                    val sid = session?.id ?: return@AgentMessageList
+                    scope.launch { ChatStore.deleteMessage(context, sid, id) }
+                },
+                // 删除一「轮」：这条用户提问 + 它后面的过程与回答一起删。
+                //
+                // 为什么必须连带：只删用户那一条会把回答变成「无主的孤儿」——
+                // 它还挂在列表里，但已经不知道是谁问的（用户实测反馈
+                // 「发出去的问题不能删除」时提到的连带关系）。
+                onDeleteTurn = { userMessageId ->
+                    val sid = session?.id ?: return@AgentMessageList
+                    scope.launch {
+                        val msgs = ChatStore.sessions.value
+                            .firstOrNull { it.id == sid }?.messages.orEmpty()
+                        val start = msgs.indexOfFirst { it.id == userMessageId }
+                        if (start >= 0) {
+                            // 从这条提问开始，删到**下一条用户消息之前**为止
+                            val nextUser = msgs.drop(start + 1)
+                                .indexOfFirst { it.role == ChatMessage.Role.USER }
+                            val endExclusive = if (nextUser < 0) msgs.size else start + 1 + nextUser
+                            msgs.subList(start, endExclusive)
+                                .forEach { ChatStore.deleteMessage(context, sid, it.id) }
+                        }
+                    }
+                },
+                onContinue = {
+                    val sid = session?.id ?: return@AgentMessageList
+                    // 复用最后一条 AI 消息（就是被中断的那条），过程原地续写
+                    val lastAssistant = session?.messages
+                        ?.lastOrNull { it.role == ChatMessage.Role.ASSISTANT }?.id
+                    scope.launch { startNewTurn(sid, agent, context, lastAssistant) }
+                },
+                onRetry = {
+                    val sid = session?.id ?: return@AgentMessageList
+                    // 复用最后一条 AI 消息（就是被中断的那条），过程原地续写
+                    val lastAssistant = session?.messages
+                        ?.lastOrNull { it.role == ChatMessage.Role.ASSISTANT }?.id
+                    scope.launch { startNewTurn(sid, agent, context, lastAssistant) }
+                },
+                onOpenAuth = {},
+                onApproveTool = { round, seq -> agent.resolveApproval(round, seq, allowed = true) },
+                onDenyTool = { round, seq -> agent.resolveApproval(round, seq, allowed = false) },
+                onEditMessage = { message -> beginEdit(message) },
+                onCopied = { writeClipboard(agent.answerText()) },
+                // 「朗读 / 分享为图片 / 反馈」三项尚未实现，菜单项会置灰。
+                // 这里留空实现是**刻意的**：宁可让用户看到「暂不可用」，
+                // 也不要弹一个假装成功、实际什么都没发生的提示。
+                onSpeak = {},
+                // 分享为图片：把捕获到的图层写成 PNG，再交给系统分享面板。
+                // 失败时明确告知，**不假装成功**。
+                onShareImage = { layer ->
+                    scope.launch {
+                        val ok = com.mcp.toolbox.feature.home.agent.AnswerImageShare.share(context, layer)
+                        if (!ok) toast.show("生成图片失败")
+                    }
+                },
+                // 打开来源链接。
+                //
+                // 这里走系统浏览器而不是应用内的 Web 模块：`WebScreen` 目前
+                // 不接受「初始 URL」，要支持得先给 web 模块加一个入口参数。
+                // 那是另一个模块的改动，不应该混在这次里一并塞进来——
+                // 用系统浏览器先让它真实可用。
+                // 来源面板里的「打开」也走内置浏览器。
+                //
+                // 早先这里直接 `startActivity(ACTION_VIEW)`，结果同一个界面里
+                // 「正文里的链接」走内置浏览器、「来源卡的打开」却跳到系统浏览器
+                // （实测反馈）。同一种操作不该有两套行为。
+                onOpenSource = linkOpener,
+                onFeedback = { excerpt ->
+                    feedbackDraft = FeedbackComposer.compose(
+                        context = context,
+                        model = currentModel,
+                        answerExcerpt = excerpt,
                     )
-                }
-            }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = spacing.pageHorizontal,
-                    end = spacing.pageHorizontal,
-                    top = spacing.sm,
-                    // 底部预留输入栏高度：列表铺满内容区后，末条消息仍能滚到输入栏上方
-                    bottom = spacing.md + with(LocalDensity.current) { inputBarHeightPx.toDp() },
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(items = chatItems, key = { it.key }) { item ->
-                    when (item) {
-                        is ChatItem.Summary -> CompressionBlock(
-                            range = item.range,
-                            original = item.original,
-                            step = item.position + 1,
-                            total = compression?.ranges?.size ?: 1,
-                            onRestore = {
-                                scope.launch {
-                                    CompressionStore.remove(context, session!!.id, item.range.id)
-                                }
-                            },
-                        )
-
-                        is ChatItem.Process -> ProcessBlock(
-                            steps = item.steps,
-                            expandedKey = item.key,
-                            expandedMap = processExpanded,
-                        )
-
-                        is ChatItem.Single -> MessageBubble(
-                            message = item.message,
-                            onCopy = {
-                                clipboard.setText(
-                                    androidx.compose.ui.text.AnnotatedString(item.message.content),
-                                )
-                            },
-                            onResend = {
-                                if (!sending) scope.launch { regenerateFrom(item.message) }
-                            },
-                            onDelete = {
-                                if (!sending) scope.launch {
-                                    ChatStore.deleteMessage(context, session!!.id, item.message.id)
-                                }
-                            },
-                            onEdit = { if (!sending) beginEdit(item.message) },
-                        )
-                    }
-                }
-                if (sending) {
-                    // 思考与工具调用按发生顺序收进同一个过程框：谁先发生谁在前。
-                    // 中间旁白（模型带工具那轮的正文）仍按原位置单独铺开，
-                    // 于是「工具之后继续思考」自然落在工具下面。
-                    val processSteps = mutableListOf<ProcessStep>()
-                    fun flushProcess() {
-                        if (processSteps.isNotEmpty()) {
-                            val snapshot = processSteps.toList()
-                            item(key = liveProcessKey) {
-                                ProcessBlock(
-                                    steps = snapshot,
-                                    expandedKey = liveProcessKey,
-                                    expandedMap = processExpanded,
-                                    autoOpen = true,
-                                )
-                            }
-                            processSteps.clear()
-                        }
-                    }
-                    runningTimeline.forEach { step ->
-                        when (step) {
-                            is RunningStep.Thinking -> processSteps += ProcessStep.Thinking(
-                                text = step.text,
-                                live = step.live,
-                                elapsedMs = step.elapsedMs,
-                            )
-                            is RunningStep.Tool -> processSteps += ProcessStep.Tool(
-                                name = step.name,
-                                title = toolStepTitle(context, step.name, step.arguments),
-                                arguments = step.arguments,
-                                result = step.result,
-                                running = step.result.isEmpty(),
-                                elapsedMs = step.elapsedMs,
-                            )
-                            // 中间旁白也进同一个过程块：它和同轮的思考、工具是一体的
-                            is RunningStep.Narration -> processSteps += ProcessStep.Narration(
-                                text = step.text,
-                            )
-                        }
-                    }
-                    flushProcess()
-                    if (!runningText.isNullOrEmpty()) {
-                        item(key = "pending-text") { StreamingAnswer(runningText!!) }
-                    }
-                    if (runningTimeline.isEmpty() && runningText.isNullOrEmpty()) {
-                        item(key = "pending") { PendingBubble() }
-                    }
-                }
-            }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = spacing.pageHorizontal),
+            )
             InputBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onHeightMeasured = { inputBarHeightPx = it },
-            value = input,
-            onValueChange = { input = it },
-            sending = sending,
-            editing = editingMessage != null,
-            onCancelEdit = { cancelEdit() },
-            onSend = { if (editingMessage != null) confirmEdit() else submit(input) },
-            onStop = onStop,
-            onAttach = { showOverflow = true },
-            onPickModel = { picker = PickerKind.MODEL },
-            onPickReasoning = { picker = PickerKind.REASONING },
-            providerIconRes = providerIconRes,
-            providerIconLabel = stringResource(R.string.chat_pick_model),
-            reasoningActive = currentReasoning != "Default",
-            // 上下文细线与附件并入底板：它们和输入区属于同一条「输入栏」，
-            // 分开铺在底板外面会各自成块，看起来像好几个独立矩形。
-            usage = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    UsageIndicator(
-                        used = used,
-                        window = contextWindow,
-                        estimated = !hasRealUsage,
-                        compressing = compressing,
-                        onCompress = onCompress,
-                    )
-                }
-            },
-            attachmentRow = {
-                // 图片留在面板内：缩略图本身就是「所见即所得」的输入内容。
-                val images = attachments.withIndex().filter { it.value is ChatAttachment.Image }
-                if (images.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                modifier = Modifier.align(Alignment.BottomCenter),
+                onHeightMeasured = { inputBarHeightPx = it },
+                value = input,
+                onValueChange = { input = it },
+                sending = sending,
+                editing = editing,
+                onCancelEdit = {
+                    editingMessageId = null
+                    input = ""
+                },
+                onSend = { submit(input) },
+                focusRequester = inputFocus,
+                onStop = onStop,
+                onAttach = { showOverflow = true },
+                onPickModel = { picker = PickerKind.MODEL },
+                onPickReasoning = { picker = PickerKind.REASONING },
+                providerIconRes = providerIconRes,
+                providerIconLabel = stringResource(R.string.chat_pick_model),
+                reasoningActive = currentReasoning != "Default",
+                // 上下文细线与附件并入底板：它们和输入区属于同一条「输入栏」，
+                // 分开铺在底板外面会各自成块，看起来像好几个独立矩形。
+                usage = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
                     ) {
-                        images.forEach { (index, item) ->
-                            if (item is ChatAttachment.Image) {
-                                ImageAttachmentCard(
-                                    uri = item.uri,
-                                    label = item.label,
+                        UsageIndicator(
+                            used = used,
+                            window = contextWindow,
+                            estimated = !hasRealUsage,
+                        )
+                    }
+                },
+                attachmentRow = {
+                    // 图片留在面板内：缩略图本身就是「所见即所得」的输入内容。
+                    val images = attachments.withIndex().filter { it.value is ChatAttachment.Image }
+                    if (images.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                        ) {
+                            images.forEach { (index, item) ->
+                                if (item is ChatAttachment.Image) {
+                                    ImageAttachmentCard(
+                                        uri = item.uri,
+                                        label = item.label,
+                                        onRemove = { attachments.removeAt(index) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                fileRow = {
+                    // 文件 / 文件夹 / 路径挪到面板之外：它们是一份待发送清单，
+                    // 和输入框不是同一层，压在框里只会让输入区变高变乱。
+                    val files = attachments.withIndex().filter { it.value !is ChatAttachment.Image }
+                    if (files.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = spacing.sm),
+                            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(spacing.sm),
+                        ) {
+                            files.forEach { (index, item) ->
+                                FileChip(
+                                    visual = fileVisual(item),
                                     onRemove = { attachments.removeAt(index) },
                                 )
                             }
                         }
                     }
-                }
-            },
-            fileRow = {
-                // 文件 / 文件夹 / 路径挪到面板之外：它们是一份待发送清单，
-                // 和输入框不是同一层，压在框里只会让输入区变高变乱。
-                val files = attachments.withIndex().filter { it.value !is ChatAttachment.Image }
-                if (files.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = spacing.sm),
-                        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(spacing.sm),
-                    ) {
-                        files.forEach { (index, item) ->
-                            FileChip(
-                                visual = fileVisual(item),
-                                onRemove = { attachments.removeAt(index) },
-                            )
-                        }
-                    }
-                }
-            },
-        )
+                },
+            )
+        }
     }
 
     // 复用项目统一的锚定式溢出菜单，锚点取自输入栏加号按钮
@@ -794,18 +727,18 @@ fun HomeScreen(
     ) {
         MiuixMenuItem(
             text = stringResource(R.string.chat_pick_model),
-            icon = Icons.Outlined.SwapHoriz,
+            iconRes = AgentIcons.ic_svc_pipeline_app,
             onClick = { showOverflow = false; picker = PickerKind.MODEL },
         )
         MiuixMenuItem(
             text = stringResource(R.string.chat_pick_reasoning),
-            icon = Icons.Outlined.Psychology,
+            iconRes = AgentIcons.ic_brain,
             onClick = { showOverflow = false; picker = PickerKind.REASONING },
         )
         MiuixMenuDivider()
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_image),
-            icon = Icons.Outlined.Image,
+            iconRes = AgentIcons.ic_image,
             onClick = {
                 showOverflow = false
                 pickImage.launch(
@@ -815,17 +748,17 @@ fun HomeScreen(
         )
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_file),
-            icon = Icons.Outlined.Description,
+            iconRes = AgentIcons.ic_file_text,
             onClick = { showOverflow = false; pickFile.launch(arrayOf("*/*")) },
         )
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_folder),
-            icon = Icons.Outlined.FolderOpen,
+            iconRes = AgentIcons.ic_folder,
             onClick = { showOverflow = false; pickFolder.launch(null) },
         )
         MiuixMenuItem(
             text = stringResource(R.string.chat_attach_path),
-            icon = Icons.Outlined.Edit,
+            iconRes = AgentIcons.ic_edit,
             onClick = { showOverflow = false; showPathDialog = true },
         )
     }
@@ -882,23 +815,6 @@ fun HomeScreen(
         }
     }
 
-    // 完整计划的底部弹层
-    MiuixBottomSheet(
-        visible = showPlan && plan != null,
-        onDismiss = { showPlan = false },
-    ) {
-        plan?.let { current ->
-            PlanSheetContent(
-                plan = current,
-                onToggle = { taskId, status ->
-                    scope.launch {
-                        PlanStore.setTaskStatus(context, session!!.id, taskId, status)
-                    }
-                },
-            )
-        }
-    }
-
     // 思考档位：档位有强弱顺序，滑杆比列表更贴合「程度」语义。
     // 拖动即时生效（顶部标签实时显示当前档位），点外部收起。
     MiuixBottomSheet(
@@ -909,12 +825,131 @@ fun HomeScreen(
             labels = availableReasoning,
             current = currentReasoning,
             onSelect = onSelectReasoning,
-            planEnabled = planEnabled,
-            onTogglePlan = onTogglePlan,
         )
     }
+
+    // ── 反馈确认层 ──
+    // 先让用户看到将要发出去的内容，再选「去提 issue」或「发邮件」。
+    // 刻意不做静默上报：应用全部数据都在本机，突然往外发东西与这个定位矛盾。
+    val draft = feedbackDraft
+    if (draft != null) {
+        FeedbackSheet(
+            draft = draft,
+            onDismiss = { feedbackDraft = null },
+            onOpenIssue = {
+                val ok = FeedbackComposer.openIssue(context, "反馈：", draft)
+                if (!ok) toast.show("无法打开浏览器")
+                feedbackDraft = null
+            },
+            onOpenMail = {
+                val ok = FeedbackComposer.openMail(context, "Yutu Agt 反馈", draft)
+                if (!ok) toast.show("没有可用的邮件应用")
+                feedbackDraft = null
+            },
+            onCopy = {
+                writeClipboard(draft)
+                toast.show("已复制到剪贴板")
+                feedbackDraft = null
+            },
+        )
+    }
+
+    // 轻量提示：直接铺在根 Column 里。
+    //
+    // 不用 `MiuixToastHost` + `Modifier.align`：根是 `Column` 而不是 `Box`，
+    // `align` 在这里不合法；而为了放一个提示条去包一层 Box、把所有内容缩进一级，
+    // 改动面太大。这里就是一行贴顶的胶囊，够用且无副作用。
+    }  // CompositionLocalProvider
+
+    toast.message?.let { msg ->
+        LaunchedEffect(msg.id) {
+            delay(2200)
+            // 只在「还是这条提示」时关闭：期间来了新提示就不该被旧的计时器关掉
+            if (toast.message?.id == msg.id) toast.dismiss()
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = spacing.sm, bottom = spacing.xs),
+            contentAlignment = Alignment.Center,
+        ) {
+            MiuixText(
+                text = msg.text,
+                style = MiuixTheme.typography.labelMedium,
+                color = colors.onSurface,
+                modifier = Modifier
+                    .sqSurface(colors.surfaceContainerHigh, MiuixTheme.radius.md)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
+    }
 }
+
+/**
+ * 反馈确认弹层。
+ *
+ * 三件事：**看到内容** → 选择渠道 → 走人。
+ * 「复制」是给那些想自己挑渠道（论坛、聊天工具）的用户留的后路。
+ */
+@Composable
+private fun FeedbackSheet(
+    draft: String,
+    onDismiss: () -> Unit,
+    onOpenIssue: () -> Unit,
+    onOpenMail: () -> Unit,
+    onCopy: () -> Unit,
+) {
+    val colors = MiuixTheme.colors
+    val spacing = MiuixTheme.dimens.spacing
+    MiuixBottomSheet(visible = true, onDismiss = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = spacing.pageHorizontal, vertical = spacing.md),
+            verticalArrangement = Arrangement.spacedBy(spacing.md),
+        ) {
+            MiuixText(
+                text = "反馈",
+                style = MiuixTheme.typography.titleMedium,
+            )
+            MiuixText(
+                text = "下面是将要发送的内容。它只包含版本、机型和这段回答，不含其它会话记录。",
+                style = MiuixTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+            // 内容用等宽小字铺开并限高：要能看全，又不能把整屏占满
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 260.dp)
+                    .verticalScroll(rememberScrollState())
+                    .sqSurface(colors.surfaceContainerHigh, MiuixTheme.radius.md)
+                    .padding(10.dp),
+            ) {
+                MiuixText(
+                    text = draft,
+                    style = MiuixTheme.typography.code,
+                    color = colors.onSurface,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.sm)) {
+                MiuixButton(text = "提 issue", onClick = onOpenIssue, modifier = Modifier.weight(1f))
+                MiuixButton(
+                    text = "发邮件",
+                    onClick = onOpenMail,
+                    modifier = Modifier.weight(1f),
+                    variant = MiuixButtonVariant.OUTLINED,
+                )
+                MiuixIconButton(
+                    iconRes = AgentIcons.ic_copy,
+                    contentDescription = "复制反馈内容",
+                    onClick = onCopy,
+                )
+            }
+        }
+    }
 }
+
 
 /**
  * 思考档位滑杆。
@@ -927,8 +962,6 @@ private fun ReasoningSheet(
     labels: List<String>,
     current: String,
     onSelect: (String) -> Unit,
-    planEnabled: Boolean = false,
-    onTogglePlan: (Boolean) -> Unit = {},
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -990,33 +1023,11 @@ private fun ReasoningSheet(
             )
         }
 
-        Spacer(Modifier.height(spacing.md))
-
-        // 计划模式开关：紧跟在思考能力滑杆下方
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                MiuixText(
-                    text = stringResource(R.string.chat_plan_title),
-                    style = MiuixTheme.typography.bodyMedium,
-                )
-                MiuixText(
-                    text = stringResource(R.string.chat_plan_desc),
-                    style = MiuixTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(spacing.sm))
-            MiuixSwitch(
-                checked = planEnabled,
-                onCheckedChange = onTogglePlan,
-            )
-        }
     }
 
     // 配置跟上后丢掉本地拖动值，滑杆回到受控状态
     LaunchedEffect(current) { dragIndex = null }
 }
-
 /**
  * 图片附件：显示真实缩略图，点右上角 × 移除。
  *
@@ -1075,7 +1086,7 @@ private fun ImageAttachmentCard(
         } else {
             // 解码未完成时先摆一枚淡图标，占位与成品同尺寸，不跳版
             MiuixIcon(
-                Icons.Outlined.Image,
+                AgentIcons.ic_image,
                 label,
                 tint = colors.onSurfaceVariant,
                 size = 20.dp,
@@ -1094,7 +1105,7 @@ private fun ImageAttachmentCard(
             contentAlignment = Alignment.Center,
         ) {
             MiuixIcon(
-                Icons.Outlined.Close,
+                AgentIcons.ic_close,
                 stringResource(R.string.chat_attach_remove),
                 tint = Color.White,
                 size = 12.dp,
@@ -1104,7 +1115,7 @@ private fun ImageAttachmentCard(
 }
 
 /** 文件类附件的外观：类型图标、图标配色、展示文案。 */
-private data class FileVisual(val icon: ImageVector, val tint: Color, val text: String)
+private data class FileVisual(val icon: Int, val tint: Color, val text: String)
 
 /**
  * 算出文件 / 文件夹 / 路径附件的展示外观。
@@ -1117,12 +1128,12 @@ private fun fileVisual(item: ChatAttachment): FileVisual {
     val colors = MiuixTheme.colors
     return when (item) {
         is ChatAttachment.Folder ->
-            FileVisual(Icons.Outlined.FolderOpen, colors.primary, compactPath(item.label))
+            FileVisual(AgentIcons.ic_folder, colors.primary, compactPath(item.label))
 
         is ChatAttachment.Path -> {
             val path = compactPath(item.path)
             val (icon, tint) = if (item.isDirectory) {
-                Icons.Outlined.FolderOpen to colors.primary
+                AgentIcons.ic_folder to colors.primary
             } else {
                 fileTypeVisual(item.path)
             }
@@ -1135,33 +1146,33 @@ private fun fileVisual(item: ChatAttachment): FileVisual {
         }
 
         // 图片走 [ImageAttachmentCard]，这里只兜底，避免 when 不穷尽
-        is ChatAttachment.Image -> FileVisual(Icons.Outlined.Image, colors.primary, item.label)
+        is ChatAttachment.Image -> FileVisual(AgentIcons.ic_image, colors.primary, item.label)
     }
 }
 
 /** 按扩展名挑图标与配色。 */
 @Composable
-private fun fileTypeVisual(name: String): Pair<ImageVector, Color> {
+private fun fileTypeVisual(name: String): Pair<Int, Color> {
     val colors = MiuixTheme.colors
     return when (name.substringAfterLast('.', "").lowercase()) {
-        "pdf" -> Icons.Outlined.PictureAsPdf to colors.error
-        "ppt", "pptx", "keynote" -> Icons.Outlined.Slideshow to colors.warning
-        "zip", "rar", "7z", "tar", "gz", "bz2" -> Icons.Outlined.FolderZip to colors.warning
-        "ttf", "otf", "woff", "woff2" -> Icons.Outlined.FontDownload to colors.primary
-        "csv", "xls", "xlsx" -> Icons.Outlined.TableChart to colors.success
+        "pdf" -> AgentIcons.ic_file_pdf to colors.error
+        "ppt", "pptx", "keynote" -> AgentIcons.ic_presentation to colors.warning
+        "zip", "rar", "7z", "tar", "gz", "bz2" -> AgentIcons.ic_file_zip to colors.warning
+        "ttf", "otf", "woff", "woff2" -> AgentIcons.ic_font_size to colors.primary
+        "csv", "xls", "xlsx" -> AgentIcons.ic_table to colors.success
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg" ->
-            Icons.Outlined.Image to colors.primary
-        "mp4", "mkv", "mov", "avi", "webm", "flv" -> Icons.Outlined.Movie to colors.tertiary
-        "mp3", "wav", "flac", "m4a", "ogg", "aac" -> Icons.Outlined.MusicNote to colors.tertiary
-        "apk", "apks", "xapk" -> Icons.Outlined.Android to colors.success
-        "db", "sqlite", "sqlite3", "sql" -> Icons.Outlined.DataObject to colors.success
-        "pem", "der", "crt", "cer", "p12", "jks", "keystore" -> Icons.Outlined.Key to colors.warning
+            AgentIcons.ic_image to colors.primary
+        "mp4", "mkv", "mov", "avi", "webm", "flv" -> AgentIcons.ic_video to colors.tertiary
+        "mp3", "wav", "flac", "m4a", "ogg", "aac" -> AgentIcons.ic_music to colors.tertiary
+        "apk", "apks", "xapk" -> AgentIcons.ic_phone_device to colors.success
+        "db", "sqlite", "sqlite3", "sql" -> AgentIcons.ic_json_data to colors.success
+        "pem", "der", "crt", "cer", "p12", "jks", "keystore" -> AgentIcons.ic_key to colors.warning
         "html", "htm", "js", "ts", "jsx", "tsx", "kt", "kts", "java", "py", "sh",
         "c", "cpp", "h", "rs", "go", "rb", "php", "xml", "json", "yml", "yaml",
-        -> Icons.Outlined.Code to colors.tertiary
+        -> AgentIcons.ic_code to colors.tertiary
         "txt", "md", "log", "ini", "conf", "properties", "toml" ->
-            Icons.Outlined.Article to colors.onSurfaceVariant
-        else -> Icons.Outlined.InsertDriveFile to colors.onSurfaceVariant
+            AgentIcons.ic_file_text to colors.onSurfaceVariant
+        else -> AgentIcons.ic_file to colors.onSurfaceVariant
     }
 }
 
@@ -1228,7 +1239,7 @@ private fun FileChip(visual: FileVisual, onRemove: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             MiuixIcon(
-                Icons.Outlined.Close,
+                AgentIcons.ic_close,
                 stringResource(R.string.chat_attach_remove),
                 tint = colors.onSurfaceVariant,
                 size = 13.dp,
@@ -1287,36 +1298,7 @@ private fun PathDialog(
     }
 }
 
-/** 可选的两类弹层。 */
 private enum class PickerKind { MODEL, REASONING }
-
-/** 小圆角选择入口。 */
-@Composable
-private fun SelectorChip(text: String, onClick: () -> Unit) {
-    val colors = MiuixTheme.colors
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.surfaceContainerLow)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        MiuixText(
-            text = text,
-            style = MiuixTheme.typography.labelMedium,
-            color = colors.onSurface,
-            maxLines = 1,
-        )
-        MiuixIcon(
-            Icons.Outlined.ExpandMore,
-            null,
-            tint = colors.onSurfaceVariant,
-            size = 16.dp,
-        )
-    }
-}
 
 /** 输入栏：发送按钮内嵌在气泡里；有内容时气泡变白。 */
 @Composable
@@ -1342,6 +1324,8 @@ private fun InputBar(
     fileRow: @Composable () -> Unit = {},
     /** 把输入栏实测高度报出去，供外层给内容列表留出等高的底部内边距。 */
     onHeightMeasured: (Int) -> Unit = {},
+    /** 外部请求把焦点给到输入框（进入编辑态时用）。 */
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -1393,7 +1377,7 @@ private fun InputBar(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     MiuixIcon(
-                        Icons.Outlined.Edit,
+                        AgentIcons.ic_edit,
                         null,
                         tint = colors.primary,
                         size = 16.dp,
@@ -1413,7 +1397,7 @@ private fun InputBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         MiuixIcon(
-                            Icons.Outlined.Close,
+                            AgentIcons.ic_close,
                             stringResource(R.string.chat_cancel),
                             tint = colors.onSurfaceVariant,
                             size = 16.dp,
@@ -1439,7 +1423,15 @@ private fun InputBar(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (focusRequester != null) {
+                                Modifier.focusRequester(focusRequester)
+                            } else {
+                                Modifier
+                            },
+                        ),
                     textStyle = MiuixTheme.typography.bodyMedium.copy(color = colors.onSurface),
                     cursorBrush = SolidColor(colors.primary),
                     maxLines = 6,
@@ -1463,7 +1455,7 @@ private fun InputBar(
                     contentAlignment = Alignment.Center,
                 ) {
                     MiuixIcon(
-                        Icons.Outlined.Add,
+                        AgentIcons.ic_plus,
                         stringResource(R.string.chat_attach),
                         tint = colors.onSurfaceVariant,
                         size = 20.dp,
@@ -1477,7 +1469,7 @@ private fun InputBar(
                     contentAlignment = Alignment.Center,
                 ) {
                     MiuixIcon(
-                        Icons.Outlined.Psychology,
+                        AgentIcons.ic_brain,
                         stringResource(R.string.chat_pick_reasoning),
                         tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
                         size = 20.dp,
@@ -1510,7 +1502,7 @@ private fun InputBar(
                         }
                     } else {
                         MiuixIcon(
-                            Icons.Outlined.SwapHoriz,
+                            AgentIcons.ic_svc_pipeline_app,
                             null,
                             tint = colors.onSurfaceVariant,
                             size = 20.dp,
@@ -1519,7 +1511,7 @@ private fun InputBar(
                 }
 
                 MiuixIconButton(
-                    icon = if (sending) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
+                    iconRes = if (sending) AgentIcons.ic_stop else AgentIcons.ic_arrow_up,
                     contentDescription = stringResource(R.string.chat_send),
                     onClick = { if (sending) onStop() else onSend() },
                     filled = active || sending,
@@ -1533,911 +1525,13 @@ private fun InputBar(
 }
 
 /**
- * 消息区的一个渲染项。
- *
- * 过程消息（深度思考 / 工具调用 / 中间旁白）会被折叠成一项 [Process]，
- * 其余消息各自一项 [Single]，被压缩的历史段落占一项 [Summary]。
- */
-private sealed interface ChatItem {
-    val key: String
 
-    data class Summary(
-        override val key: String,
-        val range: CompressedRange,
-        val original: List<ChatMessage>,
-        val position: Int,
-    ) : ChatItem
-
-    data class Process(
-        override val key: String,
-        val steps: List<ProcessStep>,
-    ) : ChatItem
-
-    data class Single(
-        override val key: String,
-        val message: ChatMessage,
-    ) : ChatItem
-}
-
-/**
- * 过程内容的一步。
- *
- * [label] 是「终端 · 单次执行」这类标题：同一次回复里往往连续调用七八次工具，
- * 只显示工具名（`shell_exec`）看不出在干什么，所以标题要带上工具的中文名与动作。
- */
-private sealed interface ProcessStep {
-    val elapsedMs: Long
-
-    data class Thinking(
-        val text: String,
-        val live: Boolean,
-        override val elapsedMs: Long = 0,
-    ) : ProcessStep
-
-    data class Tool(
-        val name: String,
-        val title: String,
-        val arguments: String,
-        val result: String,
-        val running: Boolean,
-        override val elapsedMs: Long = 0,
-    ) : ProcessStep
-
-    data class Narration(val text: String) : ProcessStep {
-        override val elapsedMs: Long get() = 0
-    }
-}
-
-/** 把毫秒格式化成人读的时长。 */
-private fun formatElapsed(ms: Long): String = when {
-    ms < 1000 -> "$ms 毫秒"
-    ms < 60_000 -> "%.1f 秒".format(java.util.Locale.US, ms / 1000.0).removeSuffix(".0")
-    else -> "${ms / 60_000} 分 ${(ms % 60_000) / 1000} 秒"
-}
-
-/** 单个步骤的图标：工具按名字分类给图形，思考用灯泡。 */
-private fun stepIcon(name: String): ImageVector {
-    val n = name.lowercase()
-    return when {
-        "shell" in n || "linux_exec" in n || "terminal" in n -> Icons.Outlined.Terminal
-        "file_write" in n || "file_copy" in n || "file_move" in n ||
-            "file_rename" in n || "file_delete" in n || "file_mkdir" in n ||
-            "file_zip" in n || "file_unzip" in n -> Icons.Outlined.EditNote
-        "file_read" in n || "file_list" in n || "file_search" in n ||
-            "file_info" in n || "file_tree" in n -> Icons.Outlined.Description
-        "db_" in n || "sql" in n -> Icons.Outlined.Storage
-        "http" in n || "network" in n -> Icons.Outlined.Language
-        "apk" in n -> Icons.Outlined.Android
-        "dex" in n || "smali" in n || "decompile" in n -> Icons.Outlined.Code
-        "ui_" in n -> Icons.Outlined.Smartphone
-        "settings" in n -> Icons.Outlined.Settings
-        "clipboard" in n -> Icons.Outlined.ContentCopy
-        "plan" in n -> Icons.Outlined.Checklist
-        "memory" in n -> Icons.Outlined.Psychology
-        "app_" in n -> Icons.Outlined.Apps
-        "device" in n -> Icons.Outlined.Memory
-        "artifact" in n -> Icons.Outlined.Inventory2
-        else -> Icons.Outlined.Build
-    }
-}
-
-/**
- * 一个「步骤」的外观：左侧一条竖向轨道 + 图标 + 标题行。
- *
- * 整块过程用同一套轨道串起来（圆点/图标对齐在同一条竖线上），
- * 而不是每个步骤各画一张卡片——后者在七八步时看着像一堆散落的方块。
- */
-@Composable
-private fun StepRow(
-    icon: ImageVector,
-    iconTint: Color,
-    title: String,
-    trailing: String? = null,
-    running: Boolean = false,
-    expandable: Boolean = true,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(200),
-        label = "step-arrow",
-    )
-
-    // animateContentSize 必须在**根**节点上：放在内部那个 Column 上时，它自己
-    // 是随出现一起创建的，没有「从 0 到有」的过程，看不到动画。
-    Column(modifier = Modifier.animateContentSize(tween(220))) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-                .clickable(enabled = expandable, onClick = onToggle)
-                .padding(vertical = 6.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MiuixIcon(icon, null, tint = iconTint, size = 17.dp)
-            Spacer(Modifier.width(8.dp))
-            MiuixText(
-                text = title,
-                style = MiuixTheme.typography.bodySmall,
-                color = colors.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (running) {
-                Spacer(Modifier.width(6.dp))
-                StepSpinner()
-            } else {
-                // 成功勾：与标题同排在右侧，一眼能扫完「哪些跑完了」
-                MiuixIcon(Icons.Outlined.Check, null, tint = colors.success, size = 14.dp)
-            }
-            if (trailing != null) {
-                Spacer(Modifier.width(6.dp))
-                MiuixText(
-                    text = trailing,
-                    style = MiuixTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            if (expandable) {
-                Spacer(Modifier.width(4.dp))
-                MiuixIcon(
-                    Icons.Outlined.ExpandMore,
-                    null,
-                    tint = colors.onSurfaceVariant,
-                    size = 15.dp,
-                    modifier = Modifier.rotate(rotation),
-                )
-            }
-        }
-
-        // 内容整体缩进，与标题文字左对齐，形成「标题 → 明细」的层次
-        if (expanded) {
-            Column(
-                modifier = Modifier
-                    .padding(start = 25.dp)
-                    .animateContentSize(tween(220)),
-            ) {
-                content()
-                Spacer(Modifier.height(4.dp))
-            }
-        }
-    }
-}
-
-/** 运行中的小转圈。 */
-@Composable
-private fun StepSpinner() {
-    val colors = MiuixTheme.colors
-    val transition = rememberInfiniteTransition(label = "step-spinner")
-    val angle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
-        label = "step-spinner-angle",
-    )
-    Box(
-        modifier = Modifier
-            .size(13.dp)
-            .graphicsLayer { rotationZ = angle },
-        contentAlignment = Alignment.Center,
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(13.dp),
-            strokeWidth = 1.5.dp,
-            color = colors.primary,
-        )
-    }
-}
-
-/**
- * 深度思考与工具调用的统一过程区。
- *
- * 每一步都是独立的行（思考 / 工具各一行，各带自己的图标与用时），
- * 整体按发生顺序串在一起。这样长回复里能一眼扫出「做了哪几步、各花多久」，
- * 而不是把十几段推理和调用揉成一整块文字。
- */
-@Composable
-private fun ProcessBlock(
-    steps: List<ProcessStep>,
-    expandedKey: String,
-    expandedMap: MutableMap<String, Boolean>,
-    autoOpen: Boolean = false,
-) {
-    val colors = MiuixTheme.colors
-    val spacing = MiuixTheme.dimens.spacing
-    val lastStep = steps.lastOrNull()
-    val working = when (lastStep) {
-        is ProcessStep.Thinking -> lastStep.live
-        is ProcessStep.Tool -> lastStep.running
-        else -> false
-    }
-
-    // 默认展开：思考与工具是用户要看的过程，默认收起等于每次都被挡在标题外。
-    // 手动折叠过就听用户的；状态存会话级 map，LazyColumn 回收不会把它一起收走。
-    val expanded = expandedMap[expandedKey] ?: true
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(200),
-        label = "process-arrow",
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MiuixTheme.radius.md))
-            .background(colors.surfaceContainerLow)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-                .clickable { expandedMap[expandedKey] = !expanded }
-                .padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MiuixIcon(
-                Icons.Outlined.Psychology,
-                null,
-                tint = colors.primary,
-                size = 16.dp,
-            )
-            Spacer(Modifier.width(6.dp))
-            MiuixText(
-                text = stringResource(
-                    if (working) R.string.chat_steps_running
-                    else R.string.chat_steps_done,
-                    steps.count { it !is ProcessStep.Narration },
-                ),
-                style = MiuixTheme.typography.labelMedium,
-                color = colors.primary,
-                modifier = Modifier.weight(1f),
-            )
-            MiuixIcon(
-                Icons.Outlined.ExpandMore,
-                null,
-                tint = colors.onSurfaceVariant,
-                size = 16.dp,
-                modifier = Modifier.rotate(rotation),
-            )
-        }
-
-        Column(modifier = Modifier.animateContentSize(tween(220))) {
-            if (expanded) {
-                Spacer(Modifier.height(spacing.xs))
-                steps.forEach { step ->
-                    when (step) {
-                        is ProcessStep.Thinking -> ThinkingStep(step)
-                        is ProcessStep.Tool -> ToolStep(step)
-                        is ProcessStep.Narration -> MarkdownText(
-                            text = step.text,
-                            compact = true,
-                            color = colors.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 一步深度思考。 */
-@Composable
-private fun ThinkingStep(step: ProcessStep.Thinking) {
-    val colors = MiuixTheme.colors
-    // 思考默认展开：这是用户明确要看的推理过程，默认收起等于每次都要多点一下。
-    // 手动折叠过就听用户的。
-    var manual by remember(step.text) { mutableStateOf<Boolean?>(null) }
-    val expanded = manual ?: true
-
-    StepRow(
-        icon = Icons.Outlined.Lightbulb,
-        iconTint = colors.primary,
-        title = stringResource(
-            if (step.live) R.string.chat_step_thinking
-            else R.string.chat_step_thought,
-        ),
-        trailing = if (step.elapsedMs > 0) formatElapsed(step.elapsedMs) else null,
-        running = step.live,
-        expandable = true,
-        expanded = expanded,
-        onToggle = { manual = !expanded },
-    ) {
-        // 思考内容全展示：不再限高、不再内部滚动——内部滚动条会把推理切成
-        // 一截一截，用户要的是从头看到尾；字号也用正文级，不再用 compact 小字。
-        MarkdownText(text = step.text, color = colors.onSurfaceVariant)
-    }
-}
-
-/** 一次工具调用。 */
-@Composable
-private fun ToolStep(step: ProcessStep.Tool) {
-    val colors = MiuixTheme.colors
-    var expanded by remember { mutableStateOf(false) }
-
-    StepRow(
-        icon = stepIcon(step.name),
-        iconTint = colors.onSurfaceVariant,
-        title = step.title.ifBlank { step.name },
-        trailing = if (step.elapsedMs > 0) formatElapsed(step.elapsedMs) else null,
-        running = step.running,
-        expanded = expanded,
-        onToggle = { expanded = !expanded },
-    ) {
-        Column {
-            // 非终端类工具只展示结果，不占位显示空参数
-            if (step.arguments.isNotBlank() && step.arguments != "{}") {
-                DetailBlock(
-                    label = stringResource(R.string.chat_tool_args),
-                    body = step.arguments,
-                    mono = true,
-                )
-                Spacer(Modifier.height(6.dp))
-            }
-            DetailBlock(
-                label = stringResource(R.string.chat_tool_result),
-                body = step.result.ifBlank { stringResource(R.string.chat_tool_pending) },
-                mono = false,
-            )
-        }
-    }
-}
-
-/** 工具参数 / 结果的展示块：浅底 + 可横向滚动，长 JSON 不会被折断。 */
-@Composable
-private fun DetailBlock(label: String, body: String, mono: Boolean) {
-    val colors = MiuixTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-            .background(colors.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        MiuixText(
-            text = label,
-            style = MiuixTheme.typography.labelSmall,
-            color = colors.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(2.dp))
-        // 用换行而不是横向滚动：窄屏上斜着看一长条 JSON 很别扭，
-        // 路径之类的长串让它自然折行更好读。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 240.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            MiuixText(
-                text = body,
-                style = if (mono) {
-                    MiuixTheme.typography.bodySmall.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    )
-                } else {
-                    MiuixTheme.typography.bodySmall
-                },
-                color = colors.onSurface,
-            )
-        }
-    }
-}
-
-/** 思考正文折叠前显示的行数。 */
-
-/** 等待回复时的占位气泡。 */
-@Composable
-private fun PendingBubble(text: String? = null) {
-    val colors = MiuixTheme.colors
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(MiuixTheme.radius.md))
-                .background(colors.surfaceContainer)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            MiuixText(
-                text = text ?: stringResource(R.string.chat_thinking),
-                style = MiuixTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/** 正在流式生成的最终答复：与已完成答复同款的无框排版，不显示操作按钮。 */
-@Composable
-private fun StreamingAnswer(text: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        MarkdownText(text = text, color = MiuixTheme.colors.onSurface)
-    }
-}
-
-/**
- * 单条消息。
- *
- * 用户消息保持气泡（便于区分输入与输出）；AI 的最终答复**不加背景框**，
- * 直接按 Markdown 铺在页面上，与主流 AI 应用的阅读形态一致。
- * 长按用户气泡仍是 复制 / 编辑 / 删除；AI 答复下方是 复制 / 重说 / 删除。
- */
-@Composable
-private fun MessageBubble(
-    message: ChatMessage,
-    onCopy: () -> Unit = {},
-    onResend: () -> Unit = {},
-    onDelete: () -> Unit = {},
-    onEdit: () -> Unit = {},
-) {
-    val colors = MiuixTheme.colors
-    val bubbleShape = RoundedCornerShape(MiuixTheme.radius.field)
-    val isUser = message.role == ChatMessage.Role.USER
-    val isSystem = message.role == ChatMessage.Role.SYSTEM
-    val isAssistant = message.role == ChatMessage.Role.ASSISTANT
-    var showActions by remember(message.id) { mutableStateOf(false) }
-    // 气泡在窗口中的位置，用作长按菜单的锚点
-    val bubbleAnchor = remember(message.id) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
-
-    if (isAssistant) {
-        // 无框答复：不加背景、不加内边距，仅在内容下方留一排操作图标。
-        // 中间旁白只铺文字——它是过程的碎片，不该让用户以为可以「重说」它。
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            MarkdownText(
-                text = message.content,
-                color = if (message.intermediate) colors.onSurfaceVariant else colors.onSurface,
-            )
-            if (message.content.isNotBlank() && !message.intermediate) {
-                Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    MessageActionIcon(
-                        Icons.Outlined.ContentCopy,
-                        stringResource(R.string.chat_msg_copy),
-                        onCopy,
-                    )
-                    MessageActionIcon(
-                        Icons.Outlined.Refresh,
-                        stringResource(R.string.chat_msg_resend),
-                        onResend,
-                    )
-                    MessageActionIcon(
-                        Icons.Outlined.DeleteOutline,
-                        stringResource(R.string.chat_msg_delete),
-                        onDelete,
-                    )
-                }
-            }
-        }
-        return
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isSystem) Alignment.CenterHorizontally else Alignment.End,
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                // 用户气泡沿用原来的 20dp 会显得「太圆」，收到 field（12dp）
-                .clip(bubbleShape)
-                // 纯白模式下气泡走灰白（主色只留给滑杆/按钮），其余模式保持主色气泡
-                .background(
-                    when {
-                        isSystem -> colors.surfaceContainerHigh
-                        colors.pureWhite -> colors.surfaceContainerHigh
-                        else -> colors.primary
-                    },
-                )
-                .combinedClickable(
-                    onLongClick = if (isUser) ({ showActions = true }) else null,
-                    onClick = {},
-                )
-                .onGloballyPositioned { bubbleAnchor.value = it.boundsInWindow() }
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            MiuixText(
-                text = message.content,
-                style = MiuixTheme.typography.bodyMedium,
-                color = when {
-                    isSystem -> colors.onSurfaceVariant
-                    colors.pureWhite -> colors.onSurface
-                    else -> colors.onPrimary
-                },
-            )
-        }
-        if (isUser && message.edited) {
-            Spacer(Modifier.height(2.dp))
-            MiuixText(
-                text = stringResource(R.string.chat_msg_edited),
-                style = MiuixTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant,
-            )
-        }
-    }
-
-    // 用户消息长按菜单：复制 / 编辑 / 删除；锚在气泡右缘、往右错开一点
-    // 同抽屉菜单：不包 if，否则收起时组件被直接移出组合，离场动画无处播
-    MiuixOverflowMenu(
-            expanded = showActions && isUser,
-            onDismiss = { showActions = false },
-            anchor = bubbleAnchor.value?.let {
-                androidx.compose.ui.geometry.Rect(
-                    it.left + 24f, it.top, it.right + 24f, it.bottom,
-                )
-            },
-            alignStart = false,
-        ) {
-            MiuixMenuItem(
-                text = stringResource(R.string.chat_msg_copy),
-                icon = Icons.Outlined.ContentCopy,
-                onClick = { showActions = false; onCopy() },
-            )
-            MiuixMenuItem(
-                text = stringResource(R.string.chat_msg_edit),
-                icon = Icons.Outlined.Edit,
-                onClick = { showActions = false; onEdit() },
-            )
-            MiuixMenuItem(
-                text = stringResource(R.string.chat_msg_delete),
-                icon = Icons.Outlined.DeleteOutline,
-                danger = true,
-                onClick = { showActions = false; onDelete() },
-            )
-    }
-}
-
-/** 消息气泡下的小操作图标（复制 / 重说 / 删除）。 */
-@Composable
-private fun MessageActionIcon(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        MiuixIcon(icon, label, tint = colors.onSurfaceVariant, size = 16.dp)
-    }
-}
-
-/**
- * 是否属于「过程」而非最终答复。
- *
- * 除了深度思考与工具调用，带工具那一轮的中间旁白也是过程的一部分——
- * 它在界面上应该和同轮的思考、工具排在一起，而不是飘在过程块外面。
- */
-private fun ChatMessage.isProcessMessage(): Boolean = when (role) {
-    ChatMessage.Role.REASONING, ChatMessage.Role.TOOL -> true
-    // 中间旁白由落盘时的 intermediate 标记（或迁移规则）识别
-    ChatMessage.Role.ASSISTANT -> intermediate
-    else -> false
-}
-
-/** 把一条历史消息还原成过程框里的一步。 */
-private fun ChatMessage.toProcessStep(context: android.content.Context): ProcessStep = when (role) {
-    ChatMessage.Role.REASONING -> ProcessStep.Thinking(
-        text = content,
-        live = false,
-        elapsedMs = elapsedMs,
-    )
-    // 中间旁白是模型带工具那轮的正文，在步骤块里就是一段普通文字。
-    // 早期实现把它落到 else 分支 → 渲染成标题空白的「工具」行（只剩扳手图标）。
-    ChatMessage.Role.ASSISTANT -> ProcessStep.Narration(text = content)
-    else -> ProcessStep.Tool(
-        name = toolName,
-        title = toolStepTitle(context, toolName, toolArguments),
-        arguments = toolArguments,
-        result = content,
-        running = false,
-        elapsedMs = elapsedMs,
-    )
-}
-
-/**
- * 工具的展示标题。
- *
- * 内置工具都注册了中文 `title`（如「终端 · 单次执行」），直接取来用；
- * 取不到时退回工具名，至少不会显示成空白。
- */
-private fun toolStepTitle(context: android.content.Context, name: String, arguments: String): String {
-    // name 是模型侧的函数名（点号已换成下划线），必须按同一套映射反查
-    val def = runCatching {
-        val dots = if ('_' in name && '.' !in name) {
-            com.mcp.toolbox.feature.mcp.BuiltInToolSet.all(context)
-                .firstOrNull { it.name.replace('.', '_') == name }
-                ?.name
-        } else {
-            name
-        }
-        com.mcp.toolbox.feature.mcp.BuiltInToolSet.all(context)
-            .firstOrNull { it.name == dots }
-    }.getOrNull()
-    val base = def?.title?.takeIf { it.isNotBlank() } ?: name
-    val action = commandHint(arguments)
-    return if (action.isBlank()) base else "$base · $action"
-}
-
-/** 从参数里挑一个能说明「在做什么」的短提示。 */
-private fun commandHint(arguments: String): String {
-    val json = runCatching { org.json.JSONObject(arguments) }.getOrNull() ?: return ""
-    val raw = json.optString("command").takeIf { it.isNotBlank() }
-        ?: json.optString("path").takeIf { it.isNotBlank() }
-        ?: json.optString("url").takeIf { it.isNotBlank() }
-        ?: json.optString("query").takeIf { it.isNotBlank() }
-        ?: return ""
-    return raw.replace("\n", " ").take(48)
-}
-
-/**
- * 被压缩的一段历史。
- *
- * 摘要块只占一条消息的位置，展开后能看到**原文全文**（原文一直在
- * `session.messages` 里，压缩只改了发给模型的内容）。
- */
-@Composable
-private fun CompressionBlock(
-    range: CompressedRange,
-    original: List<ChatMessage>,
-    step: Int,
-    total: Int,
-    onRestore: () -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    var expanded by remember(range.id) { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MiuixTheme.radius.md))
-            .background(colors.surfaceContainerLow)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MiuixIcon(
-                Icons.Outlined.Compress,
-                null,
-                tint = colors.onSurfaceVariant,
-                size = 15.dp,
-            )
-            Spacer(Modifier.width(6.dp))
-            MiuixText(
-                text = stringResource(R.string.chat_summary_title, range.messageCount),
-                style = MiuixTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            MiuixText(
-                text = "$step/$total",
-                style = MiuixTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        MarkdownText(text = range.summary, compact = true, color = colors.onSurface)
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MiuixText(
-                text = stringResource(R.string.chat_summary_expand),
-                style = MiuixTheme.typography.labelMedium,
-                color = colors.primary,
-                modifier = Modifier.clickable { expanded = !expanded },
-            )
-            Spacer(Modifier.width(12.dp))
-            MiuixText(
-                text = stringResource(R.string.chat_summary_restore),
-                style = MiuixTheme.typography.labelMedium,
-                color = colors.primary,
-                modifier = Modifier.clickable(onClick = onRestore),
-            )
-        }
-        if (expanded) {
-            Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                original.forEach { m ->
-                    val label = when (m.role) {
-                        ChatMessage.Role.USER -> "用户"
-                        ChatMessage.Role.ASSISTANT -> "助手"
-                        ChatMessage.Role.REASONING -> "深度思考"
-                        ChatMessage.Role.TOOL -> "工具调用 ${m.toolName}"
-                        ChatMessage.Role.SYSTEM -> "系统"
-                    }
-                    MarkdownText(
-                        text = "【$label】\n${m.content}",
-                        compact = true,
-                        color = colors.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 计划条：常驻在消息区上方的**单行**入口。
- *
- * 完整计划放进底部弹层，而不是在页面顶部摊开——长计划一摊就是十几行，
- * 直接把消息区顶掉大半屏。这里只留「模式 / 进度 / 目标首行」，点开才看全部。
- */
-@Composable
-private fun PlanBar(plan: PlanState, onClick: () -> Unit) {
-    val colors = MiuixTheme.colors
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-            .background(colors.surfaceContainerLow)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MiuixIcon(Icons.Outlined.Checklist, null, tint = colors.primary, size = 15.dp)
-        Spacer(Modifier.width(6.dp))
-        MiuixText(
-            text = stringResource(R.string.chat_plan_title),
-            style = MiuixTheme.typography.labelMedium,
-            color = colors.primary,
-        )
-        if (plan.tasks.isNotEmpty()) {
-            Spacer(Modifier.width(6.dp))
-            MiuixText(
-                text = stringResource(R.string.chat_plan_progress, plan.doneCount, plan.tasks.size),
-                style = MiuixTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        // 目标只露一行，让收起状态也能看出这是哪份计划
-        plan.goal.takeIf { it.isNotBlank() }?.let { goal ->
-            MiuixText(
-                text = goal,
-                style = MiuixTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.width(6.dp))
-        }
-        MiuixIcon(
-            Icons.Outlined.ExpandMore,
-            null,
-            tint = colors.onSurfaceVariant,
-            size = 15.dp,
-        )
-    }
-}
-
-/**
- * 完整计划的底部弹层。
- *
- * 子计划可点勾切换状态——这一步不经过模型，直接写 [PlanStore]，
- * 所以手动调整不必等一轮请求。
- */
-@Composable
-private fun PlanSheetContent(
-    plan: PlanState,
-    onToggle: (String, String) -> Unit,
-) {
-    val colors = MiuixTheme.colors
-    val spacing = MiuixTheme.dimens.spacing
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = spacing.pageHorizontal, vertical = spacing.md),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MiuixIcon(Icons.Outlined.Checklist, null, tint = colors.primary, size = 18.dp)
-            Spacer(Modifier.width(6.dp))
-            MiuixText(
-                text = stringResource(R.string.chat_plan_title),
-                style = MiuixTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-            )
-            if (plan.tasks.isNotEmpty()) {
-                MiuixText(
-                    text = stringResource(R.string.chat_plan_progress, plan.doneCount, plan.tasks.size),
-                    style = MiuixTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-        }
-
-        plan.goal.takeIf { it.isNotBlank() }?.let { goal ->
-            Spacer(Modifier.height(spacing.sm))
-            MarkdownText(text = goal, compact = true, color = colors.onSurface)
-        }
-
-        Spacer(Modifier.height(spacing.md))
-
-        if (plan.tasks.isEmpty()) {
-            MiuixText(
-                text = stringResource(R.string.chat_plan_empty),
-                style = MiuixTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                plan.tasks.forEach { task ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-                            .clickable {
-                                val next = if (task.status == PlanTask.STATUS_DONE) {
-                                    PlanTask.STATUS_PENDING
-                                } else {
-                                    PlanTask.STATUS_DONE
-                                }
-                                onToggle(task.id, next)
-                            }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        MiuixIcon(
-                            icon = when (task.status) {
-                                PlanTask.STATUS_DONE -> Icons.Outlined.CheckCircle
-                                PlanTask.STATUS_DOING -> Icons.Outlined.PlayCircleOutline
-                                PlanTask.STATUS_SKIPPED -> Icons.Outlined.RemoveCircleOutline
-                                else -> Icons.Outlined.RadioButtonUnchecked
-                            },
-                            contentDescription = task.status,
-                            tint = when (task.status) {
-                                PlanTask.STATUS_DONE -> colors.success
-                                PlanTask.STATUS_DOING -> colors.primary
-                                else -> colors.onSurfaceVariant
-                            },
-                            size = 18.dp,
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        MiuixText(
-                            text = task.title,
-                            style = MiuixTheme.typography.bodyMedium,
-                            color = if (task.status == PlanTask.STATUS_DONE) {
-                                colors.onSurfaceVariant
-                            } else {
-                                colors.onSurface
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(spacing.sm))
-    }
-}
-
-/**
- * 输入框右上角的用量指示。
- *
- * 细进度条 + 数字，点开是溢出菜单：已用 / 剩余 / 窗口大小 / 压缩入口。
- * 进度条刻意做得很短（56dp），它只是一眼可见的「水位」，数字看菜单。
  */
 @Composable
 private fun UsageIndicator(
     used: Int,
     window: Int?,
     estimated: Boolean,
-    compressing: Boolean,
-    onCompress: (() -> Unit)?,
 ) {
     val colors = MiuixTheme.colors
     var showMenu by remember { mutableStateOf(false) }
@@ -2526,18 +1620,6 @@ private fun UsageIndicator(
                 text = stringResource(R.string.chat_usage_estimated),
                 enabled = false,
                 onClick = {},
-            )
-        }
-        if (onCompress != null) {
-            MiuixMenuDivider()
-            MiuixMenuItem(
-                text = stringResource(
-                    if (compressing) R.string.chat_usage_compressing
-                    else R.string.chat_usage_compress,
-                ),
-                icon = Icons.Outlined.Compress,
-                enabled = !compressing,
-                onClick = { showMenu = false; onCompress() },
             )
         }
     }

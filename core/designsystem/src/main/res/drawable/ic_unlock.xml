@@ -1,0 +1,29 @@
+<!-- ic_unlock -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M7.2,10.4H16.8A2.4,2.4 0 0 1 19.2,12.8V18A2.4,2.4 0 0 1 16.8,20.4H7.2A2.4,2.4 0 0 1 4.8,18V12.8A2.4,2.4 0 0 1 7.2,10.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M8.6,10.4V7.8C8.6,6.1 10,4.7 12,4.7C13.6,4.7 15,5.6 15.5,6.9" />
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M10.4,15.4A1.6,1.6 0 1 0 13.6,15.4A1.6,1.6 0 1 0 10.4,15.4Z" />
+
+</vector>

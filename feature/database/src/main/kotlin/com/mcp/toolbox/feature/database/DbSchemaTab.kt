@@ -14,10 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixCodeText
 import com.mcp.toolbox.core.design.component.MiuixEmptyState
@@ -58,7 +55,7 @@ fun DbSchemaTab(
             title = "没有可浏览的对象",
             modifier = modifier,
             description = "当前数据库里没有用户表或视图（系统表已隐藏）",
-            icon = Icons.Outlined.TableChart,
+            iconRes = AgentIcons.ic_table,
         )
         return
     }
@@ -138,7 +135,7 @@ fun DbSchemaTab(
                                     subtitle =
                                         (if (index.unique) "唯一索引 · " else "") +
                                             index.columns.joinToString(", "),
-                                    leadingIcon = Icons.Outlined.Key,
+                                    leadingIconRes = AgentIcons.ic_key,
                                 )
                             }
                         }
@@ -152,7 +149,7 @@ fun DbSchemaTab(
                             schema.triggers.forEach { trigger ->
                                 MiuixListItem(
                                     title = trigger,
-                                    leadingIcon = Icons.Outlined.PlayArrow,
+                                    leadingIconRes = AgentIcons.ic_play_circle,
                                 )
                             }
                         }

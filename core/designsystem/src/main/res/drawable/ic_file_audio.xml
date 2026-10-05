@@ -1,0 +1,45 @@
+<!-- ic_file_audio -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.6,3H6.6C5.7,3 5,3.7 5,4.6V19.4C5,20.3 5.7,21 6.6,21H17.4C18.3,21 19,20.3 19,19.4V8.4L13.6,3Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.4,3V8.6H18.8" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.8,11.6L13.8,16.8" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.8,11.6C15,12.2 15.8,13 15.8,14.2" />
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M9.9,17A1.9,1.9 0 1 0 13.7,17A1.9,1.9 0 1 0 9.9,17Z" />
+
+</vector>

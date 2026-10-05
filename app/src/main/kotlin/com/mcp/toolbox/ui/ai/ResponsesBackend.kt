@@ -56,7 +56,6 @@ internal object ResponsesBackend {
             when (m.role) {
                 // system 在 Responses 里由顶层 instructions 承载，不能混进 input
                 ChatMessage.Role.SYSTEM -> Unit
-                ChatMessage.Role.REASONING, ChatMessage.Role.TOOL -> Unit
                 else -> input.put(
                     JSONObject()
                         .put("type", "message")

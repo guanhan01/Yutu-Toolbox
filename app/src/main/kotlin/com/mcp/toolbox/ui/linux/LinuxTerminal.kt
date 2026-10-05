@@ -22,9 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowUpward
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +39,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
@@ -69,6 +68,8 @@ private data class TerminalLine(
 fun LinuxTerminalScreen(
     distro: LinuxDistro,
     modifier: Modifier = Modifier,
+    /** 等宽字号。与 Termux 模式共用同一个值，切换模式时字号不跳。 */
+    fontSize: Float = 13.5f,
 ) {
     val colors = MiuixTheme.colors
     val spacing = MiuixTheme.dimens.spacing
@@ -179,6 +180,8 @@ fun LinuxTerminalScreen(
                         text = prefix + line.text,
                         style = MiuixTheme.typography.bodySmall.copy(
                             fontFamily = FontFamily.Monospace,
+                            fontSize = fontSize.sp,
+                            lineHeight = (fontSize * 1.3f).sp,
                         ),
                         color = color,
                     )
@@ -241,7 +244,7 @@ fun LinuxTerminalScreen(
                 )
             }
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowUpward,
+                iconRes = AgentIcons.ic_arrow_up,
                 contentDescription = stringResource(R.string.linux_cmd_run),
                 onClick = { run(input) },
                 filled = input.isNotBlank() && !running,

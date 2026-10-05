@@ -11,12 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Router
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixCard
@@ -54,7 +49,7 @@ fun PingScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "Ping / Traceroute",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
         )
         Column(
@@ -74,7 +69,7 @@ fun PingScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 value = host,
                 onValueChange = { host = it },
                 placeholder = "域名或 IP",
-                leadingIcon = Icons.Outlined.Router,
+                leadingIconRes = AgentIcons.ic_svc_load_balancer,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(spacing.md))
@@ -90,7 +85,7 @@ fun PingScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                leadingIcon = Icons.Outlined.PlayArrow,
+                leadingIconRes = AgentIcons.ic_play_circle,
                 loading = running,
             )
             Spacer(Modifier.height(spacing.lg))
@@ -139,7 +134,7 @@ fun DnsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "DNS 查询",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
         )
         Column(
@@ -153,12 +148,12 @@ fun DnsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     value = query,
                     onValueChange = { query = it },
                     placeholder = "域名或 IP",
-                    leadingIcon = Icons.Outlined.Dns,
+                    leadingIconRes = AgentIcons.ic_svc_dns,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(spacing.sm))
                 MiuixIconButton(
-                    icon = Icons.Outlined.Search,
+                    iconRes = AgentIcons.ic_search,
                     contentDescription = "查询",
                     filled = true,
                     onClick = {

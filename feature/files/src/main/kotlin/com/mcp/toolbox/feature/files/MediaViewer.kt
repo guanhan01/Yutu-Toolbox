@@ -34,14 +34,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Forward10
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Replay10
-import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.mcp.toolbox.core.common.FileOps
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixMenuGroupLabel
 import com.mcp.toolbox.core.design.component.MiuixMenuItem
@@ -399,7 +392,7 @@ fun MediaViewerOverlay(
 
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    MiuixIconButton(Icons.Outlined.MusicNote, "音频", onClick = {}, tint = Color.White)
+                    MiuixIconButton(AgentIcons.ic_music, "音频", onClick = {}, tint = Color.White)
                     MiuixText(
                         if (ready) "正在播放音频" else "正在准备…",
                         style = MiuixTheme.typography.labelMedium,
@@ -452,7 +445,7 @@ fun MediaViewerOverlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MiuixIconButton(
-                    icon = Icons.Outlined.Close,
+                    iconRes = AgentIcons.ic_close,
                     contentDescription = "关闭",
                     onClick = onClose,
                     tint = Color.White,
@@ -468,7 +461,7 @@ fun MediaViewerOverlay(
                 )
                 if (isVideo) {
                     MiuixIconButton(
-                        icon = Icons.Outlined.ScreenRotation,
+                        iconRes = AgentIcons.ic_fullscreen,
                         contentDescription = "旋转屏幕",
                         tint = Color.White,
                         onClick = { landscape = !(landscape ?: false) },
@@ -585,7 +578,7 @@ fun MediaViewerOverlay(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             MiuixIconButton(
-                                icon = Icons.Outlined.Replay10,
+                                iconRes = AgentIcons.ic_replay_10,
                                 contentDescription = "后退 10 秒",
                                 tint = Color.White,
                                 onClick = {
@@ -596,7 +589,7 @@ fun MediaViewerOverlay(
                             )
                             Spacer(Modifier.width(spacing.lg))
                             MiuixIconButton(
-                                icon = if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                                iconRes = if (playing) AgentIcons.ic_pause else AgentIcons.ic_play_circle,
                                 contentDescription = if (playing) "暂停" else "播放",
                                 tint = Color.White,
                                 onClick = {
@@ -613,7 +606,7 @@ fun MediaViewerOverlay(
                             )
                             Spacer(Modifier.width(spacing.lg))
                             MiuixIconButton(
-                                icon = Icons.Outlined.Forward10,
+                                iconRes = AgentIcons.ic_forward_10,
                                 contentDescription = "前进 10 秒",
                                 tint = Color.White,
                                 onClick = {

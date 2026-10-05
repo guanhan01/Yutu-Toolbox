@@ -17,14 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixButton
@@ -116,16 +109,16 @@ fun ArtifactsScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "MCP 产物",
-                navigationIcon = Icons.Outlined.ArrowBack,
+                navigationIconRes = AgentIcons.ic_chevron_left,
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                             MiuixMenuItem(
                                 text = "刷新列表",
                                 onClick = { menuOpen = false; reload() },
-                                icon = Icons.Outlined.Refresh,
+                                iconRes = AgentIcons.ic_refresh,
                             )
                             MiuixMenuItem(
                                 text = "执行配额与保留策略",
@@ -135,12 +128,12 @@ fun ArtifactsScreen(
                                     reload()
                                     onToast("已按配额 / 保留天数清理")
                                 },
-                                icon = Icons.Outlined.FolderOpen,
+                                iconRes = AgentIcons.ic_folder,
                             )
                             MiuixMenuItem(
                                 text = "清空全部产物",
                                 onClick = { menuOpen = false; confirmClear = true },
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                                 danger = true,
                             )
                         }
@@ -219,7 +212,7 @@ fun ArtifactsScreen(
                         } else {
                             "先到 MCP 页的「输出文件夹设置」里开启开关。"
                         },
-                        icon = Icons.Outlined.GridView,
+                        iconRes = AgentIcons.ic_svc_project_board,
                     )
                 }
             } else {
@@ -384,7 +377,7 @@ private fun ArtifactDetailSheet(
                     onClick = onOpenInFiles,
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.FolderOpen,
+                    leadingIconRes = AgentIcons.ic_folder,
                 )
                 MiuixButton(
                     text = "复制路径",
@@ -396,14 +389,14 @@ private fun ArtifactDetailSheet(
                     },
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.Share,
+                    leadingIconRes = AgentIcons.ic_share,
                 )
                 MiuixButton(
                     text = "删除",
                     onClick = onDelete,
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.TEXT,
-                    leadingIcon = Icons.Outlined.Delete,
+                    leadingIconRes = AgentIcons.ic_trash,
                 )
             }
             Spacer(Modifier.height(spacing.xxl))

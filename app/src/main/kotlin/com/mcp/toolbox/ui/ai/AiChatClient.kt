@@ -3,6 +3,7 @@ package com.mcp.toolbox.ui.ai
 import android.content.Context
 import com.mcp.toolbox.feature.home.ChatMessage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,7 +20,48 @@ import java.net.URL
 object AiChatClient {
 
     private const val TIMEOUT_MS = 60_000
-    private const val MAX_TOOL_ROUNDS = 8
+
+    /**
+     * 工具调用循环的安全上限。
+     *
+     * 正常结束条件是「模型不再请求工具」，所以这里不是「任务能做多少」的额度，
+     * 而是防跑飞的保险丝：模型陷入反复调用同一个工具的循环时，靠它兜住。
+     * 定得足够宽（按每轮可并发多个工具算，实际可完成上千次调用），
+     * 现实中的长任务不会撞到它。
+     *
+     * 之所以保留一个上限而不是真的 `while (true)`：一旦模型打转，没有任何上限
+     * 就只会一直耗 token、一直发请求，用户只能自己发现并点停止。
+     */
+    private const val MAX_TOOL_ROUNDS = 200
+
+    /**
+     * 撞上安全上限时的收尾说明。
+     *
+     * 这**不是失败**：过程都已经跑完并落盘，只是模型还想继续。所以返回一段
+     * 可读的说明而不是抛错——抛错会被界面渲染成「请求失败：…」，让用户以为
+     * 整轮白跑了。
+     */
+    /**
+     * 单次请求里累积的工具结果总字符上限。
+     *
+     * 轮数上限放宽后，真正会先把请求撑爆的是**结果总量**而不是圈数：连续读几十个
+     * 大文件、拉几次大响应，上下文很快就到模型窗口之上，之后每一圈都只会收到
+     * 400（context length exceeded）——用户看到的就是「一直失败」。
+     *
+     * 所以这里按结果总量兜一道：到顶就带说明收尾，而不是继续发注定失败的请求。
+     * 40 万字符约合 10 万 token 量级，留足余量给系统提示与历史。
+     */
+    private const val MAX_TOOL_CONTEXT_CHARS = 400_000
+
+    /** 工具结果总量到顶时的收尾说明。 */
+    private const val CONTEXT_BUDGET_NOTICE =
+        "⚠️ 本次请求累积的工具结果已经很多，继续调用会把上下文撑爆（后续请求只会返回" +
+            "超长错误）。\n\n已完成的步骤都在上方，回复「继续」我会接着往下做。"
+
+    private const val ROUND_CEILING_NOTICE =
+        "⚠️ 本次工具调用已达到安全上限（200 轮），任务可能尚未完成。\n\n" +
+            "已完成的步骤都在上方，回复「继续」我就接着往下做。"
+
     private const val MAX_TOOL_RESULT_CHARS = 16_000
     private const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
     private const val MAX_IMAGE_EDGE = 1568
@@ -84,6 +126,13 @@ object AiChatClient {
          * 都是「最后一轮」的值，也就是当前上下文实际占用的量。
          */
         onUsage: (promptTokens: Int, completionTokens: Int) -> Unit = { _, _ -> },
+        /**
+         * 60s 没有收到任何数据（stall watchdog）。
+         *
+         * 不是「超时抛异常」而是**主动报告**：界面据此把光标停掉、提示重试，
+         * 而不是让用户看着一个永远转圈的界面猜是不是卡死了。
+         */
+        onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
         // 按「协议」而不是「厂商」分派：自定义供应商由用户自己选协议，
@@ -91,17 +140,17 @@ object AiChatClient {
         when (config.activeProtocol) {
             AiProtocol.ANTHROPIC -> return@withContext anthropicStream(
                 context, config, history, systemPrompt, enableTools,
-                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
+                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
             )
 
             AiProtocol.GEMINI -> return@withContext geminiStream(
                 context, config, history, systemPrompt, enableTools,
-                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
+                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
             )
 
             AiProtocol.RESPONSES -> return@withContext responsesStream(
                 context, config, history, systemPrompt, enableTools,
-                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onDelta,
+                onToolCall, onToolResult, onReasoning, onNarration, onUsage, onStall, onDelta,
             )
 
             else -> Unit // OpenAI 兼容协议继续走下面的实现
@@ -112,6 +161,8 @@ object AiChatClient {
 
             var lastPrompt = 0
             var lastCompletion = 0
+            // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
+            var toolChars = 0
             repeat(MAX_TOOL_ROUNDS) { round ->
                 val payload = buildPayload(
                     config = config,
@@ -129,27 +180,48 @@ object AiChatClient {
                         val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                         error("HTTP $code：${extractError(err).take(200)}")
                     }
-                    readSse(conn.inputStream.bufferedReader()) { content, callDelta, reasoning, usage ->
+                    // stall watchdog：60s 收不到任何数据就主动上报，界面据此停止等待。
+                    // 用 lastEventAt 而不是「读超时」：HttpURLConnection 的 readTimeout
+                    // 只在真正阻塞时触发，而 SSE 的心跳包会让它永远不触发。
+                    val lastEventAt = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
+                    val watchdog = startStallWatchdog(conn, lastEventAt, onStall)
+                    try {
+                        // 正文一律**逐 token** 上报，保证逐字流式的手感。
+                        //
+                        // 「这一轮是过渡旁白还是最终答复」要到收尾才知道，所以判定的
+                        // 责任不在这一层：界面收到 `onNarration` 时会把**同一段**正文
+                        // 原地改标成旁白段（同 id、同位置），于是工具卡自然排在它下面，
+                        // 而最终答复留在正文区。见 `AgentTimeline` 的 Narration 分支。
+                        //
+                        // （曾试过「整轮先缓冲、收尾再派发」，那会牺牲逐字流式，已回滚。）
+                        readSse(conn.inputStream.bufferedReader()) { content, callDelta, reasoning, usage ->
+                        lastEventAt.set(System.currentTimeMillis())
                         if (content.isNotEmpty()) {
                             roundText.append(content)
                             onDelta(content)
                         }
                         if (reasoning.isNotEmpty()) onReasoning(round, reasoning)
                         callDelta?.let { mergeToolCall(calls, it) }
-                        usage?.let { u ->
-                            val prompt = u.optInt("prompt_tokens", 0)
-                            val completion = u.optInt("completion_tokens", 0)
+                        // 注意：这里不能用 `usage?.let { ... }`。
+                        // 最外层是 repeat 的 lambda，`return@let` 会跳过后面所有的
+                        // `if (prompt > 0)` 判断，导致用量永远不上报（实测踩到）。
+                        if (usage != null) {
+                            val prompt = usage.optInt("prompt_tokens", 0)
+                            val completion = usage.optInt("completion_tokens", 0)
                             // 末轮的值才是当前上下文的真实占用，直接覆盖
                             if (prompt > 0) lastPrompt = prompt
                             if (completion > 0) lastCompletion = completion
                             if (prompt > 0 || completion > 0) onUsage(lastPrompt, lastCompletion)
                         }
+                        }
+                    } finally {
+                        watchdog.cancel()
                     }
                 } finally {
                     conn.disconnect()
                 }
 
-                // 没有工具调用即为最终答复
+                // 没有工具调用即为最终答复（正文已在流式过程中上报过，这里只需返回）
                 if (calls.none { it.name.isNotBlank() }) {
                     return@runCatching roundText.toString().ifBlank { error("回复内容为空") }
                 }
@@ -186,6 +258,7 @@ object AiChatClient {
                 calls.filter { it.name.isNotBlank() }.forEachIndexed { seq, c ->
                     onToolCall(round, seq, c.name, c.arguments.toString())
                     val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
+                    toolChars += result.length
                     onToolResult(round, seq, c.name, result)
                     messages.put(
                         JSONObject()
@@ -195,11 +268,17 @@ object AiChatClient {
                     )
                 }
 
+                // 结果总量先于轮数到顶：继续只会发注定 400 的请求，及时收尾
+                if (toolChars >= MAX_TOOL_CONTEXT_CHARS) {
+                    return@runCatching CONTEXT_BUDGET_NOTICE
+                }
                 if (round == MAX_TOOL_ROUNDS - 1) {
-                    return@runCatching roundText.toString().ifBlank { error("工具调用轮数已达上限") }
+                    // 安全上限：过程已全部执行完。不能把本轮的正文当答复返回
+                    // ——它已经作为旁白进过时间线，再返回就会重复出现一次。
+                    return@runCatching ROUND_CEILING_NOTICE
                 }
             }
-            error("工具调用轮数已达上限")
+            ROUND_CEILING_NOTICE
         }
     }
 
@@ -223,6 +302,7 @@ object AiChatClient {
         onReasoning: (Int, String) -> Unit,
         onNarration: (Int, String) -> Unit,
         onUsage: (Int, Int) -> Unit,
+        onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
     ): Result<String> = runCatching {
         validate(config)
@@ -241,6 +321,8 @@ object AiChatClient {
         var lastCompletion = 0
         val system = systemPrompt?.takeIf { it.isNotBlank() }
 
+        // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
+        var toolChars = 0
         repeat(MAX_TOOL_ROUNDS) { round ->
             val payload = JSONObject()
                 .put("model", config.model)
@@ -318,16 +400,22 @@ object AiChatClient {
                 onToolCall(round, seq, c.name, c.arguments.toString())
                 val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
                     .take(MAX_TOOL_RESULT_CHARS)
+                toolChars += result.length
                 onToolResult(round, seq, c.name, result)
                 Triple(c.id, c.name, result)
             }
             ResponsesBackend.functionCallOutputs(results).forEach { working.put(it) }
 
+            // 结果总量先于轮数到顶：继续只会发注定 400 的请求，及时收尾
+            if (toolChars >= MAX_TOOL_CONTEXT_CHARS) {
+                return@runCatching CONTEXT_BUDGET_NOTICE
+            }
             if (round == MAX_TOOL_ROUNDS - 1) {
-                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+                // 同理：本轮正文已经作为旁白归档，这里只回可读的收尾说明
+                return@runCatching ROUND_CEILING_NOTICE
             }
         }
-        error("工具调用轮数已达上限")
+        ROUND_CEILING_NOTICE
     }
 
     /** 非流式 Responses 请求，供摘要压缩这类一次性调用使用。 */
@@ -371,6 +459,7 @@ object AiChatClient {
         onReasoning: (Int, String) -> Unit,
         onNarration: (Int, String) -> Unit,
         onUsage: (Int, Int) -> Unit,
+        onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
     ): Result<String> = runCatching {
         // 把历史摊成可变列表，便于逐轮回填
@@ -385,6 +474,8 @@ object AiChatClient {
         var lastCompletion = 0
         val system = systemPrompt?.takeIf { it.isNotBlank() }
 
+        // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
+        var toolChars = 0
         repeat(MAX_TOOL_ROUNDS) { round ->
             val payload = JSONObject()
                 .put("model", config.model)
@@ -474,16 +565,22 @@ object AiChatClient {
                 onToolCall(round, seq, c.name, c.arguments.toString())
                 val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
                     .take(MAX_TOOL_RESULT_CHARS)
+                toolChars += result.length
                 onToolResult(round, seq, c.name, result)
                 Triple(c.id, c.name, result)
             }
             working.put(AnthropicBackend.toolResultsBlock(results))
 
+            // 结果总量先于轮数到顶：继续只会发注定 400 的请求，及时收尾
+            if (toolChars >= MAX_TOOL_CONTEXT_CHARS) {
+                return@runCatching CONTEXT_BUDGET_NOTICE
+            }
             if (round == MAX_TOOL_ROUNDS - 1) {
-                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+                // 同理：本轮正文已经作为旁白归档，这里只回可读的收尾说明
+                return@runCatching ROUND_CEILING_NOTICE
             }
         }
-        error("工具调用轮数已达上限")
+        ROUND_CEILING_NOTICE
     }
 
     // ---------- Gemini 原生 ----------
@@ -499,6 +596,7 @@ object AiChatClient {
         onReasoning: (Int, String) -> Unit,
         onNarration: (Int, String) -> Unit,
         onUsage: (Int, Int) -> Unit,
+        onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
     ): Result<String> = runCatching {
         val working = JSONArray()
@@ -509,6 +607,8 @@ object AiChatClient {
         ).optJSONArray("contents")
         (0 until (initial?.length() ?: 0)).forEach { working.put(initial!!.opt(it)) }
 
+        // 本段已累积的工具结果字符数，按量兜住上下文膨胀（见 MAX_TOOL_CONTEXT_CHARS）
+        var toolChars = 0
         repeat(MAX_TOOL_ROUNDS) { round ->
             val payload = JSONObject()
                 .put("contents", working)
@@ -571,16 +671,22 @@ object AiChatClient {
                 onToolCall(round, seq, c.name, c.arguments.toString())
                 val result = AiToolBridge.invoke(context, c.name, c.arguments.toString())
                     .take(MAX_TOOL_RESULT_CHARS)
+                toolChars += result.length
                 onToolResult(round, seq, c.name, result)
                 Triple(c.id, c.name, result)
             }
             working.put(GeminiBackend.toolResponseContent(results))
 
+            // 结果总量先于轮数到顶：继续只会发注定 400 的请求，及时收尾
+            if (toolChars >= MAX_TOOL_CONTEXT_CHARS) {
+                return@runCatching CONTEXT_BUDGET_NOTICE
+            }
             if (round == MAX_TOOL_ROUNDS - 1) {
-                return@runCatching text.toString().ifBlank { error("工具调用轮数已达上限") }
+                // 同理：本轮正文已经作为旁白归档，这里只回可读的收尾说明
+                return@runCatching ROUND_CEILING_NOTICE
             }
         }
-        error("工具调用轮数已达上限")
+        ROUND_CEILING_NOTICE
     }
 
     /** 通用 POST，headers 由调用方给定。 */
@@ -591,6 +697,8 @@ object AiChatClient {
         config: AiConfig,
     ): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
+            // 登记为「正在读取的连接」，取消时会被断开（见 abortInflight）
+            inflight = this
             requestMethod = "POST"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
@@ -859,8 +967,68 @@ object AiChatClient {
     }
 
 
+    /** stall 检测间隔。 */
+    private const val STALL_CHECK_INTERVAL_MS = 5_000L
+
+    /** 判定 stall 的静默阈值（Spec 第 8.3 节：60s 无数据自动中止）。 */
+    private const val STALL_TIMEOUT_MS = 60_000L
+
+    /**
+     * 当前正在读取的连接。
+     *
+     * ## 为什么必须显式关闭它
+     *
+     * `job.cancel()` 只能打断**挂起点**，而 `bufferedReader().readLine()` 是阻塞 IO——
+     * 只要服务端还在推数据它就一直读下去，协程的取消标志根本没机会被检查。
+     * 结果是：界面停了、上游还在烧 token（实测「点停止后它继续做」）。
+     *
+     * 用一个引用就够：同一时刻只可能有**一个**请求在跑（`ChatRunner.isBusy()` 保证）。
+     * 不用集合，也就不需要在每个分支的 finally 里注销，少一圈容易写漏的配对。
+     */
+    @Volatile
+    private var inflight: HttpURLConnection? = null
+
+    /**
+     * 掐断在跑的上游连接。由「点停止」调用。
+     *
+     * 关掉之后阻塞的读立刻抛 IOException，请求随之结束——这才是「真的停」。
+     */
+    fun abortInflight() {
+        runCatching { inflight?.disconnect() }
+        inflight = null
+    }
+
+    /** watchdog 只读网络、不碰界面，用 IO 调度即可。 */
+    private val scopeForWatchdog =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+
+    /**
+     * stall watchdog（Spec 第 8.3 节：60s 无数据自动中止）。
+     *
+     * 为什么不能只靠 `HttpURLConnection.readTimeout`：SSE 会周期性发心跳包，
+     * 只要有心跳，读就永远不会超时阻塞——连接可能已经「活着但不产出任何内容」。
+     * 所以这里跟踪的是**距上一次有效事件的时间**。
+     */
+    private fun startStallWatchdog(
+        conn: HttpURLConnection,
+        lastEventAt: java.util.concurrent.atomic.AtomicLong,
+        onStall: () -> Unit,
+    ): kotlinx.coroutines.Job = scopeForWatchdog.launch {
+        while (true) {
+            kotlinx.coroutines.delay(STALL_CHECK_INTERVAL_MS)
+            if (System.currentTimeMillis() - lastEventAt.get() >= STALL_TIMEOUT_MS) {
+                runCatching { conn.disconnect() }
+                onStall()
+                return@launch
+            }
+        }
+    }
+
     private fun open(config: AiConfig, payload: String): HttpURLConnection =
         (URL(config.baseUrl.trimEnd('/') + "/chat/completions").openConnection() as HttpURLConnection).apply {
+            // 登记为「正在读取的连接」，取消时会被断开（见 abortInflight）
+            inflight = this
             requestMethod = "POST"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
@@ -967,9 +1135,6 @@ object AiChatClient {
                 ChatMessage.Role.USER -> "user"
                 ChatMessage.Role.ASSISTANT -> "assistant"
                 ChatMessage.Role.SYSTEM -> "system"
-                // 思考过程与工具卡片不回传给模型（工具结果已在循环内回填）
-                ChatMessage.Role.REASONING -> return@forEach
-                ChatMessage.Role.TOOL -> return@forEach
             }
             val images = m.imageUris.mapNotNull { encodeImage(context, it) }
             if (images.isEmpty()) {

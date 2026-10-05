@@ -1,5 +1,6 @@
 package com.mcp.toolbox.ui.linux
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,15 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixDialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
@@ -51,7 +44,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import androidx.compose.material.icons.outlined.Code
 
 /**
  * Linux 工具环境主页。
@@ -309,21 +301,21 @@ fun LinuxScreen(
                 MiuixListItem(
                     title = stringResource(R.string.linux_workspace),
                     subtitle = stringResource(R.string.linux_workspace_desc),
-                    leadingIcon = Icons.Outlined.Folder,
+                    leadingIconRes = AgentIcons.ic_folder,
                     showDivider = true,
                     onClick = onOpenWorkspace,
                 )
                 MiuixListItem(
                     title = stringResource(R.string.linux_shared),
                     subtitle = stringResource(R.string.linux_shared_desc),
-                    leadingIcon = Icons.Outlined.FolderOpen,
+                    leadingIconRes = AgentIcons.ic_folder,
                     showDivider = true,
                     onClick = onOpenShared,
                 )
                 MiuixListItem(
                     title = stringResource(R.string.linux_browse),
                     subtitle = stringResource(R.string.linux_browse_desc),
-                    leadingIcon = Icons.Outlined.Description,
+                    leadingIconRes = AgentIcons.ic_file_text,
                     onClick = onOpenFiles,
                 )
             }
@@ -469,14 +461,14 @@ private fun ComponentRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            MiuixIcon(
-                icon = when (component) {
-                    LinuxComponent.PYTHON -> Icons.Outlined.Terminal
-                    LinuxComponent.NODE -> Icons.Outlined.Memory
-                    LinuxComponent.SSH -> Icons.Outlined.Key
-                    LinuxComponent.JAVA -> Icons.Outlined.Build
-                    LinuxComponent.APK -> Icons.Outlined.Android
-                    LinuxComponent.GIT -> Icons.Outlined.Code
+            MiuixIconRes(
+                iconRes = when (component) {
+                    LinuxComponent.PYTHON -> AgentIcons.ic_terminal
+                    LinuxComponent.NODE -> AgentIcons.ic_memory
+                    LinuxComponent.SSH -> AgentIcons.ic_key
+                    LinuxComponent.JAVA -> AgentIcons.ic_deploy
+                    LinuxComponent.APK -> AgentIcons.ic_phone_device
+                    LinuxComponent.GIT -> AgentIcons.ic_code
                 },
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,

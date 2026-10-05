@@ -6,17 +6,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.Router
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
 import com.mcp.toolbox.core.design.component.MiuixSuperArrow
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -35,7 +28,7 @@ fun NetworkHubScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "网络",
-            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
         )
         Column(Modifier.padding(horizontal = spacing.pageHorizontal)) {
@@ -44,7 +37,7 @@ fun NetworkHubScreen(
                 MiuixSuperArrow(
                     title = "HTTP 构造器",
                     subtitle = "GET / POST / PUT / DELETE · 响应头与原始报文",
-                    leadingIcon = Icons.Outlined.Language,
+                    leadingIconRes = AgentIcons.ic_globe,
                     onClick = { onOpenRoute("network/http") },
                     showDivider = true,
                 )
@@ -54,35 +47,35 @@ fun NetworkHubScreen(
                 MiuixSuperArrow(
                     title = "Ping / Traceroute",
                     subtitle = "逐行实时回显",
-                    leadingIcon = Icons.Outlined.Router,
+                    leadingIconRes = AgentIcons.ic_svc_load_balancer,
                     onClick = { onOpenRoute("network/ping") },
                     showDivider = true,
                 )
                 MiuixSuperArrow(
                     title = "DNS 查询",
                     subtitle = "正向解析、反向解析与可达性",
-                    leadingIcon = Icons.Outlined.Dns,
+                    leadingIconRes = AgentIcons.ic_svc_dns,
                     onClick = { onOpenRoute("network/dns") },
                     showDivider = true,
                 )
                 MiuixSuperArrow(
                     title = "端口扫描",
                     subtitle = "TCP connect 并发扫描，仅限自有或已授权主机",
-                    leadingIcon = Icons.Outlined.Router,
+                    leadingIconRes = AgentIcons.ic_svc_load_balancer,
                     onClick = { onOpenRoute("network/port-scan") },
                     showDivider = true,
                 )
                 MiuixSuperArrow(
                     title = "Whois / RDAP",
                     subtitle = "域名与 IP 的注册信息（rdap.org）",
-                    leadingIcon = Icons.Outlined.Public,
+                    leadingIconRes = AgentIcons.ic_globe,
                     onClick = { onOpenRoute("network/whois") },
                     showDivider = true,
                 )
                 MiuixSuperArrow(
                     title = "网络环境",
                     subtitle = "链路详情、DNS、网卡与带宽估计",
-                    leadingIcon = Icons.Outlined.Hub,
+                    leadingIconRes = AgentIcons.ic_orchestration,
                     onClick = { onOpenRoute("network/env") },
                 )
             }

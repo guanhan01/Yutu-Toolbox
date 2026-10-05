@@ -1,5 +1,12 @@
 package com.mcp.toolbox.feature.settings
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,12 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
 import com.mcp.toolbox.core.design.component.MiuixDivider
@@ -98,72 +100,56 @@ fun ThemeSettingsScreen(
     ) {
         item {
             MiuixSectionCard(title = stringResource(R.string.settings_seed_title)) {
-                Row(
-                    modifier = Modifier.padding(spacing.lg),
-                    verticalAlignment = Alignment.CenterVertically,
+                // 总开关：只有打开它，下面展开的主色调色盘、动态取色、纯黑、纯白才生效。
+                // 关闭时整套配色回落到官方 Miuix 默认调色板，界面即「真 Miuix」。
+                MiuixSuperSwitch(
+                    title = stringResource(R.string.settings_color_customize),
+                    subtitle = stringResource(R.string.settings_color_customize_desc),
+                    leadingIconRes = AgentIcons.ic_palette,
+                    checked = config.colorCustomize,
+                    onCheckedChange = { value ->
+                        onConfigChange { it.copy(colorCustomize = value) }
+                    },
+                )
+                // 展开/收起走动画：这一段是「取色细节」，不是常驻内容
+                AnimatedVisibility(
+                    visible = config.colorCustomize,
+                    enter = expandVertically(tween(220)) + fadeIn(tween(160)),
+                    exit = shrinkVertically(tween(200)) + fadeOut(tween(120)),
                 ) {
-                    // 色盘靠左
-                    ColorWheelPicker(
-                        color = currentSeed,
-                        onColorChange = { picked ->
-                            hexInput = picked.toHexString()
-                            onConfigChange { it.copy(customSeedArgb = picked.toArgbLong(), pureWhite = false) }
-                        },
-                        size = 168.dp,
-                    )
-                    Spacer(Modifier.width(spacing.lg))
-                    // 候选色靠右纵排：白、蓝、灰、黄、绿、紫、纯白
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // 纯白按钮居中：6 个颜色分列两侧。
-                        // 深色模式下不显示纯白 —— 纯白强制浅色底，两者同屏会互相否定。
-                        SeedSwatches
-                            .filter { !(it.pureWhite && config.darkMode == DarkModeSetting.DARK) }
-                            .sortedBy { OrderOfSwatch.getValue(it.id) }
-                            .forEach { swatch ->
-                            SeedSwatchRow(
-                                color = swatch.color,
-                                label = swatch.labelZh,
-                                selected = if (swatch.pureWhite) config.pureWhite
-                                else seedLocked && !config.pureWhite &&
-                                    swatch.color.toArgb() == currentSeed.toArgb(),
-                                onClick = {
-                                    seedLocked = true
-                                    if (swatch.pureWhite) {
-                                        onConfigChange { it.copy(pureWhite = true) }
-                                    } else {
-                                        onConfigChange {
-                                            it.copy(pureWhite = false, customSeedArgb = swatch.color.toArgbLong())
-                                        }
-                                    }
-                                },
-                            )
-                        }
+                    Column {
+                        MiuixDivider(startIndent = spacing.lg)
+                        // 动态取色与纯黑都属于「取色」的一部分，跟着总开关一起展开收起：
+                        // 拆到别的卡片里会导致「开关关着却还能点」的矛盾状态。
+                        MiuixSuperSwitch(
+                            title = stringResource(R.string.settings_dynamic_color),
+                            subtitle = stringResource(R.string.settings_dynamic_color_desc),
+                            leadingIconRes = AgentIcons.ic_ai_sparkle,
+                            checked = config.dynamicEnabled,
+                            onCheckedChange = { value ->
+                                onConfigChange { it.copy(dynamicEnabled = value) }
+                            },
+                            showDivider = true,
+                        )
+                        MiuixSuperSwitch(
+                            title = stringResource(R.string.settings_amoled),
+                            subtitle = stringResource(R.string.settings_amoled_desc),
+                            leadingIconRes = AgentIcons.ic_theme_dark,
+                            checked = config.amoled,
+                            onCheckedChange = { value -> onConfigChange { it.copy(amoled = value) } },
+                            showDivider = true,
+                        )
+                        SeedPickerBlock(
+                            config = config,
+                            currentSeed = currentSeed,
+                            hexInput = hexInput,
+                            onHexInputChange = { hexInput = it; seedLocked = false },
+                            seedLocked = seedLocked,
+                            onLockSeed = { seedLocked = true },
+                            onConfigChange = onConfigChange,
+                            spacing = spacing,
+                        )
                     }
-                }
-                MiuixDivider(startIndent = spacing.lg)
-                Column(
-                    Modifier.padding(
-                        start = spacing.lg + 24.dp,
-                        end = spacing.lg,
-                        top = spacing.md,
-                        bottom = spacing.md,
-                    ),
-                ) {
-                    MiuixTextField(
-                        value = hexInput,
-                        onValueChange = { raw ->
-                            hexInput = raw
-                            seedLocked = false
-                            raw.toColorOrNull()?.let { parsed ->
-                                onConfigChange {
-                                    it.copy(customSeedArgb = parsed.toArgbLong(), pureWhite = false)
-                                }
-                            }
-                        },
-                        placeholder = "#6750A4",
-                        prefix = "HEX",
-                        supportingText = stringResource(R.string.settings_hex_hint),
-                    )
                 }
             }
         }
@@ -179,7 +165,7 @@ fun ThemeSettingsScreen(
                         modifier = Modifier.onGloballyPositioned { coords ->
                             darkToggleCenter = coords.boundsInWindow().center
                         },
-                        subtitle = if (config.pureWhite) {
+                        subtitle = if (config.pureWhite && config.colorCustomize) {
                             // 纯白模式强制浅色，此时再显示「始终深色」会前后矛盾
                             stringResource(R.string.settings_mode_pure_white)
                         } else {
@@ -190,11 +176,11 @@ fun ThemeSettingsScreen(
                                 DarkModeSetting.PER_MODULE -> stringResource(R.string.settings_mode_forced)
                             }
                         },
-                        leadingIcon = Icons.Outlined.DarkMode,
+                        leadingIconRes = AgentIcons.ic_theme_dark,
                         valueText = stringResource(R.string.settings_mode_desc),
                         onClick = {
                             // 纯白模式下这一行代表「退出纯白」，回到原来的深浅档位
-                            if (config.pureWhite) {
+                            if (config.pureWhite && config.colorCustomize) {
                                 onConfigChange { it.copy(pureWhite = false) }
                                 return@MiuixSuperArrow
                             }
@@ -214,22 +200,6 @@ fun ThemeSettingsScreen(
                             }
                             revealTrigger?.invoke(darkToggleCenter)
                         },
-                        showDivider = true,
-                    )
-                    MiuixSuperSwitch(
-                        title = stringResource(R.string.settings_dynamic_color),
-                        subtitle = stringResource(R.string.settings_dynamic_color_desc),
-                        leadingIcon = Icons.Outlined.AutoAwesome,
-                        checked = config.dynamicEnabled,
-                        onCheckedChange = { value -> onConfigChange { it.copy(dynamicEnabled = value) } },
-                        showDivider = true,
-                    )
-                    MiuixSuperSwitch(
-                        title = stringResource(R.string.settings_amoled),
-                        subtitle = stringResource(R.string.settings_amoled_desc),
-                        leadingIcon = Icons.Outlined.DarkMode,
-                        checked = config.amoled,
-                        onCheckedChange = { value -> onConfigChange { it.copy(amoled = value) } },
                         showDivider = true,
                     )
                     Column(Modifier.padding(horizontal = spacing.lg, vertical = spacing.md)) {
@@ -290,14 +260,102 @@ fun ThemeSettingsScreen(
                         toastState?.show(resetDoneMessage, MiuixToastTone.SUCCESS)
                     },
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.Refresh,
+                    leadingIconRes = AgentIcons.ic_refresh,
                 )
                 MiuixIconButton(
-                    icon = Icons.Outlined.ContentCopy,
+                    iconRes = AgentIcons.ic_copy,
                     contentDescription = stringResource(R.string.settings_copy_accent),
                     onClick = { toastState?.show("HEX ${currentSeed.toHexString()}", MiuixToastTone.NEUTRAL) },
                 )
             }
+        }
+    }
+}
+
+/**
+ * 主色取色区：左侧 HSV 色盘，右侧候选色纵排，下方 HEX 输入。
+ *
+ * 从 [ThemeSettingsScreen] 里抽出来独立成块，因为它现在只作为「Customize 取色」
+ * 展开区的内容 —— 展开/收起由外部驱动，这里只负责画。
+ */
+@Composable
+private fun SeedPickerBlock(
+    config: ThemeConfig,
+    currentSeed: Color,
+    hexInput: String,
+    onHexInputChange: (String) -> Unit,
+    seedLocked: Boolean,
+    onLockSeed: () -> Unit,
+    onConfigChange: ((ThemeConfig) -> ThemeConfig) -> Unit,
+    spacing: com.mcp.toolbox.core.design.token.SpacingTokens,
+) {
+    Column {
+        Row(
+            modifier = Modifier.padding(spacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 色盘靠左
+            ColorWheelPicker(
+                color = currentSeed,
+                onColorChange = { picked ->
+                    onHexInputChange(picked.toHexString())
+                    onConfigChange { it.copy(customSeedArgb = picked.toArgbLong(), pureWhite = false) }
+                },
+                size = 168.dp,
+            )
+            Spacer(Modifier.width(spacing.lg))
+            // 候选色靠右纵排：白、蓝、灰、纯白、黄、绿、紫
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SeedSwatches
+                    .filter { !(it.pureWhite && config.darkMode == DarkModeSetting.DARK) }
+                    .sortedBy { OrderOfSwatch.getValue(it.id) }
+                    .forEach { swatch ->
+                        SeedSwatchRow(
+                            color = swatch.color,
+                            label = swatch.labelZh,
+                            selected = if (swatch.pureWhite) config.pureWhite
+                            else seedLocked && !config.pureWhite &&
+                                swatch.color.toArgb() == currentSeed.toArgb(),
+                            onClick = {
+                                onLockSeed()
+                                if (swatch.pureWhite) {
+                                    onConfigChange { it.copy(pureWhite = true) }
+                                } else {
+                                    onConfigChange {
+                                        it.copy(
+                                            pureWhite = false,
+                                            customSeedArgb = swatch.color.toArgbLong(),
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                    }
+            }
+        }
+        MiuixDivider(startIndent = spacing.lg)
+        Column(
+            Modifier.padding(
+                start = spacing.lg + 24.dp,
+                end = spacing.lg,
+                top = spacing.md,
+                bottom = spacing.md,
+            ),
+        ) {
+            MiuixTextField(
+                value = hexInput,
+                onValueChange = { raw ->
+                    onHexInputChange(raw)
+                    raw.toColorOrNull()?.let { parsed ->
+                        onConfigChange {
+                            it.copy(customSeedArgb = parsed.toArgbLong(), pureWhite = false)
+                        }
+                    }
+                },
+                placeholder = "#6750A4",
+                prefix = "HEX",
+                supportingText = stringResource(R.string.settings_hex_hint),
+            )
         }
     }
 }
@@ -328,8 +386,8 @@ private fun SeedSwatchRow(
             contentAlignment = Alignment.Center,
         ) {
             if (selected) {
-                MiuixIcon(
-                    icon = Icons.Filled.Check,
+                MiuixIconRes(
+                    iconRes = AgentIcons.ic_check,
                     contentDescription = null,
                     tint = if (color.luminance() > 0.6f) Color(0xFF1A1A1C) else Color.White,
                     size = 16.dp,

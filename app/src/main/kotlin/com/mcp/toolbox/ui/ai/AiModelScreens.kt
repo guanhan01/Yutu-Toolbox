@@ -17,13 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import com.mcp.toolbox.core.design.component.MiuixIcon
@@ -169,7 +163,7 @@ fun AiModelScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    MiuixIcon(Icons.Outlined.Refresh, null, tint = colors.primary, size = 20.dp)
+                    MiuixIcon(AgentIcons.ic_refresh, null, tint = colors.primary, size = 20.dp)
                     Column(Modifier.weight(1f)) {
                         MiuixText(
                             text = stringResource(R.string.ai_pull_models),
@@ -192,7 +186,7 @@ fun AiModelScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    MiuixIcon(Icons.Outlined.Add, null, tint = colors.primary, size = 20.dp)
+                    MiuixIcon(AgentIcons.ic_plus, null, tint = colors.primary, size = 20.dp)
                     MiuixText(
                         text = stringResource(R.string.ai_add_model),
                         style = MiuixTheme.typography.bodyLarge,
@@ -221,7 +215,7 @@ fun AiModelScreen(
                         value = query,
                         onValueChange = { query = it },
                         placeholder = stringResource(R.string.ai_search_model),
-                        leadingIcon = Icons.Outlined.Search,
+                        leadingIconRes = AgentIcons.ic_search,
                         singleLine = true,
                     )
                 }
@@ -286,7 +280,7 @@ fun AiModelScreen(
                                 }
                             }
                             MiuixIconButton(
-                                icon = Icons.Outlined.Edit,
+                                iconRes = AgentIcons.ic_edit,
                                 contentDescription = null,
                                 onClick = { editing = entry },
                                 buttonSize = 40.dp,
@@ -306,7 +300,7 @@ fun AiModelScreen(
                             ) {
                                 if (selected) {
                                     MiuixIcon(
-                                        Icons.Outlined.Check,
+                                        AgentIcons.ic_check,
                                         null,
                                         tint = colors.onPrimary,
                                         size = 16.dp,
@@ -432,7 +426,7 @@ private fun ModelEditDialog(
                         style = MiuixTheme.typography.bodyMedium,
                     )
                     MiuixIconButton(
-                        icon = if (supportsReasoning) Icons.Outlined.Check else Icons.Outlined.Add,
+                        iconRes = if (supportsReasoning) AgentIcons.ic_check else AgentIcons.ic_plus,
                         contentDescription = null,
                         onClick = { supportsReasoning = !supportsReasoning },
                         filled = supportsReasoning,
@@ -458,7 +452,7 @@ private fun ModelEditDialog(
                         ) {
                             if (active) {
                                 MiuixIcon(
-                                    Icons.Outlined.Check,
+                                    AgentIcons.ic_check,
                                     null,
                                     tint = colors.primary,
                                     size = 16.dp,
@@ -478,7 +472,7 @@ private fun ModelEditDialog(
                         text = stringResource(R.string.ai_model_delete),
                         onClick = onDelete,
                         variant = com.mcp.toolbox.core.design.component.MiuixButtonVariant.TONAL,
-                        leadingIcon = Icons.Outlined.Delete,
+                        leadingIconRes = AgentIcons.ic_trash,
                     )
                 }
             }

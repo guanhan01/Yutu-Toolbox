@@ -17,14 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,7 +84,7 @@ private fun CustomAvatar(
                 modifier = Modifier.matchParentSize(),
             )
         } else {
-            MiuixIcon(Icons.Outlined.Add, null, tint = colors.onSurfaceVariant, size = size * 0.5f)
+            MiuixIcon(AgentIcons.ic_plus, null, tint = colors.onSurfaceVariant, size = size * 0.5f)
         }
     }
 }
@@ -153,7 +146,7 @@ private fun SelectionCircle(
         contentAlignment = Alignment.Center,
     ) {
         if (selected) {
-            MiuixIcon(Icons.Outlined.Check, null, tint = colors.onPrimary, size = 16.dp)
+            MiuixIcon(AgentIcons.ic_check, null, tint = colors.onPrimary, size = 16.dp)
         }
     }
 }
@@ -198,7 +191,7 @@ private fun SecretField(
                     inner()
                 }
                 MiuixIconButton(
-                    icon = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    iconRes = if (visible) AgentIcons.ic_eye_off else AgentIcons.ic_eye,
                     contentDescription = placeholder,
                     onClick = { visible = !visible },
                     buttonSize = 40.dp,
@@ -282,7 +275,7 @@ fun AiSettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    MiuixIcon(Icons.Outlined.Tune, null, tint = colors.onSurfaceVariant, size = 20.dp)
+                    MiuixIcon(AgentIcons.ic_settings_slider, null, tint = colors.onSurfaceVariant, size = 20.dp)
                     Column(Modifier.weight(1f)) {
                         MiuixText(stringResource(R.string.ai_models), style = MiuixTheme.typography.bodyLarge)
                         MiuixText(
@@ -322,7 +315,7 @@ fun AiSettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 MiuixIcon(
-                    Icons.Outlined.Terminal,
+                    AgentIcons.ic_terminal,
                     null,
                     tint = colors.onSurfaceVariant,
                     size = 20.dp,
@@ -459,7 +452,7 @@ fun AiProviderListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    MiuixIcon(Icons.Outlined.Add, null, tint = colors.primary, size = 20.dp)
+                    MiuixIcon(AgentIcons.ic_plus, null, tint = colors.primary, size = 20.dp)
                     MiuixText(
                         text = stringResource(R.string.ai_custom_add),
                         style = MiuixTheme.typography.bodyLarge,
@@ -847,7 +840,7 @@ fun AiProviderDetailScreen(
                             )
                         }
                         MiuixIconButton(
-                            icon = Icons.Outlined.Delete,
+                            iconRes = AgentIcons.ic_trash,
                             contentDescription = null,
                             onClick = {
                                 persist { it.copy(customHeaders = it.customHeaders - k) }
@@ -876,7 +869,7 @@ fun AiProviderDetailScreen(
                             }
                         },
                         enabled = headerKey.isNotBlank(),
-                        leadingIcon = Icons.Outlined.Add,
+                        leadingIconRes = AgentIcons.ic_plus,
                     )
                 }
             }
@@ -893,7 +886,7 @@ fun AiProviderDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                MiuixIcon(Icons.Outlined.Tune, null, tint = colors.onSurfaceVariant, size = 20.dp)
+                MiuixIcon(AgentIcons.ic_settings_slider, null, tint = colors.onSurfaceVariant, size = 20.dp)
                 Column(Modifier.weight(1f)) {
                     MiuixText(stringResource(R.string.ai_models), style = MiuixTheme.typography.bodyLarge)
                     MiuixText(

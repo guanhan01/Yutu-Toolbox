@@ -4,11 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Accessibility
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +13,7 @@ import com.mcp.toolbox.core.common.PrivilegeBackend
 import com.mcp.toolbox.core.common.ToolboxAccessibilityService
 import com.mcp.toolbox.core.common.PrivilegeManager
 import com.mcp.toolbox.core.common.PrivilegeStatus
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -122,7 +118,7 @@ fun PrivilegeScreen(modifier: Modifier = Modifier, onToast: (String) -> Unit = {
                         status.rootGranted -> "已授权，可执行 su 命令"
                         else -> "发现 su，尚未授权"
                     },
-                    leadingIcon = Icons.Outlined.Terminal,
+                    leadingIconRes = AgentIcons.ic_terminal,
                     trailing = {
                         MiuixTag(
                             text = if (status.rootGranted) "可用" else "不可用",
@@ -139,7 +135,7 @@ fun PrivilegeScreen(modifier: Modifier = Modifier, onToast: (String) -> Unit = {
                         !status.shizukuGranted -> "服务运行中，尚未授权"
                         else -> "已授权，可执行命令"
                     },
-                    leadingIcon = Icons.Outlined.Security,
+                    leadingIconRes = AgentIcons.ic_shield,
                     trailing = {
                         MiuixTag(
                             text = if (status.shizukuGranted) "可用" else "不可用",
@@ -165,7 +161,7 @@ fun PrivilegeScreen(modifier: Modifier = Modifier, onToast: (String) -> Unit = {
                         accessibilityOn -> "系统设置里已开启，服务尚未连接（可在系统里关掉重开）"
                         else -> "未开启。不开也能用，但界面操作与截屏需要 root 或 Shizuku"
                     },
-                    leadingIcon = Icons.Outlined.Accessibility,
+                    leadingIconRes = AgentIcons.ic_user,
                     trailing = {
                         MiuixTag(
                             text = if (accessibilityLive) "可用" else "不可用",

@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Lan
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -158,7 +156,7 @@ fun PortScanScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "端口扫描",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 if (running) {
@@ -238,7 +236,7 @@ fun PortScanScreen(
 
         if (hits.isEmpty()) {
             MiuixEmptyState(
-                icon = Icons.Outlined.Lan,
+                iconRes = AgentIcons.ic_svc_dns,
                 title = if (running) "正在扫描…" else "尚未发现开放端口",
                 description = if (running) {
                     "TCP connect 扫描进行中，结果会实时出现在这里"

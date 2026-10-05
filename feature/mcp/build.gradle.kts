@@ -23,7 +23,6 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.core.ktx)
     implementation("androidx.documentfile:documentfile:1.0.0")
     implementation(libs.androidx.activity.compose)

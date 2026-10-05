@@ -1,0 +1,32 @@
+<!-- ic_monitor -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M4.8,4.2H19.2A2.2,2.2 0 0 1 21.4,6.4V14.4A2.2,2.2 0 0 1 19.2,16.6H4.8A2.2,2.2 0 0 1 2.6,14.4V6.4A2.2,2.2 0 0 1 4.8,4.2Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M12,16.6L12,19.6" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M8,19.6L16,19.6" />
+
+</vector>

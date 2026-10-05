@@ -44,7 +44,7 @@ fun ToolsScreen(
                 ToolEntries.forEachIndexed { index, entry ->
                     MiuixListItem(
                         title = stringResource(entry.labelRes),
-                        leadingIcon = entry.icon,
+                        leadingIconRes = entry.icon,
                         showDivider = index != ToolEntries.lastIndex,
                         onClick = { onOpenTool(entry.route) },
                     )

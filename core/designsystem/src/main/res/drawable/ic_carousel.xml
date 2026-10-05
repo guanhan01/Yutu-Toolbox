@@ -1,0 +1,32 @@
+<!-- ic_carousel -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M4.4,5.4H12A2,2 0 0 1 14,7.4V16.6A2,2 0 0 1 12,18.6H4.4A2,2 0 0 1 2.4,16.6V7.4A2,2 0 0 1 4.4,5.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M15.6,5.4H19.4V18.6H15.6" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M20.8,8L20.8,16" />
+
+</vector>

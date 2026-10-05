@@ -1,7 +1,10 @@
 package com.mcp.toolbox.core.design.component
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.LinkInteractionListener
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -192,11 +195,41 @@ private fun codeLanguageOf(lang: String): CodeLanguage = when (lang.lowercase())
  * 用一次性扫描而不是多轮 replace：多轮 replace 会在「代码里含 **」这类情况下
  * 反复改写同一段文本，导致样式互相覆盖。
  */
+/**
+ * 「打开链接」的实现。
+ *
+ * 默认走 Compose 的 `LocalUriHandler`（系统浏览器）。宿主可以覆写它，
+ * 把链接交给应用内的浏览器——用户明确要求「用内置浏览器」打开，
+ * 但 `:core:designsystem` 不该依赖 `:feature:web`，所以用 CompositionLocal
+ * 把实现倒过来注入。
+ */
+val LocalLinkOpener = androidx.compose.runtime.staticCompositionLocalOf<((String) -> Unit)?> { null }
+
+@Composable
+private fun rememberLinkListener(): LinkInteractionListener? {
+    val custom = LocalLinkOpener.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    return androidx.compose.runtime.remember(custom, uriHandler) {
+        LinkInteractionListener { annotation ->
+            val url = (annotation as? LinkAnnotation.Url)?.url ?: return@LinkInteractionListener
+            if (custom != null) custom(url) else runCatching { uriHandler.openUri(url) }
+            Unit
+        }
+    }
+}
+
 fun inlineMarkdown(
     text: String,
     codeBackground: Color,
     linkColor: Color,
     codeFontFamily: FontFamily = FontFamily.Monospace,
+    /**
+     * 链接的点击监听。为 null 时链接**只有样式、不响应点击**。
+     *
+     * 之所以要求显式传入而不是在这里直接取 `LocalUriHandler`：
+     * 这个函数是普通函数（非 @Composable），拿不到 CompositionLocal。
+     */
+    linkListener: LinkInteractionListener? = null,
 ): AnnotatedString = buildAnnotatedString {
     var i = 0
     fun appendStyled(content: String, style: SpanStyle) {
@@ -244,6 +277,15 @@ fun inlineMarkdown(
                 }
             }
 
+            /**
+             * `[文本](url)`。
+             *
+             * 旧实现只把**显示文本**写进 AnnotatedString，`(url)` 整段被跳过——
+             * 于是链接有颜色有下划线，却完全点不动，也拿不到目标地址
+             * （用户实测反馈「AI 给的链接可以点击」）。
+             *
+             * 现在用 [LinkAnnotation.Url] 把地址一起带上，由渲染层决定怎么打开。
+             */
             rest.startsWith("[") -> {
                 val close = text.indexOf(']', i + 1)
                 val open = if (close > 0 && close + 1 < text.length && text[close + 1] == '(') {
@@ -252,14 +294,60 @@ fun inlineMarkdown(
                     -1
                 }
                 if (close > i && open > close) {
-                    appendStyled(
-                        text.substring(i + 1, close),
-                        SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
-                    )
+                    val label = text.substring(i + 1, close)
+                    val url = text.substring(close + 2, open).trim()
+                    if (url.isEmpty()) {
+                        appendStyled(
+                            label,
+                            SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                        )
+                    } else {
+                        pushLink(
+                            LinkAnnotation.Url(
+                                url = url,
+                                styles = TextLinkStyles(
+                                    SpanStyle(
+                                        color = linkColor,
+                                        textDecoration = TextDecoration.Underline,
+                                    ),
+                                ),
+                                linkInteractionListener = linkListener,
+                            ),
+                        )
+                        append(label)
+                        pop()
+                    }
                     i = open + 1
                 } else {
                     append(text[i]); i++
                 }
+            }
+
+            /**
+             * 裸链接（`https://…`）。
+             *
+             * 模型经常直接把地址写出来而不写成 Markdown 链接；不识别的话
+             * 用户只能长按选中再复制，很别扭。
+             */
+            rest.startsWith("http://") || rest.startsWith("https://") -> {
+                val end = rest.indexOfFirst { it.isWhitespace() || it == '）' || it == ')' || it == '，' || it == '。' }
+                    .let { if (it < 0) rest.length else it }
+                val url = rest.substring(0, end)
+                pushLink(
+                    LinkAnnotation.Url(
+                        url = url,
+                        styles = TextLinkStyles(
+                            SpanStyle(
+                                color = linkColor,
+                                textDecoration = TextDecoration.Underline,
+                            ),
+                        ),
+                        linkInteractionListener = linkListener,
+                    ),
+                )
+                append(url)
+                pop()
+                i += end
             }
 
             rest.startsWith("*") || rest.startsWith("_") -> {
@@ -295,6 +383,8 @@ fun MarkdownBlockView(
     compact: Boolean = false,
 ) {
     val colors = MiuixTheme.colors
+    // 链接点击：默认交给系统浏览器；宿主可用 LocalLinkOpener 换成内置浏览器
+    val linkListener = rememberLinkListener()
     val textColor = if (color != Color.Unspecified) color else colors.onSurface
     val style = if (compact) MiuixTheme.typography.bodySmall else MiuixTheme.typography.bodyMedium
 
@@ -304,6 +394,7 @@ fun MarkdownBlockView(
                 block.text,
                 codeBackground = colors.surfaceContainerHigh,
                 linkColor = colors.primary,
+                linkListener = linkListener,
             ),
             modifier = modifier.fillMaxWidth(),
             style = style,
@@ -322,6 +413,7 @@ fun MarkdownBlockView(
                     block.text,
                     codeBackground = colors.surfaceContainerHigh,
                     linkColor = colors.primary,
+                    linkListener = linkListener,
                 ),
                 modifier = modifier.fillMaxWidth(),
                 style = if (compact) style.copy(fontWeight = FontWeight.SemiBold) else headingStyle,
@@ -346,6 +438,7 @@ fun MarkdownBlockView(
                             item,
                             codeBackground = colors.surfaceContainerHigh,
                             linkColor = colors.primary,
+                            linkListener = linkListener,
                         ),
                         modifier = Modifier.weight(1f),
                         style = style,
@@ -364,7 +457,7 @@ fun MarkdownBlockView(
             lineHeight = if (compact) 18.sp else 20.sp,
         )
 
-        is MdBlock.Table -> MarkdownTableView(block, modifier, compact)
+        is MdBlock.Table -> MarkdownTableView(block, modifier, compact, linkListener)
 
         is MdBlock.Quote -> Row(modifier.fillMaxWidth()) {
             Box(
@@ -380,6 +473,7 @@ fun MarkdownBlockView(
                     block.text,
                     codeBackground = colors.surfaceContainerHigh,
                     linkColor = colors.primary,
+                    linkListener = linkListener,
                 ),
                 modifier = Modifier.weight(1f),
                 style = style,
@@ -408,6 +502,14 @@ private fun MarkdownTableView(
     table: MdBlock.Table,
     modifier: Modifier = Modifier,
     compact: Boolean,
+    /**
+     * 与表格外**同一个**链接监听器。
+     *
+     * 复用它而不是另建一套：点击行为全部由注入的 `LocalLinkOpener` 决定
+     * （内置浏览器 + nonce + force 那套），表格里外走同一条路，
+     * 就不会出现「表格里能点、表格外点不动」这种两边不一致的问题。
+     */
+    linkListener: LinkInteractionListener?,
 ) {
     val colors = MiuixTheme.colors
     val style = if (compact) MiuixTheme.typography.bodySmall else MiuixTheme.typography.bodyMedium
@@ -436,7 +538,12 @@ private fun MarkdownTableView(
         Row(Modifier.background(colors.surfaceContainerHigh)) {
             table.header.forEachIndexed { index, cell ->
                 MiuixText(
-                    text = inlineMarkdown(cell, colors.surfaceContainerHigh, colors.primary),
+                    text = inlineMarkdown(
+                        cell,
+                        colors.surfaceContainerHigh,
+                        colors.primary,
+                        linkListener = linkListener,
+                    ),
                     modifier = Modifier
                         .width(widths[index])
                         .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -463,6 +570,7 @@ private fun MarkdownTableView(
                             row.getOrNull(col).orEmpty(),
                             colors.surfaceContainerHigh,
                             colors.primary,
+                            linkListener = linkListener,
                         ),
                         modifier = Modifier
                             .width(widths[col])

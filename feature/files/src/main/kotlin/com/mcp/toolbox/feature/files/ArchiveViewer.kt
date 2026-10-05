@@ -20,10 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.common.FileOps
 import com.mcp.toolbox.core.common.PrivilegeManager
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -47,13 +44,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.zip.ZipFile
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.InsertDriveFile
 
 /** 压缩包总大小上限：超过就不再尝试落到本地缓存。 */
 private const val MAX_ARCHIVE_BYTES = 4L * 1024 * 1024 * 1024
@@ -68,13 +58,13 @@ internal data class ArchiveEntry(
 internal fun shellQuoted(value: String): String = "'" + value.replace("'", "'\\''") + "'"
 
 private fun iconFor(name: String) = when (name.substringAfterLast('.', "").lowercase()) {
-    "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "svg" -> Icons.Outlined.Image
-    "mp3", "wav", "flac", "aac", "ogg", "m4a", "amr" -> Icons.Outlined.MusicNote
-    "mp4", "mkv", "avi", "mov", "webm", "3gp", "flv" -> Icons.Outlined.Movie
-    "java", "kt", "kts", "smali", "c", "cpp", "h", "py", "js", "ts", "go", "rs", "sh", "xml", "json", "yml", "yaml", "html", "css" -> Icons.Outlined.Code
-    "txt", "md", "log", "ini", "conf", "properties", "csv" -> Icons.Outlined.Description
-    "apk", "jar", "dex", "so", "zip", "tar", "gz", "7z", "rar" -> Icons.Outlined.Android
-    else -> Icons.Outlined.InsertDriveFile
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "svg" -> AgentIcons.ic_image
+    "mp3", "wav", "flac", "aac", "ogg", "m4a", "amr" -> AgentIcons.ic_music
+    "mp4", "mkv", "avi", "mov", "webm", "3gp", "flv" -> AgentIcons.ic_video
+    "java", "kt", "kts", "smali", "c", "cpp", "h", "py", "js", "ts", "go", "rs", "sh", "xml", "json", "yml", "yaml", "html", "css" -> AgentIcons.ic_code
+    "txt", "md", "log", "ini", "conf", "properties", "csv" -> AgentIcons.ic_file_text
+    "apk", "jar", "dex", "so", "zip", "tar", "gz", "7z", "rar" -> AgentIcons.ic_phone_device
+    else -> AgentIcons.ic_file
 }
 
 private fun humanSize(bytes: Long): String = when {
@@ -324,11 +314,11 @@ fun ArchiveViewerOverlay(
     ) {
         MiuixTopAppBar(
             title = name,
-            navigationIcon = Icons.Outlined.Close,
+            navigationIconRes = AgentIcons.ic_close,
             onNavigationClick = onClose,
             actions = {
                 if (entries != null) {
-                    MiuixIconButton(Icons.Outlined.Unarchive, "解压到同级目录", onClick = extractAll)
+                    MiuixIconButton(AgentIcons.ic_archive, "解压到同级目录", onClick = extractAll)
                 }
             },
         )
@@ -420,7 +410,7 @@ private fun ArchiveRow(item: ArchiveEntry, onOpen: () -> Unit, onExtract: () -> 
             )
         }
         Spacer(Modifier.width(spacing.sm))
-        MiuixIconButton(Icons.Outlined.Unarchive, "解出这个文件到同级目录", onClick = onExtract)
+        MiuixIconButton(AgentIcons.ic_archive, "解出这个文件到同级目录", onClick = onExtract)
     }
 }
 

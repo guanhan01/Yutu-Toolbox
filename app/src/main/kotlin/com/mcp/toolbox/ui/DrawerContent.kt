@@ -1,5 +1,6 @@
 package com.mcp.toolbox.ui
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -21,11 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,15 +42,13 @@ import com.mcp.toolbox.R
 import com.mcp.toolbox.feature.capture.CaptureStore
 import com.mcp.toolbox.feature.home.ChatSession
 import com.mcp.toolbox.feature.home.ChatStore
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBadge
 import com.mcp.toolbox.core.design.component.MiuixOverflowMenu
 import com.mcp.toolbox.core.design.component.MiuixMenuItem
 import com.mcp.toolbox.core.design.component.MiuixDialog
 import com.mcp.toolbox.core.design.component.MiuixTextField
 import com.mcp.toolbox.core.design.component.MiuixDivider
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -89,6 +83,8 @@ fun DrawerContent(
     val scope = rememberCoroutineScope()
     // 正在重命名的会话；非空即弹对话框
     var renamingSession by remember { mutableStateOf<ChatSession?>(null) }
+    // 待确认删除的会话：删除会丢掉整段对话，先弹一次确认
+    var deletingSession by remember { mutableStateOf<ChatSession?>(null) }
     val context = LocalContext.current
 
     Column(
@@ -113,7 +109,7 @@ fun DrawerContent(
             Spacer(Modifier.weight(1f))
             MiuixIconButton(
                 onClick = onClose,
-                icon = Icons.Outlined.Close,
+                iconRes = AgentIcons.ic_close,
                 contentDescription = stringResource(R.string.app_drawer_close),
             )
         }
@@ -129,7 +125,7 @@ fun DrawerContent(
                 destination = Destination(
                     route = Routes.MEMORY,
                     labelRes = R.string.app_nav_memory,
-                    icon = Icons.Outlined.Psychology,
+                    icon = AgentIcons.ic_brain,
                 ),
                 selected = currentRoute == Routes.MEMORY,
                 onClick = { onNavigate(Routes.MEMORY) },
@@ -171,9 +167,7 @@ fun DrawerContent(
                                         // 才能连着看好几条；收起交给点遮罩或点开关闭按钮。
                                     },
                                     onRename = { renamingSession = item },
-                                    onDelete = {
-                                        scope.launch { ChatStore.delete(context, item.id) }
-                                    },
+                                    onDelete = { deletingSession = item },
                                 )
                             }
                         }
@@ -200,6 +194,19 @@ fun DrawerContent(
                 )
             }
         }
+    }
+
+    // 删除对话确认
+    deletingSession?.let { target ->
+        MiuixDialog(
+            visible = true,
+            onDismiss = { deletingSession = null },
+            title = stringResource(R.string.chat_history_delete_title),
+            message = stringResource(R.string.chat_history_delete_message),
+            confirmText = stringResource(R.string.chat_history_delete),
+            destructive = true,
+            onConfirm = { scope.launch { ChatStore.delete(context, target.id) } },
+        )
     }
 
     // 重命名对话框
@@ -258,8 +265,8 @@ private fun DrawerItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        MiuixIcon(
-            icon = destination.icon,
+        MiuixIconRes(
+            iconRes = destination.icon,
             contentDescription = stringResource(destination.labelRes),
             tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
             size = 20.dp,
@@ -296,8 +303,8 @@ private fun DrawerItem(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                MiuixIcon(
-                    icon = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                MiuixIconRes(
+                    iconRes = if (expanded) AgentIcons.ic_chevron_up else AgentIcons.ic_chevron_down,
                     contentDescription = arrowDesc,
                     tint = colors.onSurfaceVariant,
                     size = 18.dp,
@@ -382,12 +389,12 @@ private fun ChatHistoryRow(
         ) {
                 MiuixMenuItem(
                     text = stringResource(R.string.chat_history_rename),
-                    icon = Icons.Outlined.DriveFileRenameOutline,
+                    iconRes = AgentIcons.ic_edit,
                     onClick = { showMenu = false; onRename() },
                 )
                 MiuixMenuItem(
                     text = stringResource(R.string.chat_history_delete),
-                    icon = Icons.Outlined.DeleteOutline,
+                    iconRes = AgentIcons.ic_trash,
                     danger = true,
                     onClick = { showMenu = false; onDelete() },
                 )

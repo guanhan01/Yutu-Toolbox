@@ -1,5 +1,7 @@
 package com.mcp.toolbox.feature.mcp
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -23,19 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.DriveFileRenameOutline
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Upload
-import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -139,13 +129,13 @@ fun SkillScreen(
                     MiuixEmptyState(
                         title = "还没有 Skill",
                         description = "点右下角「+」导入。支持文件、ZIP、文件夹、URL、JSON 与剪贴板。",
-                        icon = Icons.Outlined.Extension,
+                        iconRes = AgentIcons.ic_plugin,
                         action = {
                             MiuixButton(
                                 text = "导入",
                                 onClick = { showImport = true },
                                 variant = MiuixButtonVariant.TONAL,
-                                leadingIcon = Icons.Outlined.Add,
+                                leadingIconRes = AgentIcons.ic_plus,
                             )
                         },
                     )
@@ -201,7 +191,7 @@ fun SkillScreen(
                 .semantics { contentDescription = "导入 Skill" },
             contentAlignment = Alignment.Center,
         ) {
-            MiuixIcon(Icons.Outlined.Add, null, tint = colors.onPrimary, size = 26.dp)
+            MiuixIcon(AgentIcons.ic_plus, null, tint = colors.onPrimary, size = 26.dp)
         }
 
         if (busy) {
@@ -240,7 +230,7 @@ fun SkillScreen(
                     detail = current
                     menuSkill = null
                 },
-                icon = Icons.Outlined.Info,
+                iconRes = AgentIcons.ic_info,
             )
             MiuixMenuItem(
                 text = "重命名",
@@ -248,7 +238,7 @@ fun SkillScreen(
                     renaming = current
                     menuSkill = null
                 },
-                icon = Icons.Outlined.DriveFileRenameOutline,
+                iconRes = AgentIcons.ic_edit,
             )
             MiuixMenuItem(
                 text = "导出为 ZIP",
@@ -257,7 +247,7 @@ fun SkillScreen(
                     menuSkill = null
                     exportLauncher.launch(null)
                 },
-                icon = Icons.Outlined.Upload,
+                iconRes = AgentIcons.ic_upload,
             )
             MiuixMenuItem(
                 text = "删除",
@@ -265,7 +255,7 @@ fun SkillScreen(
                     deleting = current
                     menuSkill = null
                 },
-                icon = Icons.Outlined.DeleteOutline,
+                iconRes = AgentIcons.ic_trash,
                 danger = true,
             )
         }
@@ -376,7 +366,7 @@ private fun SkillTopBar(
             contentAlignment = Alignment.Center,
         ) {
             MiuixIcon(
-                Icons.AutoMirrored.Outlined.ArrowBack,
+                AgentIcons.ic_chevron_left,
                 "返回",
                 tint = MiuixTheme.colors.onSurface,
                 size = 22.dp,
@@ -418,7 +408,7 @@ private fun SkillRow(
                 contentAlignment = Alignment.Center,
             ) {
                 MiuixIcon(
-                    Icons.Outlined.Extension,
+                    AgentIcons.ic_plugin,
                     null,
                     tint = colors.primary,
                     size = 22.dp,
@@ -537,7 +527,7 @@ private fun SkillImportSheet(
             ) {
                 when (tab) {
                     ImportTab.FILE -> ImportEntry(
-                        icon = Icons.Outlined.Description,
+                        iconRes = AgentIcons.ic_file_text,
                         title = "选择 Markdown 文件",
                         subtitle = "导入一个 .md；带 frontmatter 时读取 name 与 description",
                         action = "选择文件",
@@ -545,7 +535,7 @@ private fun SkillImportSheet(
                     )
 
                     ImportTab.ZIP -> ImportEntry(
-                        icon = Icons.Outlined.Upload,
+                        iconRes = AgentIcons.ic_upload,
                         title = "选择 ZIP 压缩包",
                         subtitle = "包内需有 SKILL.md，可带 scripts / references / assets",
                         action = "选择 ZIP",
@@ -553,7 +543,7 @@ private fun SkillImportSheet(
                     )
 
                     ImportTab.FOLDER -> ImportEntry(
-                        icon = Icons.Outlined.FolderOpen,
+                        iconRes = AgentIcons.ic_folder,
                         title = "选择文件夹",
                         subtitle = "整个目录复制进来；含多个子目录时逐个识别为 Skill",
                         action = "选择文件夹",
@@ -578,7 +568,7 @@ private fun SkillImportSheet(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = Icons.Outlined.Link,
+                            leadingIconRes = AgentIcons.ic_link,
                         )
                     }
 
@@ -602,7 +592,7 @@ private fun SkillImportSheet(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = Icons.Outlined.DataObject,
+                            leadingIconRes = AgentIcons.ic_json_data,
                         )
                         Spacer(Modifier.height(spacing.sm))
                         MiuixButton(
@@ -614,7 +604,7 @@ private fun SkillImportSheet(
                     }
 
                     ImportTab.CLIPBOARD -> ImportEntry(
-                        icon = Icons.Outlined.ContentCopy,
+                        iconRes = AgentIcons.ic_copy,
                         title = "从剪贴板导入",
                         subtitle = "读出剪贴板里的 JSON 文本并导入",
                         action = "读取剪贴板",
@@ -637,7 +627,7 @@ private fun SkillImportSheet(
 /** 导入分类里的一屏：图标 + 说明 + 一个主操作按钮。 */
 @Composable
 private fun ImportEntry(
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     title: String,
     subtitle: String,
     action: String,
@@ -647,7 +637,8 @@ private fun ImportEntry(
     val spacing = MiuixTheme.dimens.spacing
     MiuixCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(spacing.lg)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            MiuixIcon(icon, null, tint = colors.primary, size = 24.dp)
+            MiuixIconRes(
+iconRes, null, tint = colors.primary, size = 24.dp)
             Spacer(Modifier.width(spacing.md))
             MiuixText(text = title, style = MiuixTheme.typography.titleMedium)
         }
@@ -738,7 +729,7 @@ private fun SkillDetailSheet(
                         .background(colors.primary.copy(alpha = 0.12f), RoundedCornerShape(MiuixTheme.radius.field)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    MiuixIcon(Icons.Outlined.Extension, null, tint = colors.primary, size = 22.dp)
+                    MiuixIcon(AgentIcons.ic_plugin, null, tint = colors.primary, size = 22.dp)
                 }
                 Spacer(Modifier.width(spacing.md))
                 Column(Modifier.weight(1f)) {
@@ -849,25 +840,25 @@ private fun SkillDetailSheet(
                 MiuixCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
                     MiuixListItem(
                         title = "重命名",
-                        leadingIcon = Icons.Outlined.DriveFileRenameOutline,
+                        leadingIconRes = AgentIcons.ic_edit,
                         onClick = onRename,
                         showDivider = true,
                     )
                     MiuixListItem(
                         title = "导出为 ZIP",
-                        leadingIcon = Icons.Outlined.Upload,
+                        leadingIconRes = AgentIcons.ic_upload,
                         onClick = onExport,
                         showDivider = true,
                     )
                     MiuixListItem(
                         title = "复制 JSON",
-                        leadingIcon = Icons.Outlined.DataObject,
+                        leadingIconRes = AgentIcons.ic_json_data,
                         onClick = onExportJson,
                         showDivider = true,
                     )
                     MiuixListItem(
                         title = "删除",
-                        leadingIcon = Icons.Outlined.DeleteOutline,
+                        leadingIconRes = AgentIcons.ic_trash,
                         onClick = onDelete,
                         danger = true,
                     )

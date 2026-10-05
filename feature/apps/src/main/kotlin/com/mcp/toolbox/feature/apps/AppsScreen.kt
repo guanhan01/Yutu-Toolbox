@@ -21,16 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AcUnit
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +43,7 @@ import android.provider.Settings
 import androidx.compose.runtime.rememberCoroutineScope
 import com.mcp.toolbox.core.common.PrivilegeManager
 import kotlinx.coroutines.launch
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBadge
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixDivider
@@ -237,11 +228,11 @@ fun AppsScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "应用管理",
-                navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                navigationIconRes = AgentIcons.ic_chevron_left,
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                             MiuixMenuItem(
                                 text = if (includeSystem) "只看用户应用" else "显示系统应用",
@@ -249,10 +240,10 @@ fun AppsScreen(
                                     appScope = if (includeSystem) AppScope.USER else AppScope.ALL
                                     menuOpen = false
                                 },
-                                icon = Icons.Outlined.Android,
+                                iconRes = AgentIcons.ic_phone_device,
                                 checked = includeSystem,
                             )
-                            MiuixMenuItem("按体积排序", { menuOpen = false }, icon = Icons.Outlined.Info)
+                            MiuixMenuItem("按体积排序", { menuOpen = false }, iconRes = AgentIcons.ic_info)
                             MiuixMenuItem("导出应用列表", { menuOpen = false; onToast("已导出 ${visible.size} 条记录") })
                         }
                     }
@@ -357,13 +348,13 @@ fun AppsScreen(
                 MiuixDivider()
                 MiuixListItem(
                     title = "打开应用",
-                    leadingIcon = Icons.Outlined.OpenInNew,
+                    leadingIconRes = AgentIcons.ic_link,
                     onClick = { actionTarget = null; launchApp(context, target, onToast) },
                 )
                 MiuixListItem(
                     title = "应用详情",
                     subtitle = "系统设置页 · uid ${target.uid}",
-                    leadingIcon = Icons.Outlined.Info,
+                    leadingIconRes = AgentIcons.ic_info,
                     onClick = { actionTarget = null; openAppDetails(context, target, onToast) },
                 )
                 MiuixListItem(
@@ -373,7 +364,7 @@ fun AppsScreen(
                     } else {
                         "pm enable · 恢复应用运行"
                     },
-                    leadingIcon = Icons.Outlined.AcUnit,
+                    leadingIconRes = AgentIcons.ic_weather,
                     onClick = {
                         actionTarget = null
                         scope.launch {
@@ -386,7 +377,7 @@ fun AppsScreen(
                 MiuixListItem(
                     title = if (target.isSystem) "系统应用不可卸载" else "卸载",
                     subtitle = formatBytes(target.sizeBytes) + " · 安装于 " + formatDate(target.installedAt),
-                    leadingIcon = Icons.Outlined.Delete,
+                    leadingIconRes = AgentIcons.ic_trash,
                     danger = !target.isSystem,
                     onClick = {
                         actionTarget = null
@@ -426,7 +417,7 @@ private fun AppRow(app: InstalledApp, icon: ImageBitmap?, onClick: () -> Unit) {
                     modifier = Modifier.size(40.dp),
                 )
             } else {
-                MiuixIcon(Icons.Outlined.Android, null, tint = colors.onSurfaceVariant, size = 22.dp)
+                MiuixIcon(AgentIcons.ic_phone_device, null, tint = colors.onSurfaceVariant, size = 22.dp)
             }
         }
         Column(
@@ -453,7 +444,7 @@ private fun AppRow(app: InstalledApp, icon: ImageBitmap?, onClick: () -> Unit) {
                 color = colors.onSurfaceVariant,
             )
         }
-        MiuixIcon(Icons.Outlined.ChevronRight, null, tint = colors.onSurfaceVariant, size = 18.dp)
+        MiuixIcon(AgentIcons.ic_chevron_right, null, tint = colors.onSurfaceVariant, size = 18.dp)
     }
 }
 

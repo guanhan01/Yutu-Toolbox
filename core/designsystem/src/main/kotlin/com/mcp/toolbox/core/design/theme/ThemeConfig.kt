@@ -39,11 +39,23 @@ val FIXED_PALETTE_STYLE: PaletteStyleSetting = PaletteStyleSetting.VIBRANT
 data class ThemeConfig(
     val darkMode: DarkModeSetting = DarkModeSetting.FOLLOW_SYSTEM,
     val perModuleDark: Set<String> = emptySet(),
+    /**
+     * 是否启用自定义取色（Customize）。
+     *
+     * 这是一组色彩自定义的**总开关**：只有它为 true 时，[customSeedArgb]（主色调色盘）、
+     * [dynamicEnabled]（动态取色）、[amoled]（AMOLED 纯黑）、[pureWhite]（纯白）才生效。
+     *
+     * 为 false 时整套配色直接取官方 Miuix 的默认调色板 —— 界面与「真 Miuix」完全一致，
+     * 不会出现「官方配色 + 某几项自定义」的混合态。
+     *
+     * 与 [darkMode] 的关系：深浅模式不属于「取色」，无论开关如何都照常生效。
+     */
+    val colorCustomize: Boolean = false,
     val customSeedArgb: Long = BrandSeedArgb,
-    /** 是否跟随系统动态取色（Monet）。关掉则用 [customSeedArgb]。 */
+    /** 是否跟随系统动态取色（Monet）。关掉则用 [customSeedArgb]。仅在 [colorCustomize] 打开时生效。 */
     val dynamicEnabled: Boolean = true,
     val amoled: Boolean = false,
-    /** 纯白模式：surface 系压白，主色保持鲜艳。 */
+    /** 纯白模式：surface 系压白，主色保持鲜艳。仅在 [colorCustomize] 打开时生效。 */
     val pureWhite: Boolean = true,
     /** 全局圆角尺度 0-32dp：卡片=该值，Dialog/Sheet/输入栏=×1.4，输入框=×0.6。 */
     val radiusScaleDp: Float = 20f,

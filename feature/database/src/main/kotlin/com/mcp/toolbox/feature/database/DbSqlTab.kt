@@ -13,13 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeEditor
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
@@ -124,12 +118,12 @@ fun DbSqlTab(
             MiuixTag(text = "${tables.size} 张表", color = colors.onSurfaceVariant)
             Spacer(Modifier.weight(1f))
             MiuixIconButton(
-                icon = Icons.Outlined.History,
+                iconRes = AgentIcons.ic_clock,
                 contentDescription = "执行历史",
                 onClick = { panel = if (panel == SqlPanel.HISTORY) SqlPanel.NONE else SqlPanel.HISTORY },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.StarBorder,
+                iconRes = AgentIcons.ic_star,
                 contentDescription = "收藏语句",
                 onClick = { panel = if (panel == SqlPanel.FAVORITE) SqlPanel.NONE else SqlPanel.FAVORITE },
             )
@@ -170,7 +164,7 @@ fun DbSqlTab(
             MiuixButton(
                 text = "执行",
                 onClick = { run() },
-                leadingIcon = Icons.Outlined.PlayArrow,
+                leadingIconRes = AgentIcons.ic_play_circle,
                 loading = running,
             )
             Spacer(Modifier.width(8.dp))
@@ -234,7 +228,7 @@ fun DbSqlTab(
                         onClick = { script = entry },
                         trailing = {
                             MiuixIconButton(
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                                 contentDescription = "从历史移除",
                                 buttonSize = 32.dp,
                                 iconSize = 16.dp,
@@ -263,7 +257,7 @@ fun DbSqlTab(
                         showDivider = true,
                         trailing = {
                             MiuixIconButton(
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                                 contentDescription = "取消收藏",
                                 buttonSize = 32.dp,
                                 iconSize = 16.dp,
@@ -297,7 +291,7 @@ fun DbSqlTab(
                             text = "导出 CSV",
                             variant = MiuixButtonVariant.TONAL,
                             size = MiuixButtonSize.SMALL,
-                            leadingIcon = Icons.Outlined.FileDownload,
+                            leadingIconRes = AgentIcons.ic_download,
                             onClick = { onExport("query_result.csv", SqliteEngine.toCsv(outcome)) },
                         )
                         Spacer(Modifier.width(8.dp))

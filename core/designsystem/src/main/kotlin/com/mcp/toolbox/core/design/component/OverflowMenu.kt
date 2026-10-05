@@ -1,5 +1,8 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.icon.AgentIcons
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -20,8 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +38,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -151,7 +151,7 @@ fun MiuixMenuItem(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
+    @DrawableRes iconRes: Int? = null,
     danger: Boolean = false,
     checked: Boolean? = null,
     trailingText: String? = null,
@@ -176,8 +176,8 @@ fun MiuixMenuItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (icon != null) {
-            MiuixIcon(icon, null, tint = contentColor, size = 18.dp)
+        if (iconRes != null) {
+            MiuixIconRes(iconRes, null, tint = contentColor, size = 18.dp)
         }
         MiuixText(
             text = text,
@@ -195,7 +195,7 @@ fun MiuixMenuItem(
         if (checked != null) {
             if (checked) {
                 MiuixIcon(
-                    Icons.Filled.Check,
+                    AgentIcons.ic_check,
                     null,
                     tint = colors.primary,
                     size = 16.dp,

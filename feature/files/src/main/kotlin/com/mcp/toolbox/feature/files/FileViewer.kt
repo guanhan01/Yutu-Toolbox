@@ -27,14 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +45,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.common.FileOps
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
 import com.mcp.toolbox.core.design.component.MiuixIconButton
@@ -259,34 +252,34 @@ private fun FileViewerOverlayInner(
     ) {
         MiuixTopAppBar(
             title = name,
-            navigationIcon = Icons.Outlined.Close,
+            navigationIconRes = AgentIcons.ic_close,
             onNavigationClick = { if (editing) editing = false else onClose() },
             actions = {
                 if (isApk) {
-                    MiuixIconButton(Icons.Outlined.Android, "安装", onClick = { onInstallApk(path) })
-                    MiuixIconButton(Icons.Outlined.Code, "反编译", onClick = { onDecompile(path) })
+                    MiuixIconButton(AgentIcons.ic_phone_device, "安装", onClick = { onInstallApk(path) })
+                    MiuixIconButton(AgentIcons.ic_code, "反编译", onClick = { onDecompile(path) })
                 }
                 val textState = state as? ViewerState.Text
                 if (editing) {
                     MiuixIconButton(
-                        Icons.Outlined.Check,
+                        AgentIcons.ic_check,
                         if (saving) "保存中" else "保存",
                         onClick = { saveDraft() },
                         enabled = !saving,
                     )
                 }
                 if (textState != null && !editing) {
-                    MiuixIconButton(Icons.Outlined.ContentCopy, "复制全文", onClick = {
+                    MiuixIconButton(AgentIcons.ic_copy, "复制全文", onClick = {
                         clipboard.setText(AnnotatedString(textState.content))
                         onToast("已复制全文")
                     })
-                    MiuixIconButton(Icons.Outlined.Edit, "编辑", onClick = {
+                    MiuixIconButton(AgentIcons.ic_edit, "编辑", onClick = {
                         draft = textState.content
                         editing = true
                     })
                 }
                 MiuixIconButton(
-                    Icons.Outlined.Share,
+                    AgentIcons.ic_share,
                     "分享",
                     onClick = { sharePaths(context, listOf(path), onToast) },
                 )

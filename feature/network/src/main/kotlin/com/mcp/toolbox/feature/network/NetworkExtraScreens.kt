@@ -19,12 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +32,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
@@ -108,12 +103,12 @@ fun WhoisScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         MiuixTopAppBar(
             title = "Whois / RDAP",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 if (rawJson.isNotBlank()) {
                     com.mcp.toolbox.core.design.component.MiuixIconButton(
-                        icon = Icons.Outlined.ContentCopy,
+                        iconRes = AgentIcons.ic_copy,
                         contentDescription = "复制原始 JSON",
                         onClick = {
                             clipboard.setText(AnnotatedString(rawJson))
@@ -135,7 +130,7 @@ fun WhoisScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = "example.com 或 8.8.8.8",
-                leadingIcon = Icons.Outlined.Search,
+                leadingIconRes = AgentIcons.ic_search,
             )
             Spacer(Modifier.height(10.dp))
             MiuixButton(
@@ -321,11 +316,11 @@ fun NetworkEnvScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         MiuixTopAppBar(
             title = "网络环境",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 com.mcp.toolbox.core.design.component.MiuixIconButton(
-                    icon = Icons.Outlined.Refresh,
+                    iconRes = AgentIcons.ic_refresh,
                     contentDescription = "刷新",
                     onClick = {
                         refreshing = true
@@ -379,7 +374,7 @@ fun NetworkEnvScreen(onBack: () -> Unit, onToast: (String) -> Unit) {
             MiuixEmptyState(
                 title = "未读取到网络信息",
                 description = "请检查是否已连接网络",
-                icon = Icons.Outlined.Wifi,
+                iconRes = AgentIcons.ic_wifi,
             )
         }
         Spacer(Modifier.height(4.dp))

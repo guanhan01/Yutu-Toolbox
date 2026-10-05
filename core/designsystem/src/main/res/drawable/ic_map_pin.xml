@@ -1,0 +1,24 @@
+<!-- ic_map_pin -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M12,21C12,21 19,14.6 19,9.6C19,6.6 16.6,4.4 12,4.4C7.4,4.4 5,6.6 5,9.6C5,14.6 12,21 12,21Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M9.6,9.6A2.4,2.4 0 1 0 14.4,9.6A2.4,2.4 0 1 0 9.6,9.6Z" />
+
+</vector>

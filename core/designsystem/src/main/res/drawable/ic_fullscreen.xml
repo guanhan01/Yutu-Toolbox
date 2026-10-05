@@ -1,0 +1,17 @@
+<!-- ic_fullscreen -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:fillType="evenOdd"
+        android:pathData="M4.4,9.4V4.4H9.4M14.6,4.4H19.6V9.4M19.6,14.6V19.6H14.6M9.4,19.6H4.4V14.6" />
+
+</vector>

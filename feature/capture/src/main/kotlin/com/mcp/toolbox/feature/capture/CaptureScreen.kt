@@ -39,23 +39,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
 import com.mcp.toolbox.core.design.component.MiuixDialog
@@ -167,14 +151,14 @@ fun CaptureScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = str.title,
-            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 MiuixIconButton(
-                    Icons.Outlined.Settings, str.actionSettings, onClick = { configOpen = true })
+                    AgentIcons.ic_settings, str.actionSettings, onClick = { configOpen = true })
                 Box {
                     MiuixIconButton(
-                        Icons.Outlined.MoreHoriz, str.actionMore, onClick = { menuOpen = true })
+                        AgentIcons.ic_more_horiz, str.actionMore, onClick = { menuOpen = true })
                     MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                         MiuixMenuItem(
                             str.menuScope,
@@ -182,7 +166,7 @@ fun CaptureScreen(
                                 menuOpen = false
                                 appsOpen = true
                             },
-                            icon = Icons.Outlined.FilterList,
+                            iconRes = AgentIcons.ic_filter,
                         )
                         MiuixMenuItem(
                             str.menuDnsLog,
@@ -190,7 +174,7 @@ fun CaptureScreen(
                                 menuOpen = false
                                 dnsLogOpen = true
                             },
-                            icon = Icons.Outlined.Bolt,
+                            iconRes = AgentIcons.ic_speed,
                             trailingText = state.dnsLog.size.toString(),
                         )
                         MiuixMenuItem(
@@ -199,7 +183,7 @@ fun CaptureScreen(
                                 menuOpen = false
                                 caOpen = true
                             },
-                            icon = Icons.Outlined.Security,
+                            iconRes = AgentIcons.ic_shield,
                         )
                         MiuixMenuItem(
                             str.menuDecrypt,
@@ -212,7 +196,7 @@ fun CaptureScreen(
                                 onToast(if (next) str.toastDecryptOn else str.toastDecryptOff)
                                 menuOpen = false
                             },
-                            icon = Icons.Outlined.Lock,
+                            iconRes = AgentIcons.ic_lock,
                             trailingText = if (decryptOn) str.stateOn else str.stateOff,
                         )
                         MiuixMenuItem(
@@ -221,7 +205,7 @@ fun CaptureScreen(
                                 menuOpen = false
                                 exportOpen = true
                             },
-                            icon = Icons.Outlined.FileDownload,
+                            iconRes = AgentIcons.ic_download,
                         )
                         MiuixMenuItem(
                             str.actionClear,
@@ -230,7 +214,7 @@ fun CaptureScreen(
                                 CaptureStore.clear()
                                 onToast(str.toastCleared)
                             },
-                            icon = Icons.Outlined.DeleteSweep,
+                            iconRes = AgentIcons.ic_clean,
                             danger = true,
                         )
                     }
@@ -391,7 +375,7 @@ private fun ComplianceBanner(onDetail: () -> Unit, onDismiss: () -> Unit) {
                 .padding(horizontal = spacing.md, vertical = spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MiuixIcon(Icons.Outlined.ErrorOutline, null, tint = colors.onWarningContainer, size = 18.dp)
+        MiuixIcon(AgentIcons.ic_error, null, tint = colors.onWarningContainer, size = 18.dp)
         Spacer(Modifier.width(spacing.sm))
         Column(Modifier.weight(1f)) {
             MiuixText(
@@ -419,7 +403,7 @@ private fun ComplianceBanner(onDetail: () -> Unit, onDismiss: () -> Unit) {
         }
         Spacer(Modifier.width(spacing.xs))
         MiuixIconButton(
-            Icons.Outlined.DeleteSweep,
+            AgentIcons.ic_clean,
             stringResource(R.string.capture_screen_banner_dismiss),
             onClick = onDismiss)
     }
@@ -439,7 +423,7 @@ private fun EmptyCaptureHint(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        MiuixIcon(Icons.Outlined.VpnKey, null, tint = colors.primary, size = 36.dp)
+        MiuixIcon(AgentIcons.ic_svc_key_vault, null, tint = colors.primary, size = 36.dp)
         Spacer(Modifier.height(spacing.md))
         MiuixText(
             text =
@@ -545,7 +529,7 @@ private fun CaptureRow(record: CaptureRecord, onClick: () -> Unit) {
                     color = colors.onSurfaceVariant,
                 )
         }
-        MiuixIcon(Icons.Outlined.ChevronRight, null, tint = colors.onSurfaceVariant, size = 18.dp)
+        MiuixIcon(AgentIcons.ic_chevron_right, null, tint = colors.onSurfaceVariant, size = 18.dp)
     }
 }
 
@@ -618,7 +602,7 @@ private fun CaptureStatusPanel(
                         .background(accent.copy(alpha = 0.16f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                MiuixIcon(Icons.Outlined.Bolt, null, tint = accent, size = 20.dp)
+                MiuixIcon(AgentIcons.ic_speed, null, tint = accent, size = 20.dp)
             }
             Spacer(Modifier.width(spacing.md))
             Column(Modifier.weight(1f)) {
@@ -647,7 +631,7 @@ private fun CaptureStatusPanel(
             }
             Spacer(Modifier.width(spacing.sm))
             MiuixIconButton(
-                if (barExpanded) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                if (barExpanded) AgentIcons.ic_chevron_down else AgentIcons.ic_chevron_up,
                 if (barExpanded) "收起底栏" else "展开底栏",
                 onClick = { barExpanded = !barExpanded },
             )
@@ -693,8 +677,8 @@ private fun CaptureStatusPanel(
                     variant =
                         if (state.running) MiuixButtonVariant.OUTLINED
                         else MiuixButtonVariant.FILLED,
-                    leadingIcon =
-                        if (state.running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                    leadingIconRes =
+                        if (state.running) AgentIcons.ic_pause else AgentIcons.ic_play_circle,
                 )
                 MiuixButton(
                     text =
@@ -716,13 +700,13 @@ private fun CaptureStatusPanel(
                     onClick = onClear,
                     modifier = Modifier.weight(1f),
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.DeleteSweep,
+                    leadingIconRes = AgentIcons.ic_clean,
                 )
                 MiuixButton(
                     text = stringResource(R.string.capture_screen_action_export_har),
                     onClick = onExport,
                     modifier = Modifier.weight(1f),
-                    leadingIcon = Icons.Outlined.FileDownload,
+                    leadingIconRes = AgentIcons.ic_download,
                 )
             }
         }

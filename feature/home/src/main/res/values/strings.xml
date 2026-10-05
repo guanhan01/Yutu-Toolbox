@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="chat_title">Chat</string>
+    <string name="chat_reply_pending_refactor">Reply area under refactor</string>
     <string name="chat_input_hint">Message…</string>
     <string name="chat_send">Send</string>
     <string name="chat_empty_title">Start a conversation</string>
@@ -33,6 +34,11 @@
     <string name="chat_msg_resend">Regenerate</string>
     <string name="chat_msg_delete">Delete</string>
     <string name="chat_msg_edit">Edit</string>
+    <string name="chat_msg_select">Select text</string>
+    <string name="chat_msg_select_hint">Text selection: long-press the text for system handles</string>
+    <string name="chat_delete_question_title">Delete this question</string>
+    <string name="chat_delete_turn_message">This deletes the question, every step it triggered (reasoning / tool calls / narration) and the answer. This cannot be undone.</string>
+    <string name="chat_delete_single_message">This deletes the message. This cannot be undone.</string>
     <string name="chat_msg_edited">Edited</string>
     <string name="chat_edit_title">Edit message</string>
     <string name="chat_edit_save">Save &amp; resend</string>

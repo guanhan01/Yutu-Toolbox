@@ -1,0 +1,33 @@
+<!-- ic_keyboard -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M4.8,6.4H19.2A2.2,2.2 0 0 1 21.4,8.6V15.4A2.2,2.2 0 0 1 19.2,17.6H4.8A2.2,2.2 0 0 1 2.6,15.4V8.6A2.2,2.2 0 0 1 4.8,6.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:fillType="evenOdd"
+        android:pathData="M6,10.4H7.6M9.6,10.4H11.2M13.2,10.4H14.8M16.8,10.4H18.4" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M8.6,14L16.4,14" />
+
+</vector>

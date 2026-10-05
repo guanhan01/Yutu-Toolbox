@@ -1,8 +1,8 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.theme.MiuixTheme
 import top.yukonga.miuix.kmp.basic.BasicComponent as OfficialBasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults as OfficialBasicComponentDefaults
@@ -47,7 +48,7 @@ fun MiuixListItem(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    leadingIcon: ImageVector? = null,
+    @DrawableRes leadingIconRes: Int? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -68,10 +69,10 @@ fun MiuixListItem(
             summary = subtitle,
             summaryColor = OfficialBasicComponentDefaults.summaryColor(color = summaryColor),
             startAction = when {
-                leadingIcon != null -> {
+                leadingIconRes != null -> {
                     {
-                        MiuixIcon(
-                            icon = leadingIcon,
+                        MiuixIconRes(
+                            iconRes = leadingIconRes,
                             contentDescription = null,
                             tint = iconTint,
                             size = 22.dp,
@@ -86,7 +87,7 @@ fun MiuixListItem(
             enabled = enabled,
         )
         if (showDivider) {
-            MiuixDivider(startIndent = if (leadingIcon != null || leading != null) 54.dp else 16.dp)
+            MiuixDivider(startIndent = if (leadingIconRes != null || leading != null) 54.dp else 16.dp)
         }
     }
 }
@@ -98,7 +99,7 @@ fun MiuixSuperArrow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    leadingIcon: ImageVector? = null,
+    @DrawableRes leadingIconRes: Int? = null,
     valueText: String? = null,
     valueColor: Color = Color.Unspecified,
     showDivider: Boolean = false,
@@ -106,7 +107,7 @@ fun MiuixSuperArrow(
     MiuixListItem(
         title = title,
         subtitle = subtitle,
-        leadingIcon = leadingIcon,
+        leadingIconRes = leadingIconRes,
         modifier = modifier,
         onClick = onClick,
         showDivider = showDivider,
@@ -121,8 +122,8 @@ fun MiuixSuperArrow(
                     )
                     Spacer(Modifier.width(6.dp))
                 }
-                MiuixIcon(
-                    icon = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                MiuixIconRes(
+                    iconRes = AgentIcons.ic_chevron_right,
                     contentDescription = null,
                     tint = MiuixTheme.colors.onSurfaceVariant,
                     size = 20.dp,
@@ -140,14 +141,14 @@ fun MiuixSuperSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    leadingIcon: ImageVector? = null,
+    @DrawableRes leadingIconRes: Int? = null,
     enabled: Boolean = true,
     showDivider: Boolean = false,
 ) {
     MiuixListItem(
         title = title,
         subtitle = subtitle,
-        leadingIcon = leadingIcon,
+        leadingIconRes = leadingIconRes,
         modifier = modifier,
         onClick = if (enabled) ({ onCheckedChange(!checked) }) else null,
         showDivider = showDivider,

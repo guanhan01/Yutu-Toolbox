@@ -9,6 +9,8 @@
     <string name="settings_tag_preview">Preview</string>
     <string name="settings_hex_hint">Supports #RRGGBB and #AARRGGBB</string>
     <string name="settings_seed_title">Accent color</string>
+    <string name="settings_color_customize">Customize colors</string>
+    <string name="settings_color_customize_desc">Turn on to use the palette, dynamic color and AMOLED black below; off uses the default Miuix palette</string>
     <string name="settings_mode_pure_white">Pure white</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_dark_mode">Light &amp; dark</string>

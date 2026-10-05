@@ -18,6 +18,10 @@ android {
 
         // 应用名：stable 走 @string/app_name（跟随语言），beta 写死带 Beta 后缀
         manifestPlaceholders["appLabel"] = "@string/app_name"
+
+        // 持久 shell 会话只能靠设备上的真实 su / chroot 验证：
+        // 它涉及 su 提权、unshare 挂载、管道读写与哨兵解析，桩不出来
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     flavorDimensions += "channel"
@@ -78,6 +82,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    /**
+     * 单元测试。终端仿真器（ANSI/xterm 状态机）是纯 Kotlin 逻辑，
+     * 正确性没法靠肉眼看真机，必须用 vt 序列回归，所以这里真跑 JVM 单测。
+     */
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     buildFeatures {
         compose = true
         // 关于页需要读取 BuildConfig.VERSION_NAME 显示当前版本
@@ -86,7 +98,9 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.compose.material.icons.extended)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:designsystem"))

@@ -179,13 +179,19 @@ enum class LinuxComponent(
     val subtitle: String,
     /** 用于检测是否安装的可执行文件（在 rootfs 内）。 */
     val probe: String,
-    /** 取版本号用的参数。 */
-    val versionArgs: List<String> = listOf("--version"),
 ) {
     PYTHON("Python / uv 环境", "uv 与最新正式版 Python", "/usr/local/bin/uv"),
     NODE("Node.js 环境", "Node.js 与 npm", "/usr/local/bin/node"),
-    SSH("SSH 远程访问", "sshd、ssh-keygen 与 ssh-agent", "/usr/bin/ssh-keygen"),
-    APK("APK 分析", "JADX、Apktool、smali 与 baksmali（含 OpenJDK）", "/opt/apktool/apktool"),
+    // 探针必须是 **sshd**，不能再是 ssh-keygen。
+    //
+    // ssh-keygen 属于 openssh-client，而基础镜像是自带它的：于是这台机器上
+    // 「只装了客户端、服务端根本没装」也会被判成「SSH 已安装」——实测就是这个
+    // 状态（dpkg 里 openssh-server 是 un，/usr/sbin/sshd 不存在，界面却显示已安装）。
+    // 探针换成 sshd 才能真正代表「SSH 远程访问」这个能力可用。
+    SSH("SSH 远程访问", "sshd 服务端，以及 ssh、ssh-keygen 客户端", "/usr/sbin/sshd"),
+    // smali / baksmali 不是独立的可执行文件，是 apktool 内置的（2.11.1 带 3.0.9）。
+    // 原描述会让使用者和 AI 去找不存在的命令（实测 command -v smali/baksmali 均失败）。
+    APK("APK 分析", "JADX 与 Apktool（内置 smali / baksmali，含 OpenJDK）", "/opt/apktool/apktool"),
     JAVA("OpenJDK 运行时", "jadx 与 apktool 依赖的 Java 运行时（随 APK 分析一起安装）", "/usr/bin/java"),
     GIT("Git 版本控制", "git 命令行工具", "/usr/bin/git"),
 }

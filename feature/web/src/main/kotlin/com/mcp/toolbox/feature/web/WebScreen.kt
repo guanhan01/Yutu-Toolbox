@@ -1,5 +1,6 @@
 package com.mcp.toolbox.feature.web
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
@@ -35,32 +36,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ArrowForward
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -121,6 +103,30 @@ fun WebScreen(
     onBack: () -> Unit,
     onToast: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 进来就直接打开的地址（AI 回答里的链接走这里）。
+     *
+     * 用 key 触发而不是在 composition 里直接调：`loadUrl` 依赖 WebView 已创建，
+     * 而 WebView 是在 AndroidView 的 factory 里才建出来的。等页面组合完成后再加载，
+     * 否则第一次打开会静默失败——地址栏有内容、页面却是空白。
+     */
+    initialUrl: String? = null,
+    /**
+     * [initialUrl] 已经交给 WebView 之后回调。
+     *
+     * 由宿主在这里「消费掉」那个待打开地址。
+     * **不能**让宿主在传入后就立刻清空：那会让本函数的 `LaunchedEffect` 因 key
+     * 变化而重启，未跑完的加载被取消——表现就是「点了链接没反应」。
+     */
+    onInitialUrlLoaded: () -> Unit = {},
+    /**
+     * [initialUrl] 的「第几次请求」标识。
+     *
+     * 只传 URL 不够：用户两次点**同一个**链接时地址没变，
+     * effect 的 key 不变、不会重新加载，看起来就是「第二次点了没反应」。
+     * 让宿主每次请求都给一个递增的值，重复地址也能触发。
+     */
+    initialUrlKey: Any? = null,
 ) {
     val vm: WebViewModel = viewModel()
     val state by vm.state.collectAsState()
@@ -157,6 +163,22 @@ fun WebScreen(
         webViews[activeTab.id]?.loadUrl(url)
     }
 
+    // 带地址进来时自动打开一次。
+    // key 用 initialUrl：换了地址就重新加载；同一地址重组不会重复触发。
+    LaunchedEffect(initialUrl, initialUrlKey, activeTab.id) {
+        val target = initialUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        // 轮询等 WebView 出现：它由 AndroidView 的 factory 创建，
+        // 可能比本 effect 晚一两帧。只等一帧是不够的（实测偶尔仍然落空）。
+        repeat(WEBVIEW_WAIT_FRAMES) {
+            if (webViews[activeTab.id] != null) {
+                loadUrl(target)
+                onInitialUrlLoaded()
+                return@LaunchedEffect
+            }
+            withFrameNanos { }
+        }
+    }
+
     fun currentWebView(): WebView? = webViews[activeTab.id]
 
     fun readCurrentPage() {
@@ -177,11 +199,11 @@ fun WebScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "网页",
-            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 MiuixIconButton(
-                    icon = Icons.Outlined.Add,
+                    iconRes = AgentIcons.ic_plus,
                     contentDescription = "新建标签页",
                     onClick = {
                         val id = vm.newTab()
@@ -191,21 +213,21 @@ fun WebScreen(
                 )
                 Box {
                     MiuixIconButton(
-                        icon = Icons.Outlined.MoreVert,
+                        iconRes = AgentIcons.ic_more_vert,
                         contentDescription = "更多",
                         onClick = { overflowVisible = true },
                     )
                     MiuixOverflowMenu(expanded = overflowVisible, onDismiss = { overflowVisible = false }) {
-                        MiuixMenuItem(text = "分享当前页", icon = Icons.Outlined.Share, onClick = {
+                        MiuixMenuItem(text = "分享当前页", iconRes = AgentIcons.ic_share, onClick = {
                             overflowVisible = false
                             shareUrl(context, activeTab.url)
                         })
-                        MiuixMenuItem(text = "在系统浏览器打开", icon = Icons.Outlined.Language, onClick = {
+                        MiuixMenuItem(text = "在系统浏览器打开", iconRes = AgentIcons.ic_globe, onClick = {
                             overflowVisible = false
                             openExternally(context, activeTab.url)
                         })
                         MiuixMenuDivider()
-                        MiuixMenuItem(text = "清除浏览历史", icon = Icons.Outlined.Delete, danger = true, onClick = {
+                        MiuixMenuItem(text = "清除浏览历史", iconRes = AgentIcons.ic_trash, danger = true, onClick = {
                             overflowVisible = false
                             vm.clearHistory()
                             onToast("浏览历史已清除")
@@ -248,7 +270,7 @@ fun WebScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                     MiuixIconButton(
-                        icon = Icons.Outlined.Close,
+                        iconRes = AgentIcons.ic_close,
                         contentDescription = "关闭标签",
                         onClick = {
                             webViews.remove(tab.id)?.let { wv ->
@@ -270,13 +292,13 @@ fun WebScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowBack,
+                iconRes = AgentIcons.ic_chevron_left,
                 contentDescription = "后退",
                 enabled = state.canGoBack,
                 onClick = { currentWebView()?.goBack() },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowForward,
+                iconRes = AgentIcons.ic_arrow_right,
                 contentDescription = "前进",
                 enabled = state.canGoForward,
                 onClick = { currentWebView()?.goForward() },
@@ -289,8 +311,8 @@ fun WebScreen(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MiuixIcon(
-                    icon = if (activeTab.url.startsWith("https")) Icons.Outlined.Lock else Icons.Outlined.Language,
+                MiuixIconRes(
+                    iconRes = if (activeTab.url.startsWith("https")) AgentIcons.ic_lock else AgentIcons.ic_globe,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = colors.onSurfaceVariant,
@@ -316,7 +338,7 @@ fun WebScreen(
                 )
                 if (state.addressText.isNotEmpty()) {
                     MiuixIconButton(
-                        icon = Icons.Outlined.Close,
+                        iconRes = AgentIcons.ic_close,
                         contentDescription = "清空",
                         onClick = { vm.setAddressText("") },
                         buttonSize = 26.dp,
@@ -325,7 +347,7 @@ fun WebScreen(
                 }
             }
             MiuixIconButton(
-                icon = if (activeTab.loading) Icons.Outlined.Close else Icons.Outlined.Refresh,
+                iconRes = if (activeTab.loading) AgentIcons.ic_close else AgentIcons.ic_refresh,
                 contentDescription = if (activeTab.loading) "停止" else "刷新",
                 onClick = {
                     val wv = currentWebView() ?: return@MiuixIconButton
@@ -333,7 +355,7 @@ fun WebScreen(
                 },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Search,
+                iconRes = AgentIcons.ic_search,
                 contentDescription = "前往",
                 onClick = { loadUrl(state.addressText) },
             )
@@ -394,19 +416,19 @@ fun WebScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowBack,
+                iconRes = AgentIcons.ic_chevron_left,
                 contentDescription = "后退",
                 enabled = state.canGoBack,
                 onClick = { currentWebView()?.goBack() },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.ArrowForward,
+                iconRes = AgentIcons.ic_arrow_right,
                 contentDescription = "前进",
                 enabled = state.canGoForward,
                 onClick = { currentWebView()?.goForward() },
             )
             MiuixIconButton(
-                icon = if (vm.isBookmarked(activeTab.url)) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                iconRes = if (vm.isBookmarked(activeTab.url)) AgentIcons.ic_bookmark else AgentIcons.ic_bookmark,
                 contentDescription = "书签",
                 onClick = {
                     if (activeTab.url.isBlank()) {
@@ -418,7 +440,7 @@ fun WebScreen(
                 },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Download,
+                iconRes = AgentIcons.ic_download,
                 contentDescription = "下载",
                 onClick = {
                     sheetVisible = true
@@ -426,17 +448,17 @@ fun WebScreen(
                 },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Share,
+                iconRes = AgentIcons.ic_share,
                 contentDescription = "分享",
                 onClick = { shareUrl(context, activeTab.url) },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Article,
+                iconRes = AgentIcons.ic_file_text,
                 contentDescription = "阅读模式",
                 onClick = { readCurrentPage() },
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Settings,
+                iconRes = AgentIcons.ic_settings,
                 contentDescription = "浏览器设置",
                 onClick = { sheetVisible = true },
             )
@@ -490,7 +512,7 @@ private fun StartPage(
             onValueChange = onQueryChange,
             modifier = Modifier.fillMaxWidth(),
             placeholder = "搜索或输入网址",
-            leadingIcon = Icons.Outlined.Search,
+            leadingIconRes = AgentIcons.ic_search,
         )
         Spacer(Modifier.height(12.dp))
         MiuixButton(
@@ -512,7 +534,7 @@ private fun StartPage(
                 MiuixListItem(
                     title = bookmark.title,
                     subtitle = bookmark.url,
-                    leadingIcon = Icons.Outlined.Bookmark,
+                    leadingIconRes = AgentIcons.ic_bookmark,
                     onClick = { onOpen(bookmark.url) },
                 )
             }
@@ -520,7 +542,7 @@ private fun StartPage(
             MiuixEmptyState(
                 title = "还没有书签",
                 description = "打开网页后点底部书签图标即可收藏",
-                icon = Icons.Outlined.BookmarkBorder,
+                iconRes = AgentIcons.ic_bookmark,
             )
         }
     }
@@ -549,7 +571,7 @@ private fun ReaderPane(
                 color = colors.primary,
             )
             MiuixIconButton(
-                icon = Icons.Outlined.Close,
+                iconRes = AgentIcons.ic_close,
                 contentDescription = "退出阅读模式",
                 onClick = onClose,
             )
@@ -684,18 +706,18 @@ private fun BrowserSheet(
                 "书签" -> if (state.bookmarks.isEmpty()) {
                     MiuixEmptyState(
                         title = "暂无书签",
-                        icon = Icons.Outlined.BookmarkBorder,
+                        iconRes = AgentIcons.ic_bookmark,
                     )
                 } else {
                     state.bookmarks.forEach { bookmark ->
                         MiuixListItem(
                             title = bookmark.title,
                             subtitle = bookmark.url,
-                            leadingIcon = Icons.Outlined.Bookmark,
+                            leadingIconRes = AgentIcons.ic_bookmark,
                             onClick = { onOpen(bookmark.url) },
                             trailing = {
                                 MiuixIconButton(
-                                    icon = Icons.Outlined.Delete,
+                                    iconRes = AgentIcons.ic_trash,
                                     contentDescription = "删除书签",
                                     onClick = { vm.removeBookmark(bookmark.url) },
                                 )
@@ -705,13 +727,13 @@ private fun BrowserSheet(
                 }
 
                 "历史" -> if (state.history.isEmpty()) {
-                    MiuixEmptyState(title = "暂无历史记录", icon = Icons.Outlined.History)
+                    MiuixEmptyState(title = "暂无历史记录", iconRes = AgentIcons.ic_clock)
                 } else {
                     state.history.take(40).forEach { entry ->
                         MiuixListItem(
                             title = entry.title,
                             subtitle = "${formatTime(entry.visitedAt)} · ${entry.url}",
-                            leadingIcon = Icons.Outlined.History,
+                            leadingIconRes = AgentIcons.ic_clock,
                             onClick = { onOpen(entry.url) },
                         )
                     }
@@ -721,14 +743,14 @@ private fun BrowserSheet(
                     MiuixEmptyState(
                         title = "暂无下载任务",
                         description = "网页中的下载会交给系统下载管理器",
-                        icon = Icons.Outlined.Download,
+                        iconRes = AgentIcons.ic_download,
                     )
                 } else {
                     downloads.forEach { record ->
                         MiuixListItem(
                             title = record.title,
                             subtitle = "${record.statusText} · ${record.sizeText} · ${formatTime(record.time)}",
-                            leadingIcon = Icons.Outlined.Download,
+                            leadingIconRes = AgentIcons.ic_download,
                         )
                     }
                 }
@@ -764,10 +786,10 @@ private fun BrowserSheet(
                     state.pageSettings.blockRules.forEach { rule ->
                         MiuixListItem(
                             title = rule,
-                            leadingIcon = Icons.Outlined.Block,
+                            leadingIconRes = AgentIcons.ic_blocked,
                             trailing = {
                                 MiuixIconButton(
-                                    icon = Icons.Outlined.Close,
+                                    iconRes = AgentIcons.ic_close,
                                     contentDescription = "移除规则",
                                     onClick = { vm.removeBlockRule(rule) },
                                 )
@@ -1005,3 +1027,6 @@ private fun openExternally(context: Context, url: String) {
         )
     }
 }
+
+/** 等待 WebView 创建的最多帧数（60 帧 ≈ 1 秒，足够覆盖首帧组合）。 */
+private const val WEBVIEW_WAIT_FRAMES = 60

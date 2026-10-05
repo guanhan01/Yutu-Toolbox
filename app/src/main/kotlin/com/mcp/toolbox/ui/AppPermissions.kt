@@ -13,8 +13,6 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +25,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixListItem
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
 import com.mcp.toolbox.core.design.component.MiuixTag
@@ -128,7 +127,7 @@ internal fun PermissionSection(onToast: (String) -> Unit = {}) {
                 MiuixListItem(
                     title = item.name,
                     subtitle = item.desc,
-                    leadingIcon = Icons.Outlined.Info,
+                    leadingIconRes = AgentIcons.ic_info,
                     trailing = {
                         if (item.granted) {
                             MiuixTag(text = "已授予", color = colors.primary)

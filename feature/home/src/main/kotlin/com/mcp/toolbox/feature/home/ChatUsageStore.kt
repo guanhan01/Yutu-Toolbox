@@ -87,11 +87,7 @@ object ChatUsageStore {
         var total = 0
         memoryPrompt?.let { total += MemoryBudget.estimateTokens(it) }
         session.messages.forEach { m ->
-            when (m.role) {
-                // 与 buildMessages 一致：思考与工具卡片不回传，不计入
-                ChatMessage.Role.REASONING, ChatMessage.Role.TOOL -> Unit
-                else -> total += MemoryBudget.estimateTokens(m.content) + 4
-            }
+            total += MemoryBudget.estimateTokens(m.content) + 4
         }
         return total
     }

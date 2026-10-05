@@ -2,11 +2,12 @@ package com.mcp.toolbox.ui.ai
 
 import android.content.Context
 import com.mcp.toolbox.feature.home.ChatMessage
+import com.mcp.toolbox.feature.home.agent.AgentStreamBus
+import com.mcp.toolbox.feature.home.agent.SystemKind
 import com.mcp.toolbox.feature.home.ChatMemoryStore
+import com.mcp.toolbox.feature.home.TurnState
 import com.mcp.toolbox.feature.home.ChatStore
 import com.mcp.toolbox.feature.home.ChatUsageStore
-import com.mcp.toolbox.feature.home.CompressionStore
-import com.mcp.toolbox.feature.home.PlanStore
 import com.mcp.toolbox.feature.mcp.SkillStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,45 +30,19 @@ object ChatRunner {
     /** 正在进行的请求。 */
     data class Running(
         val sessionId: String,
-        val streamed: String = "",
         /**
-         * 本轮回复的时间线。
+         * 本轮过程要写进哪条 AI 消息。
          *
-         * 一次回复里「思考 → 工具调用 → 再思考 → 再调用 → 最终文本」是交替发生的，
-         * 所以这里按发生顺序整条保留，而不是按类型分成两个桶——分桶会让所有思考
-         * 聚成一块，看着像「思考全部发生在工具之前」。
+         * 发送时界面先往会话里落一条 `Running` 占位，id 一并传进来；
+         * 回答区不在场时（用户切页后才点停止）就用它做兜底落盘。
          */
-        val timeline: List<Step> = emptyList(),
+        val messageId: String = "",
+        /** 已经流出的正文。 */
+        val streamed: String = "",
         /** 最近一次请求的真实用量（服务端返回）；未收到时保持 0。 */
         val promptTokens: Int = 0,
         val completionTokens: Int = 0,
     )
-
-    /** 时间线上的一步。 */
-    sealed interface Step {
-        val round: Int
-
-        /** 第 [round] 轮的深度思考文本；[live] 表示仍在接收增量。 */
-        data class Thinking(
-            override val round: Int,
-            val text: String,
-            val live: Boolean = false,
-            val elapsedMs: Long = 0,
-        ) : Step
-
-        /** 第 [round] 轮里模型带工具调用时的过渡旁白（不是最终答复）。 */
-        data class Narration(override val round: Int, val text: String) : Step
-
-        /** 第 [round] 轮的第 [seq] 次工具调用。 */
-        data class Tool(
-            override val round: Int,
-            val seq: Int,
-            val name: String,
-            val arguments: String = "",
-            val result: String = "",
-            val elapsedMs: Long = 0,
-        ) : Step
-    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
@@ -93,102 +68,50 @@ object ChatRunner {
         context: Context,
         config: AiConfig,
         sessionId: String,
+        assistantMessageId: String,
         history: List<ChatMessage>,
         onFallbackReply: String,
     ) {
         if (isBusy()) return
-        _running.value = Running(sessionId = sessionId)
-        // 让 plan.update / memory.write 知道自己属于哪个会话。
+        _running.value = Running(sessionId = sessionId, messageId = assistantMessageId)
+        // 回答区先把乐观占位卡摆上屏（Spec 第 5.2 节：避免发送后 200ms 毫无反应）
+        AgentStreamBus.emit { it.onStarted() }
+        // 让 memory.write / memory.delete 知道自己属于哪个会话。
         AiToolBridge.sessionId = sessionId
-        // 同一时刻只有一个思考流 / 一次工具调用在跑，用单个时间戳足够
-        var toolStartedAt = System.currentTimeMillis()
-        var thinkingStartedAt = System.currentTimeMillis()
         val myGeneration = ++generation
         job = scope.launch {
             try {
                 val result = AiChatClient.completeStream(
                     context = context,
                     config = config,
-                    // 压缩只改「发给模型的历史」：磁盘上原文一条不动
-                    history = CompressionStore.modelHistoryFor(sessionId, history),
-                    systemPrompt = buildSystemPrompt(context, config, sessionId),
+                    history = history,
+                    systemPrompt = buildSystemPrompt(context, config),
                     enableTools = true,
-                    onToolCall = { round, seq, name, args ->
-                        val current = _running.value ?: return@completeStream
-                        val now = System.currentTimeMillis()
-                        toolStartedAt = now
-                        _running.value = current.copy(
-                            timeline = current.timeline.map { step ->
-                                if (step is Step.Thinking && step.live) {
-                                    step.copy(live = false, elapsedMs = now - thinkingStartedAt)
-                                } else {
-                                    step
-                                }
-                            } + Step.Tool(
-                                round = round, seq = seq, name = name, arguments = args,
-                            ),
-                            // 本轮旁白已归档进时间线，清掉实时正文的累积——
-                            // 否则「我来查一下…」会和下一轮的最终答复拼成一段。
-                            streamed = "",
-                        )
-                    },
-                    onToolResult = { round, seq, _, result ->
-                        val current = _running.value ?: return@completeStream
-                        val cost = (System.currentTimeMillis() - toolStartedAt).coerceAtLeast(0)
-                        // 按 (round, seq) 定位，避免同名工具或重复调用时匹配错
-                        _running.value = current.copy(
-                            timeline = current.timeline.map { step ->
-                                if (step is Step.Tool && step.round == round && step.seq == seq) {
-                                    step.copy(result = result.take(200), elapsedMs = cost)
-                                } else {
-                                    step
-                                }
-                            },
-                        )
-                    },
-                    // 同一个 round 的思考增量累积到该条上；新 round 追加新条，
-                    // 于是「工具之后的思考」自然排到工具卡片下面。
-                    // 每次思考增量都把整条时间线里其它思考的 live 清掉：
-                    // 只有正在接收增量的那一段才是「进行中」。
-                    onReasoning = { round, delta ->
-                        val current = _running.value ?: return@completeStream
-                        val last = current.timeline.lastOrNull()
-                        val now = System.currentTimeMillis()
-                        _running.value = if (last is Step.Thinking && last.round == round) {
-                            current.copy(
-                                timeline = current.timeline.dropLast(1) +
-                                    last.copy(
-                                        text = last.text + delta,
-                                        live = true,
-                                        elapsedMs = now - thinkingStartedAt,
-                                    ),
-                            )
-                        } else {
-                            // 新的一段思考开始，重新计时
-                            thinkingStartedAt = now
-                            current.copy(
-                                timeline = current.timeline + Step.Thinking(
-                                    round = round,
-                                    text = delta,
-                                    live = true,
-                                    elapsedMs = 0,
-                                ),
-                            )
-                        }
-                    },
-                    // 旁白或工具一出现，说明上一段思考已经结束：立刻把 live 收掉，
-                    // 界面便不会再显示「深度思考中…」。
-                    onNarration = { round, text ->
-                        val current = _running.value ?: return@completeStream
-                        _running.value = current.copy(
-                            timeline = current.timeline.map { step ->
-                                if (step is Step.Thinking) step.copy(live = false) else step
-                            } + Step.Narration(round, text),
-                        )
-                    },
+                    // 旧回答 UI 的思考 / 工具 / 旁白时间线已移除；这些回调暂时只做
+                    // 用量统计与正文累积，等重构方案定了再决定新的呈现方式。
                     onDelta = { delta ->
                         val current = _running.value ?: return@completeStream
                         _running.value = current.copy(streamed = current.streamed + delta)
+                        // 真实正文增量 → 回答区（经 TokenBuffer 节流后落屏）
+                        AgentStreamBus.emit { it.onDelta(delta) }
+                    },
+                    // 深度思考增量：回答区按轮次排布（第 N 轮思考在同轮工具卡之上）
+                    onReasoning = { round, text ->
+                        AgentStreamBus.emit { it.onThinking(round, text) }
+                    },
+                    // 工具调用那一轮的过渡旁白，不并进最终回复
+                    onNarration = { round, text ->
+                        AgentStreamBus.emit { it.onNarration(round, text) }
+                    },
+                    onToolCall = { round, seq, name, args ->
+                        AgentStreamBus.emit { it.onToolCall(round, seq, name, args) }
+                    },
+                    onToolResult = { round, seq, name, result ->
+                        AgentStreamBus.emit { it.onToolResult(round, seq, name, result, true) }
+                    },
+                    // 60s 无数据兜底：真的掐断上游，而不是让界面一直转圈
+                    onStall = {
+                        AgentStreamBus.emit { it.onFailed(SystemKind.Stall, "", 0) }
                     },
                     onUsage = { prompt, completion ->
                         val current = _running.value ?: return@completeStream
@@ -196,61 +119,24 @@ object ChatRunner {
                             promptTokens = prompt,
                             completionTokens = completion,
                         )
-                        // 立刻写回用量表，进度条不必等整轮跑完才动。
-                        // 回调不是挂起函数，另起一次写入即可，不阻塞流读取。
+                        // 立刻写回用量表，输入栏的上下文条不必等整轮跑完才动。
                         scope.launch {
                             ChatUsageStore.record(context, sessionId, prompt, completion)
                         }
                     },
                 )
-                val reply = result.getOrElse { onFallbackReply.format(it.message ?: "") }
-
-                // 思考 / 旁白 / 工具调用按发生顺序落成消息，再落最终回复。
-                // 顺序在这里决定界面排版：落到工具之后的思考，渲染时就在工具下面。
-                _running.value?.timeline.orEmpty().forEach { step ->
-                    when (step) {
-                        is Step.Thinking -> {
-                            if (step.text.isNotBlank()) {
-                                ChatStore.append(
-                                    context, sessionId,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.REASONING,
-                                        content = step.text.trim(),
-                                        elapsedMs = step.elapsedMs,
-                                    ),
-                                )
-                            }
-                        }
-                        // 旁白是模型带工具那轮的正文，单独成条，不并进最终回复
-                        is Step.Narration -> {
-                            if (step.text.isNotBlank()) {
-                                ChatStore.append(
-                                    context, sessionId,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.ASSISTANT,
-                                        content = step.text.trim(),
-                                        // 中间旁白：不显示操作按钮
-                                        intermediate = true,
-                                    ),
-                                )
-                            }
-                        }
-                        is Step.Tool -> ChatStore.append(
-                            context, sessionId,
-                            ChatMessage(
-                                role = ChatMessage.Role.TOOL,
-                                content = step.result,
-                                toolName = step.name,
-                                toolArguments = step.arguments,
-                                elapsedMs = step.elapsedMs,
-                            ),
-                        )
-                    }
+            // ── 收尾 ──
+            // 不再在这里 `ChatStore.append` 一条纯文本：回答区持有完整时间线
+            // （思考 / 工具 / 正文 / 系统卡），由它 upsert 到本轮那条消息上。
+            // 两边都写就会落下两条记录：一条带过程、一条纯文本。
+            if (result.isSuccess) {
+                // 冲刷残缓冲正文 + 把仍在 Running 的段定型
+                AgentStreamBus.emitFinished()
+            } else {
+                AgentStreamBus.emit {
+                    it.onFailed(SystemKind.ServerError, result.exceptionOrNull()?.message.orEmpty(), 0)
                 }
-                ChatStore.append(
-                    context, sessionId,
-                    ChatMessage(role = ChatMessage.Role.ASSISTANT, content = reply),
-                )
+            }
             } catch (t: Throwable) {
                 // 取消时静默收尾，其他异常写回会话
                 if (t !is kotlinx.coroutines.CancellationException) {
@@ -276,86 +162,51 @@ object ChatRunner {
     /**
      * 用户主动点停止。
      *
-     * 不能只 cancel：已跑完的思考段落、工具结果和已经流出的正文都是用户看着
-     * 攒出来的，直接丢掉等于「点停止就把整轮抹掉」。先把它们按正常顺序落盘，
-     * 再中断请求——落盘走的是和正常结束完全相同的路径，界面立刻能看到。
+     * 请求中断，但已经流出的正文不丢：落盘后界面立刻能看到。
      */
     fun stop(context: Context) {
         // 请求其实已经跑完时不再补落盘：正常路径已经写过一遍，
         // 这里再写就成了两份一模一样的记录。
         val stillRunning = job?.isActive == true
         val snapshot = _running.value.takeIf { stillRunning }
+        // 先掐断上游：`job.cancel()` 打不断阻塞的 `readLine()`，
+        // 只关协程的话服务端还会继续推、继续计费（实测「点停止后它继续做」）。
+        AiChatClient.abortInflight()
         job?.cancel()
         job = null
         // 号码前进一格，被取消那轮的 finally 便不再有权改写共享状态
         generation++
         AiToolBridge.sessionId = null
         _running.value = null
-        if (snapshot != null) {
-            scope.launch { persistPartial(context, snapshot) }
-        }
-    }
-
-    /**
-     * 把一轮中途停止的回复落成消息。
-     *
-     * 顺序与正常结束一致：思考 / 旁白 / 工具按发生顺序，最后是已流出的正文。
-     * 正文为空时不落一条空 ASSISTANT，避免历史里出现空气泡。
-     */
-    private suspend fun persistPartial(context: Context, running: Running) {
-        running.timeline.forEach { step ->
-            when (step) {
-                is Step.Thinking -> if (step.text.isNotBlank()) {
-                    ChatStore.append(
-                        context, running.sessionId,
-                        ChatMessage(
-                            role = ChatMessage.Role.REASONING,
-                            content = step.text.trim(),
-                            elapsedMs = step.elapsedMs,
-                        ),
+        // 过程与正文由回答区统一落盘（它持有完整时间线）。
+        // 只有「回答区已经不在了」（用户切到别的页面后才点停止）才退回写纯文本，
+        // 否则同一轮会落成两条：一条带过程的、一条纯文本的。
+        val delivered = AgentStreamBus.emitInterrupted()
+        if (!delivered && snapshot != null) {
+            val left = snapshot.streamed.trim()
+            if (left.isNotEmpty()) {
+                scope.launch {
+                    ChatStore.upsertAssistant(
+                        context = context,
+                        sessionId = snapshot.sessionId,
+                        messageId = snapshot.messageId,
+                        content = left,
+                        segmentsJson = null,
+                        turnState = TurnState.Interrupted,
                     )
                 }
-                is Step.Narration -> if (step.text.isNotBlank()) {
-                    ChatStore.append(
-                        context, running.sessionId,
-                        ChatMessage(
-                            role = ChatMessage.Role.ASSISTANT,
-                            content = step.text.trim(),
-                            intermediate = true,
-                        ),
-                    )
-                }
-                is Step.Tool -> ChatStore.append(
-                    context, running.sessionId,
-                    ChatMessage(
-                        role = ChatMessage.Role.TOOL,
-                        content = step.result,
-                        toolName = step.name,
-                        toolArguments = step.arguments,
-                        elapsedMs = step.elapsedMs,
-                    ),
-                )
             }
-        }
-        val left = running.streamed.trim()
-        if (left.isNotEmpty()) {
-            ChatStore.append(
-                context, running.sessionId,
-                ChatMessage(role = ChatMessage.Role.ASSISTANT, content = left),
-            )
         }
     }
 
     /**
      * 拼装 system prompt。
      *
-     * 三部分按优先级拼接：用户自定义提示 → 长期记忆 → 当前计划。
-     * 此前这里传的是 null，用户配置的系统提示实际从未下发过。
+     * 三部分按优先级拼接：用户自定义提示 → 长期记忆 → 启用的 Skill。
      */
     private fun buildSystemPrompt(
         context: Context,
         config: AiConfig,
-        sessionId: String,
     ): String? {
         val parts = buildList {
             add(BASE_PROMPT)
@@ -363,7 +214,6 @@ object ChatRunner {
             // 记忆预算跟着当前模型窗口走，换模型后限额自动收敛
             ChatMemoryStore.syncModelWindow(context, config.active.contextWindowOrNull() ?: 0)
             ChatMemoryStore.buildPrompt()?.let { add(it) }
-            PlanStore.buildPrompt(sessionId)?.let { add(it) }
             // 用户导入并启用的 Skill：只给目录（名称 + 描述），正文按需用 skill.read 取
             SkillStore.buildPrompt()?.let { add(it) }
         }

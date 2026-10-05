@@ -17,15 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +30,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixDialog
 import com.mcp.toolbox.core.design.component.MiuixIconButton
@@ -230,17 +222,17 @@ fun DatabaseScreen(
     Column(Modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "数据库",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 MiuixIconButton(
-                    icon = Icons.Outlined.FolderOpen,
+                    iconRes = AgentIcons.ic_folder,
                     contentDescription = "打开数据库",
                     onClick = { openMenu = true },
                     modifier = Modifier.onGloballyPositioned { openAnchor = it.boundsInWindow() },
                 )
                 MiuixIconButton(
-                    icon = Icons.Outlined.MoreHoriz,
+                    iconRes = AgentIcons.ic_more_horiz,
                     contentDescription = "更多",
                     onClick = { moreMenu = true },
                     modifier = Modifier.onGloballyPositioned { moreAnchor = it.boundsInWindow() },
@@ -355,7 +347,7 @@ fun DatabaseScreen(
         MiuixMenuGroupLabel(text = "打开数据库")
         MiuixMenuItem(
             text = "示例库（真实 SQLite 文件）",
-            icon = Icons.Outlined.Storage,
+            iconRes = AgentIcons.ic_svc_storage_bucket,
             onClick = {
                 openMenu = false
                 openLocal(
@@ -368,14 +360,14 @@ fun DatabaseScreen(
             })
         MiuixMenuItem(
             text = "打开外部 .db 文件（SAF）",
-            icon = Icons.Outlined.FolderOpen,
+            iconRes = AgentIcons.ic_folder,
             onClick = {
                 openMenu = false
                 pickDatabase.launch(arrayOf("*/*"))
             })
         MiuixMenuItem(
             text = "打开应用数据库（root 只读）",
-            icon = Icons.Outlined.PhoneAndroid,
+            iconRes = AgentIcons.ic_phone_device,
             trailingText =
                 when (rootAvailable) {
                     true -> "可用"
@@ -393,7 +385,7 @@ fun DatabaseScreen(
         )
         MiuixMenuItem(
             text = "自定义 root 路径",
-            icon = Icons.Outlined.Terminal,
+            iconRes = AgentIcons.ic_terminal,
             onClick = {
                 openMenu = false
                 pathDialog = true
@@ -430,7 +422,7 @@ fun DatabaseScreen(
         )
         MiuixMenuItem(
             text = "保存写回原文件",
-            icon = Icons.Outlined.Save,
+            iconRes = AgentIcons.ic_snapshot,
             enabled = handle?.origin is DbOrigin.Saf && handle?.writable == true,
             onClick = {
                 moreMenu = false
@@ -453,7 +445,7 @@ fun DatabaseScreen(
         MiuixMenuDivider()
         MiuixMenuItem(
             text = "清空导出目录",
-            icon = Icons.Outlined.DeleteSweep,
+            iconRes = AgentIcons.ic_clean,
             onClick = {
                 moreMenu = false
                 confirm =

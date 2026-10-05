@@ -9,13 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Construction
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.AppLanguage
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixCard
 import com.mcp.toolbox.core.design.component.MiuixEmptyState
 import com.mcp.toolbox.core.design.component.MiuixListItem
@@ -42,9 +36,6 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.SystemUpdate
-import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import com.mcp.toolbox.BuildConfig
@@ -65,7 +56,7 @@ fun FeaturePlaceholderScreen(destination: Destination, modifier: Modifier = Modi
     ) {
         Spacer(Modifier.height(spacing.lg))
         MiuixEmptyState(
-            icon = Icons.Outlined.Construction,
+            iconRes = AgentIcons.ic_deploy,
             title = stringResource(R.string.app_placeholder_title, stringResource(destination.labelRes)),
             description = stringResource(R.string.app_placeholder_desc, destination.implStage),
         )
@@ -98,12 +89,12 @@ fun SettingsOverview(
             Column {
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_screen_theme),
-                    leadingIcon = Icons.Outlined.Palette,
+                    leadingIconRes = AgentIcons.ic_palette,
                     onClick = onOpenTheme,
                 )
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_language),
-                    leadingIcon = Icons.Outlined.Language,
+                    leadingIconRes = AgentIcons.ic_globe,
                     valueText = languageDisplayName(currentLanguage),
                     onClick = { languageDialog = true },
                 )
@@ -115,7 +106,7 @@ fun SettingsOverview(
                 MiuixSuperArrow(
                     title = stringResource(R.string.app_settings_root_title),
                     subtitle = privilegeSummary,
-                    leadingIcon = Icons.Outlined.Security,
+                    leadingIconRes = AgentIcons.ic_shield,
                     valueText = if (privilegeUsable) "已就绪" else "未就绪",
                     onClick = onOpenPrivilege,
                 )
@@ -192,7 +183,7 @@ fun AboutScreen(
                 MiuixListItem(
                     title = stringResource(R.string.app_about_update_check),
                     subtitle = stringResource(R.string.app_about_update_current, currentVersion),
-                    leadingIcon = Icons.Outlined.SystemUpdate,
+                    leadingIconRes = AgentIcons.ic_update,
                     onClick = {
                         expanded = !expanded
                         if (UpdateChecker.ENABLED) checkUpdate()
@@ -238,7 +229,7 @@ fun AboutScreen(
                             MiuixButton(
                                 text = stringResource(R.string.app_about_update_go),
                                 onClick = { openUrl(available.releaseUrl) },
-                                leadingIcon = Icons.Outlined.Download,
+                                leadingIconRes = AgentIcons.ic_download,
                             )
                         }
                     }
@@ -253,14 +244,14 @@ fun AboutScreen(
                 MiuixListItem(
                     title = stringResource(R.string.app_about_project_title),
                     subtitle = UpdateChecker.PROJECT_URL.removePrefix("https://"),
-                    leadingIcon = Icons.Outlined.Language,
+                    leadingIconRes = AgentIcons.ic_globe,
                     onClick = { openUrl(UpdateChecker.PROJECT_URL) },
                     showDivider = true,
                 )
                 MiuixListItem(
                     title = stringResource(R.string.app_about_license_title),
                     subtitle = stringResource(R.string.app_about_license_subtitle),
-                    leadingIcon = Icons.Outlined.Verified,
+                    leadingIconRes = AgentIcons.ic_shield_check,
                     onClick = { openUrl(UpdateChecker.PROJECT_URL + "/blob/main/LICENSE") },
                 )
             }
@@ -272,19 +263,19 @@ fun AboutScreen(
                 MiuixListItem(
                     title = stringResource(R.string.app_about_compliance1_title),
                     subtitle = stringResource(R.string.app_about_compliance1_subtitle),
-                    leadingIcon = Icons.Outlined.Security,
+                    leadingIconRes = AgentIcons.ic_shield,
                     showDivider = true,
                 )
                 MiuixListItem(
                     title = stringResource(R.string.app_about_compliance2_title),
                     subtitle = stringResource(R.string.app_about_compliance2_subtitle),
-                    leadingIcon = Icons.Outlined.Info,
+                    leadingIconRes = AgentIcons.ic_info,
                     showDivider = true,
                 )
                 MiuixListItem(
                     title = stringResource(R.string.app_about_compliance3_title),
                     subtitle = stringResource(R.string.app_about_compliance3_subtitle),
-                    leadingIcon = Icons.Outlined.Security,
+                    leadingIconRes = AgentIcons.ic_shield,
                 )
             }
         }

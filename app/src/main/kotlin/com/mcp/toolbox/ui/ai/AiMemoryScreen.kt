@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
@@ -220,7 +219,7 @@ fun AiMemoryScreen(modifier: Modifier = Modifier) {
                     )
                     Spacer(Modifier.width(4.dp))
                     MiuixIconButton(
-                        icon = Icons.Outlined.Delete,
+                        iconRes = AgentIcons.ic_trash,
                         contentDescription = stringResource(R.string.memory_delete),
                         onClick = {
                             scope.launch { ChatMemoryStore.deleteEntry(context, entry.id) }

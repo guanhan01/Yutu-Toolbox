@@ -12,6 +12,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.unit.Dp
 import androidx.navigation.NavController
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.animation.AnimatedContentScope
@@ -40,14 +41,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -70,6 +70,8 @@ import androidx.navigation.compose.rememberNavController
 import com.mcp.toolbox.R
 import com.mcp.toolbox.core.common.PrivilegeManager
 import com.mcp.toolbox.core.common.PrivilegeStatus
+import com.mcp.toolbox.core.design.icon.AgentIcons
+import com.mcp.toolbox.core.design.component.MiuixDialog
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixIconButton
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -90,20 +92,26 @@ import com.mcp.toolbox.ui.ai.AiModelScreen
 import com.mcp.toolbox.ui.ai.AiProviderDetailScreen
 import com.mcp.toolbox.ui.ai.AiHub
 import com.mcp.toolbox.ui.ai.AiConfigStore
+import com.mcp.toolbox.ui.linux.LinuxChoiceSheet
 import com.mcp.toolbox.ui.linux.LinuxScreen
 import com.mcp.toolbox.ui.linux.LinuxTerminalScreen
 import com.mcp.toolbox.ui.linux.LinuxDistro
+import com.mcp.toolbox.ui.linux.term.LinuxTermMode
+import com.mcp.toolbox.ui.linux.term.LinuxTerminalPanel
+import com.mcp.toolbox.ui.linux.term.TermSessionStore
+import com.mcp.toolbox.core.design.component.MiuixTextField
+import com.mcp.toolbox.ui.linux.term.TerminalToAi
+import com.mcp.toolbox.ui.linux.term.TerminalTabStrip
 import com.mcp.toolbox.ui.linux.LinuxCheckScreen
+import android.widget.Toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
 import com.mcp.toolbox.feature.home.ChatMemoryStore
 import com.mcp.toolbox.feature.home.ChatStore
+import com.mcp.toolbox.feature.home.agent.AgentStreamBus
 import com.mcp.toolbox.feature.home.ChatUsageStore
-import com.mcp.toolbox.feature.home.CompressionStore
-import com.mcp.toolbox.feature.home.PlanStore
-import com.mcp.toolbox.ui.ai.AiCompressor
 import com.mcp.toolbox.feature.home.ChatMessage
 import com.mcp.toolbox.ui.ai.AiMemoryScreen
 import com.mcp.toolbox.ui.ai.ChatRunner
@@ -135,7 +143,6 @@ import com.mcp.toolbox.ui.linux.LinuxPrefs
 import com.mcp.toolbox.ui.linux.LinuxBrowseTarget
 import com.mcp.toolbox.ui.linux.LinuxFilesScreen
 import com.mcp.toolbox.ui.linux.LinuxSharedScreen
-import com.mcp.toolbox.feature.home.RunningStep
 
 /** 压暗纱的不透明度，与抽屉遮罩的 0.35 取同一量级。 */
 private const val ScrimAlpha = 0.45f
@@ -262,8 +269,16 @@ fun AppShell(
     val panelDragAccumulator = remember { mutableFloatStateOf(0f) }
     val edgeThresholdPx = with(density) { 56.dp.toPx() }
 
-    fun navigate(route: String) {
-        if (route == currentRoute) {
+    /**
+     * 导航到一个路由。
+     *
+     * [force] 用于「目的地相同但载荷不同」的场景：点 AI 回答里的链接时，
+     * 如果用户上一次已经进过浏览器，`currentRoute` 就是 Web ——
+     * 这个守卫会直接 return，地址永远递不进去，表现为
+     * 「第一次能点开，第二次点了没反应」（实测反馈）。
+     */
+    fun navigate(route: String, force: Boolean = false) {
+        if (!force && route == currentRoute) {
             drawerOpen = false
             return
         }
@@ -304,6 +319,7 @@ fun AppShell(
                         toastState = toastState,
                         onOpenDrawer = { drawerOpen = true },
                         onNavigate = { navigate(it) },
+                        onNavigateForce = { navigate(it, force = true) },
                     )
                     }
                     }
@@ -353,6 +369,24 @@ fun AppShell(
             }
         }
 
+        // 抽屉打开时消费返回键/返回手势：只收起抽屉，不再往下透传。
+        //
+        // 本页那个常驻 enabled 的 OnBackPressedCallback 只做「重新分发」
+        // （见上面 DisposableEffect），并不消费事件；抽屉此前也没人拦，
+        // 于是事件一路落到 NavHost。首页是唯一栈底，NavHost 无处可 pop，
+        // 最终走 Activity finish —— 表现就是「点开侧边菜单再返回，应用直接退出」。
+        //
+        // BackHandler 在本组合中晚于上面那个 callback 注册；OnBackPressedDispatcher
+        // 按“后注册的先检查”（descendingIterator）分发，所以抽屉开着时由这里先消费。
+        BackHandler(enabled = drawerOpen) {
+            // 手势路径下，上面那个 callback 的 handleOnBackStarted 可能已经把
+            // backGesture 置为 true（二级页开抽屉时 previousBackStackEntry 非空）。
+            // 那条清尾逻辑挂在 handleOnBackCancelled 上，而这里走的是正常完成路径，
+            // 不主动清的话页面圆角会一直挂着。
+            backGesture = false
+            drawerOpen = false
+        }
+
         // 左侧边缘不再自绘「滑动打开抽屉」手势：它与系统返回手势热区完全重叠，
         // 会抢掉边缘滑动，导致返回上一级目录失效。抽屉统一走左上角按钮打开。
         LaunchedEffect(Unit) { edgeDragAccumulator.value = 0f }
@@ -362,6 +396,13 @@ fun AppShell(
     }
 }
 
+/**
+ * 一次「用内置浏览器打开链接」的请求。
+ *
+ * [nonce] 让重复打开同一地址也能被识别为新请求。
+ */
+private data class WebRequest(val url: String, val nonce: Int)
+
 @Composable
 private fun ToolboxNavHost(
     navController: NavHostController,
@@ -370,17 +411,31 @@ private fun ToolboxNavHost(
     toastState: MiuixToastState,
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
+    /**
+     * 同 [onNavigate]，但**即使已经在该路由也会重新导航**。
+     *
+     * 单独一个参数而不是给 `onNavigate` 加默认值：Kotlin 的函数类型没有默认参数，
+     * 硬加会让改动波及本文件里十几处现有调用点。
+     */
+    onNavigateForce: (String) -> Unit = onNavigate,
 ) {
+    /**
+     * 待打开的网页请求。HomeScreen 里点到链接时写入，Web 页加载成功后清空。
+     *
+     * [nonce] 是必需的：两次点**同一个链接**时地址没变，
+     * 光比 URL 无法让 Web 页分辨出「这是新的一次请求」——那样第二次点击就没反应。
+     *
+     * 声明在这里而不是外层 AppShell：HomeScreen 与 Web 两条路由都在本函数内，
+     * 状态放在共同祖先才既能写又能读。
+     */
+    var pendingWeb by remember { mutableStateOf<WebRequest?>(null) }
+    /** 递增的请求序号：让「重复打开同一地址」也能被识别为新请求。 */
+    var nextWebNonce by remember { mutableIntStateOf(0) }
     val notConfigured = stringResource(R.string.ai_not_configured)
     val errNetwork = stringResource(R.string.ai_err_network)
     val chatRunning by ChatRunner.running.collectAsState()
-    val planEnabled by PlanStore.enabled.collectAsState()
-    val compressStates by CompressionStore.states.collectAsState()
     // 未配置时把提示写进会话用的应用级作用域
     val scopeForNotice = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    var compressing by remember { mutableStateOf(false) }
-    val compressDone = stringResource(R.string.chat_usage_compress_done)
-    val compressFail = stringResource(R.string.chat_usage_compress_fail)
     val aiConfig by AiConfigStore.config.collectAsState()
 
     // 权限探测放在 NavHost 外，首页与设置页读同一份结果，避免各自重复起进程。
@@ -389,7 +444,6 @@ private fun ToolboxNavHost(
     LaunchedEffect(Unit) {
         AiConfigStore.load(shellContext)
         ChatUsageStore.load(shellContext)
-        CompressionStore.load(shellContext)
     }
 
     // 当前选中项可能是自定义供应商，展示名要从配置里取
@@ -479,24 +533,32 @@ private fun ToolboxNavHost(
                 HomeScreen(
                     onOpenDrawer = onOpenDrawer,
                     onOpenTerminal = { onNavigate(Routes.LINUX_TERMINAL) },
-                    onStart = { sessionId, history ->
+                    onOpenWeb = { url ->
+                        // 用独立的 nonce 记一次「这一轮请求」，而不是让 Web 页去比对 URL。
+                        //
+                        // 比对 URL 的写法有个死角：两次点同一个链接时地址没变，
+                        // Web 页那边看不出「这是新的一次请求」，于是第二次不加载。
+                        pendingWeb = WebRequest(url = url, nonce = nextWebNonce++)
+                        // force：即使已经停在浏览器页，也必须把新地址递进去
+                        onNavigateForce(Routes.WEB)
+                    },
+                    onStart = { sessionId, assistantMessageId, history ->
                         val cfg = AiConfigStore.config.value
                         if (!cfg.ready) {
-                            // 未配置：直接把提示写进会话，不占用请求通道
-                            scopeForNotice.launch {
-                                ChatStore.append(
-                                    shellContext, sessionId,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.ASSISTANT,
-                                        content = notConfigured,
-                                    ),
-                                )
+                            // 未配置：**不**往会话里塞一条纯文本提示，而是让回答区渲染
+                            // 一张「需要配置模型」的 CTA 卡（Spec 第 8.3 节：认证类问题
+                            // 给 CTA 卡而不是报错条）。这样用户看到的是可点的下一步，
+                            // 不是一段看上去像 AI 在推脱的话。
+                            AgentStreamBus.emit { sink ->
+                                (sink as? com.mcp.toolbox.feature.home.agent.AgentChatState)
+                                    ?.onNotConfigured()
                             }
                         } else {
                             ChatRunner.start(
                                 context = shellContext,
                                 config = cfg,
                                 sessionId = sessionId,
+                                assistantMessageId = assistantMessageId,
                                 history = history,
                                 onFallbackReply = errNetwork,
                             )
@@ -554,70 +616,14 @@ private fun ToolboxNavHost(
                     },
                     providerIconRes = aiConfig.currentCustom?.let { com.mcp.toolbox.ui.ai.AiProvider.CUSTOM.iconRes }
                         ?: aiConfig.current.iconRes,
-                    runningText = chatRunning?.streamed,
-                    // 直接映射时间线，保持思考与工具调用的先后关系
-                    runningTimeline = chatRunning?.timeline?.map { step ->
-                        when (step) {
-                            is ChatRunner.Step.Thinking -> RunningStep.Thinking(
-                                text = step.text,
-                                live = step.live,
-                                elapsedMs = step.elapsedMs,
-                            )
-                            is ChatRunner.Step.Narration ->
-                                RunningStep.Narration(text = step.text)
-                            is ChatRunner.Step.Tool -> RunningStep.Tool(
-                                name = step.name,
-                                arguments = step.arguments,
-                                result = step.result,
-                                elapsedMs = step.elapsedMs,
-                            )
-                        }
-                    }.orEmpty(),
                     running = chatRunning != null,
                     onStop = { ChatRunner.stop(shellContext) },
-                    contextWindow = aiConfig.active.contextWindowOrNull(),
-                    planEnabled = planEnabled,
-                    onTogglePlan = { enabled ->
-                        scopeForNotice.launch { PlanStore.setEnabled(shellContext, enabled) }
-                    },
-                    compressing = compressing,
-                    onCompress = {
-                        val cfg = AiConfigStore.config.value
-                        val active = ChatStore.current()
-                        if (active == null) {
-                            compressing = false
-                        } else if (!cfg.ready) {
-                            compressing = false
-                            scopeForNotice.launch {
-                                ChatStore.append(
-                                    shellContext, active.id,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.ASSISTANT,
-                                        content = notConfigured,
-                                    ),
-                                )
-                            }
-                        } else {
-                            compressing = true
-                            scopeForNotice.launch {
-                                val result = AiCompressor.compress(shellContext, cfg, active)
-                                compressing = false
-                                ChatStore.append(
-                                    shellContext, active.id,
-                                    ChatMessage(
-                                        role = ChatMessage.Role.SYSTEM,
-                                        content = result.fold(
-                                            onSuccess = {
-                                                compressDone.format(it.messageCount)
-                                            },
-                                            onFailure = { compressFail.format(it.message ?: "") },
-                                        ),
-                                    ),
-                                )
-                            }
-                        }
-                    },
                     currentModel = aiConfig.model,
+                    // 上下文上限必须显式传下去。
+                    // 早先算了 `activeWindow` 却只用在记忆预算上，没传给 HomeScreen，
+                    // 于是输入栏永远显示「服务端未提供该模型的上下文上限」——
+                    // 明明自定义供应商的模型里已经填了 ctx（实测反馈）。
+                    contextWindow = activeWindow,
                     currentReasoning = aiConfig.reasoning.label,
                     availableModels = aiConfig.cachedModels.ifEmpty {
                         listOfNotNull(aiConfig.model.takeIf { it.isNotBlank() })
@@ -773,13 +779,237 @@ private fun ToolboxNavHost(
                 }
             }
             composable(Routes.LINUX_TERMINAL) {
+                val termContext = LocalContext.current
+                val appContext = termContext.applicationContext
+                val termDistro = remember { LinuxPrefs.distro(termContext) }
+                var termMode by remember { mutableStateOf(LinuxTermMode.load(termContext)) }
+                var termFontSize by remember { mutableFloatStateOf(13.5f) }
+                // 窗口列表与会话都放在 TermSessionStore：退出这个页面时进程继续跑，
+                // 再进来（或切窗口）靠重放输出恢复画面，而不是重开 shell。
+                val tabs by TermSessionStore.tabs
+                val currentTab by TermSessionStore.current
+                val termux = termMode == LinuxTermMode.TERMUX
+                // 待确认关闭的窗口。× 就在标题旁边，误触代价是「正在跑编译的窗口
+                // 连同它的进程一起没了」，所以经一次确认再关。
+                var pendingClose by remember { mutableStateOf<TermSessionStore.Tab?>(null) }
+                /**
+                 * 点加号后先问「开哪种终端」。
+                 *
+                 * 两种环境差别很大（Android 免 Root、Linux 需要已安装的环境），
+                 * 直接开一个再让用户切换，等于替他做了选择——而且 Linux 环境
+                 * 没装时那个窗口必然是空的。
+                 */
+                var pickEnv by remember { mutableStateOf(false) }
+                /**
+                 * 接入 AI 的提示语输入。
+                 *
+                 * 让用户先写一句「想问什么」再发：直接把一屏终端丢过去，
+                 * 模型只能泛泛而谈；带上意图（"这个报错怎么修"）才有用。
+                 */
+                var termToAi by remember { mutableStateOf(false) }
+                var termToAiPrompt by remember { mutableStateOf("") }
+
+                // 只在 Termux 模式需要窗口；简单模式没有常驻会话，不该凭空建一个。
+                // 注意这些写入必须放在 LaunchedEffect 里：在组合期间改状态会让
+                // Compose 立即重组，形成「写 -> 重组 -> 再写」的循环。
+                LaunchedEffect(termux, tabs) {
+                    if (!termux) return@LaunchedEffect
+                    if (TermSessionStore.tabs.value.isEmpty()) {
+                        TermSessionStore.open(appContext, termDistro)
+                    } else if (TermSessionStore.current.value == null) {
+                        TermSessionStore.select(TermSessionStore.tabs.value.last())
+                    }
+                }
+
                 Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
                 Column(Modifier.fillMaxSize()) {
+                    val current = currentTab
+                    val tabTitle = current?.let { t -> val name by t.title; name }
+                        ?: stringResource(R.string.linux_open_terminal)
                     MiuixTopBarPlaceholder(
-                        title = stringResource(R.string.linux_open_terminal),
+                        // 标题跟随当前窗口：跑起来后 shell 会发 OSC 标题（比如 vim 的文件名、
+                        // 正在跑的目录），一眼能看出这是哪个窗口
+                        title = tabTitle,
                         onOpenDrawer = onOpenDrawer,
-                        onBack = { navController.popBackStack() })
-                    LinuxTerminalScreen(distro = LinuxPrefs.distro(LocalContext.current))
+                        onBack = { navController.popBackStack() },
+                        trailing = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                            ) {
+                                // 模式切换：当前处于 Termux 模式时**只把图标染成主色**。
+                                // 不用 filled=true —— 那会把容器画成一个实心圆，看起来像
+                                // 一直在转的加载圈（用户明确不要）。变色更轻，也仍是
+                                // Material 里「已选中」的常规表达。
+                                MiuixIconButton(
+                                    iconRes = AgentIcons.ic_svc_pipeline_app,
+                                    contentDescription = stringResource(R.string.linux_term_mode_switch),
+                                    onClick = {
+                                        termMode = LinuxTermMode.toggle(termContext, termMode)
+                                    },
+                                    tint = if (termux) {
+                                        MiuixTheme.colors.primary
+                                    } else {
+                                        MiuixTheme.colors.onSurfaceVariant
+                                    },
+                                    buttonSize = 40.dp,
+                                    iconSize = 20.dp,
+                                )
+                                // 接入 AI：把当前终端的输出交给对话页。
+                                // 与「新开窗口」并列，因为它俩同属「拿这个终端做什么」。
+                                if (termux && currentTab != null) {
+                                    MiuixIconButton(
+                                        iconRes = AgentIcons.ic_ai_assistant,
+                                        contentDescription = stringResource(R.string.linux_term_to_ai),
+                                        onClick = { termToAi = true },
+                                        tint = MiuixTheme.colors.onSurfaceVariant,
+                                        buttonSize = 40.dp,
+                                        iconSize = 20.dp,
+                                    )
+                                }
+                                if (termux) {
+                                    MiuixIconButton(
+                                        iconRes = AgentIcons.ic_plus,
+                                        contentDescription = stringResource(R.string.linux_term_new_window),
+                                        onClick = {
+                                            if (TermSessionStore.tabs.value.size >= TermSessionStore.MAX_TABS) {
+                                                Toast.makeText(
+                                                    termContext,
+                                                    termContext.getString(
+                                                        R.string.linux_term_max_windows,
+                                                        TermSessionStore.MAX_TABS,
+                                                    ),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            } else {
+                                                // 先选环境，再开窗口
+                                                pickEnv = true
+                                            }
+                                        },
+                                        tint = MiuixTheme.colors.onSurfaceVariant,
+                                        buttonSize = 40.dp,
+                                        iconSize = 20.dp,
+                                    )
+                                }
+                            }
+                        },
+                    )
+                    if (termux) {
+                        TerminalTabStrip(
+                            tabs = tabs,
+                            currentId = currentTab?.id,
+                            onSelect = { TermSessionStore.select(it) },
+                            onRequestClose = { pendingClose = it },
+                        )
+                    }
+                    when {
+                        !termux -> LinuxTerminalScreen(
+                            distro = termDistro,
+                            modifier = Modifier.weight(1f),
+                        )
+                        currentTab == null -> Box(Modifier.weight(1f))
+                        else -> key(currentTab!!.id) {
+                            LinuxTerminalPanel(
+                                tab = currentTab!!,
+                                fontSize = termFontSize,
+                                modifier = Modifier.weight(1f),
+                                onClosed = { navController.popBackStack() },
+                            )
+                        }
+                    }
+                }
+
+                if (pickEnv) {
+                    LinuxChoiceSheet(
+                        title = stringResource(R.string.linux_term_pick_env),
+                        options = listOf(
+                            stringResource(R.string.linux_term_env_local) to
+                                stringResource(R.string.linux_term_env_local_desc),
+                            stringResource(R.string.linux_term_env_linux) to
+                                stringResource(R.string.linux_term_env_linux_desc),
+                        ),
+                        selectedIndex = -1,
+                        onPick = { idx ->
+                            pickEnv = false
+                            val env = if (idx == 0) TermSessionStore.Env.LOCAL
+                            else TermSessionStore.Env.LINUX
+                            TermSessionStore.open(appContext, termDistro, env)
+                        },
+                        onDismiss = { pickEnv = false },
+                    )
+                }
+
+                if (termToAi) {
+                    val target = currentTab
+                    if (target == null) {
+                        termToAi = false
+                    } else {
+                        MiuixDialog(
+                            visible = true,
+                            onDismiss = { termToAi = false; termToAiPrompt = "" },
+                            title = stringResource(R.string.linux_term_to_ai),
+                            message = stringResource(R.string.linux_term_to_ai_hint),
+                            confirmText = stringResource(R.string.linux_term_to_ai_send),
+                            onConfirm = {
+                                val text = termToAiPrompt
+                                termToAi = false
+                                termToAiPrompt = ""
+                                TerminalToAi.send(
+                                    context = appContext,
+                                    tab = target,
+                                    distro = termDistro,
+                                    prompt = text,
+                                    onError = { msg ->
+                                        Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                                    },
+                                )
+                                onNavigate(Routes.HOME)
+                            },
+                            dismissText = stringResource(R.string.app_action_close),
+                        ) {
+                            MiuixTextField(
+                                value = termToAiPrompt,
+                                onValueChange = { termToAiPrompt = it },
+                                placeholder = stringResource(R.string.linux_term_to_ai_placeholder),
+                                singleLine = false,
+                                minLines = 2,
+                            )
+                        }
+                    }
+                }
+
+                pendingClose?.let { target ->
+                    val name by target.title
+                    // 还剩别的窗口才是「关掉」；只剩它一个时 close() 是就地重开新 shell
+                    // （否则会留下一个没有任何窗口的页面）。文案必须跟着这个区别走，
+                    // 不能按「是否在跑命令」判断，否则等于骗用户说会关掉。
+                    val willClose = tabs.size > 1
+                    MiuixDialog(
+                        visible = true,
+                        onDismiss = { pendingClose = null },
+                        title = stringResource(
+                            if (willClose) R.string.linux_term_close_title
+                            else R.string.linux_term_restart_title,
+                            name,
+                        ),
+                        message = stringResource(
+                            if (willClose) R.string.linux_term_close_message
+                            else R.string.linux_term_restart_message,
+                        ),
+                        confirmText = stringResource(
+                            if (willClose) R.string.linux_term_close_confirm
+                            else R.string.linux_term_restart_confirm,
+                        ),
+                        destructive = willClose,
+                        onConfirm = {
+                            val tab = pendingClose ?: return@MiuixDialog
+                            pendingClose = null
+                            // 真被关掉（还有别的窗口）才需要退回上一个窗口
+                            if (TermSessionStore.close(tab)) {
+                                TermSessionStore.tabs.value.lastOrNull()?.let(TermSessionStore::select)
+                            }
+                        },
+                    )
                 }
                 }
             }
@@ -876,7 +1106,17 @@ private fun ToolboxNavHost(
                 Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) { DnsScreen(onBack = { navController.popBackStack() })                 }}
             composable(Routes.WEB) {
                 Box(Modifier.fillMaxSize().pageCorners(this).background(MiuixTheme.colors.background)) {
-                WebScreen(onBack = { navController.popBackStack() }, onToast = { toastState.show(it) })
+                WebScreen(
+                    onBack = { navController.popBackStack() },
+                    onToast = { toastState.show(it) },
+                    initialUrl = pendingWeb?.url,
+                    // nonce 一变就重新加载（同一地址也要重新加载）
+                    initialUrlKey = pendingWeb?.nonce,
+                    // 加载成功后再清空。
+                    // 早先写成「传进去就立刻清空」，那会让 WebScreen 里等待 WebView 的
+                    // effect 因 key 变化而重启、加载被取消——点了链接什么都不会发生。
+                    onInitialUrlLoaded = { pendingWeb = null },
+                )
                 }
             }
             composable(Routes.MCP) {
@@ -970,7 +1210,7 @@ private fun CompactBackRow(onBack: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         MiuixIcon(
-            Icons.AutoMirrored.Outlined.ArrowBack,
+            AgentIcons.ic_chevron_left,
             stringResource(R.string.app_action_back),
             tint = MiuixTheme.colors.onSurface,
             size = 22.dp,
@@ -990,6 +1230,7 @@ private fun MiuixTopBarPlaceholder(
     title: String,
     onOpenDrawer: () -> Unit = {},
     onBack: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val back = onBack != null
     Row(
@@ -1009,7 +1250,7 @@ private fun MiuixTopBarPlaceholder(
             contentAlignment = Alignment.Center,
         ) {
             MiuixIcon(
-                if (back) Icons.AutoMirrored.Outlined.ArrowBack else Icons.Outlined.Menu,
+                if (back) AgentIcons.ic_chevron_left else AgentIcons.ic_menu,
                 stringResource(
                     if (back) R.string.app_action_back else R.string.app_action_open_drawer,
                 ),
@@ -1023,6 +1264,10 @@ private fun MiuixTopBarPlaceholder(
             modifier = Modifier.padding(start = 8.dp).weight(1f),
             maxLines = 1,
         )
+        // 右侧动作槽：目前只有终端页用它放「模式切换」。
+        // 不给各页单独开 AppBar 是因为这个顶栏是统一形态，
+        // 多一个可选槽位比让每个页面自己重写一遍更省事。
+        trailing?.invoke()
     }
 }
 
@@ -1046,7 +1291,7 @@ private fun MiuixNavRail(currentRoute: String, onNavigate: (String) -> Unit) {
             val selected = destination.route == currentRoute
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 MiuixIconButton(
-                    icon = destination.icon,
+                    iconRes = destination.icon,
                     contentDescription = stringResource(destination.labelRes),
                     onClick = { onNavigate(destination.route) },
                     filled = selected,

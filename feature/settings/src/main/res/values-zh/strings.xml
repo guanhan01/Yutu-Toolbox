@@ -9,6 +9,8 @@
     <string name="settings_tag_preview">预览</string>
     <string name="settings_hex_hint">支持 #RRGGBB 与 #AARRGGBB</string>
     <string name="settings_seed_title">主色</string>
+    <string name="settings_color_customize">Customize 取色</string>
+    <string name="settings_color_customize_desc">打开后可用下方调色盘、动态取色与纯黑；关闭则使用 Miuix 默认配色</string>
     <string name="settings_mode_pure_white">纯白模式</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_dark_mode">深浅模式</string>

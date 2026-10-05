@@ -1,0 +1,29 @@
+<!-- ic_wifi -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M10.3,17.4A1.7,1.7 0 1 0 13.7,17.4A1.7,1.7 0 1 0 10.3,17.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M7.42,14.54A5.4,5.4 0 0 1 16.58,14.54" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M5.41,11.87A8.6,8.6 0 0 1 18.59,11.87" />
+
+</vector>

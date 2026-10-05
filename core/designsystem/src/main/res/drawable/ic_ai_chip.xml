@@ -1,0 +1,30 @@
+<!-- ic_ai_chip -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M8.2,6.2H15.8A2,2 0 0 1 17.8,8.2V15.8A2,2 0 0 1 15.8,17.8H8.2A2,2 0 0 1 6.2,15.8V8.2A2,2 0 0 1 8.2,6.2Z" />
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M10.8,9.6H13.2A1.2,1.2 0 0 1 14.4,10.8V13.2A1.2,1.2 0 0 1 13.2,14.4H10.8A1.2,1.2 0 0 1 9.6,13.2V10.8A1.2,1.2 0 0 1 10.8,9.6Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:fillType="evenOdd"
+        android:pathData="M3.4,9.6H6.2M3.4,14.4H6.2M17.8,9.6H20.6M17.8,14.4H20.6M9.6,3.4V6.2M14.4,3.4V6.2M9.6,17.8V20.6M14.4,17.8V20.6" />
+
+</vector>

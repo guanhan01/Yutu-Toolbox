@@ -107,3 +107,25 @@ sealed interface ChatAttachment {
         }.getOrDefault("")
     }
 }
+
+/**
+ * 转成可落盘的展示信息。
+ *
+ * 只保留「画 chip 需要什么」：图标类型 + 一行文字。附件正文已经进了
+ * `ChatMessage.modelContext`，这里不重复存内容。
+ *
+ * 图片不走这里——它由 `ChatMessage.imageUris` 单独承载，因为要画真实缩略图。
+ */
+fun ChatAttachment.toRef(): AttachmentRef = when (this) {
+    is ChatAttachment.Image -> AttachmentRef(AttachmentRef.Kind.IMAGE, label)
+    is ChatAttachment.File -> AttachmentRef(AttachmentRef.Kind.FILE, label)
+    is ChatAttachment.Folder -> AttachmentRef(AttachmentRef.Kind.FOLDER, compactLabel(label))
+    is ChatAttachment.Path -> AttachmentRef(AttachmentRef.Kind.PATH, compactLabel(path))
+}
+
+/** 路径压到末两段，避免 chip 横着占满一行。 */
+private fun compactLabel(path: String): String {
+    val parts = path.trim().trimEnd('/').split('/').filter { it.isNotBlank() }
+    if (parts.size <= 2) return parts.joinToString("/").ifBlank { path }
+    return "…/" + parts.takeLast(2).joinToString("/")
+}

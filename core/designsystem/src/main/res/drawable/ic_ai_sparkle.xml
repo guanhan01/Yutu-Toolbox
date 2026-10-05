@@ -1,0 +1,18 @@
+<!-- ic_ai_sparkle -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M10,4.6L10.99,9.01L15.4,10L10.99,10.99L10,15.4L9.01,10.99L4.6,10L9.01,9.01Z" />
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M17.6,13.8L18.08,15.92L20.2,16.4L18.08,16.88L17.6,19L17.12,16.88L15,16.4L17.12,15.92Z" />
+
+</vector>

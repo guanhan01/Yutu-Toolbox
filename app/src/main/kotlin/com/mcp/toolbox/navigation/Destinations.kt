@@ -1,29 +1,13 @@
 package com.mcp.toolbox.navigation
 
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import androidx.annotation.StringRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.Router
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.Extension
-import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material.icons.outlined.Wifi
-import androidx.compose.ui.graphics.vector.ImageVector
 import com.mcp.toolbox.R
 
 data class Destination(
     val route: String,
     @StringRes val labelRes: Int,
-    val icon: ImageVector,
+    val icon: Int,
     val badge: Int = 0,
     val implStage: String = "P0",
 )
@@ -64,7 +48,7 @@ object Routes {
 
 /** 抽屉一级入口：只保留首页，工具统一收进「应用工具」子页面。 */
 val DrawerPrimary: List<Destination> = listOf(
-    Destination(Routes.HOME, R.string.app_nav_home, Icons.Outlined.Public),
+    Destination(Routes.HOME, R.string.app_nav_home, AgentIcons.ic_globe),
 )
 
 /** 「应用工具」子页面里的工具入口。 */
@@ -79,28 +63,28 @@ val DrawerPrimary: List<Destination> = listOf(
  *  - MCP 产物：属于 MCP 服务的附属目录，入口集中到 MCP 页面内部。
  */
 val ToolEntries: List<Destination> = listOf(
-    Destination(Routes.APPS, R.string.app_nav_apps, Icons.Outlined.Smartphone, implStage = "P2"),
-    Destination(Routes.WEB, R.string.app_nav_web, Icons.Outlined.Language, implStage = "P3"),
-    Destination(Routes.CAPTURE, R.string.app_nav_capture, Icons.Outlined.Bolt, implStage = "P5"),
-    Destination(Routes.MCP, R.string.app_nav_mcp, Icons.Outlined.Hub, implStage = "P7"),
+    Destination(Routes.APPS, R.string.app_nav_apps, AgentIcons.ic_phone_device, implStage = "P2"),
+    Destination(Routes.WEB, R.string.app_nav_web, AgentIcons.ic_globe, implStage = "P3"),
+    Destination(Routes.CAPTURE, R.string.app_nav_capture, AgentIcons.ic_speed, implStage = "P5"),
+    Destination(Routes.MCP, R.string.app_nav_mcp, AgentIcons.ic_orchestration, implStage = "P7"),
 )
 
 /** 「网络」二级可折叠菜单。 */
 val DrawerNetworkChildren: List<Destination> = listOf(
-    Destination(Routes.NETWORK_HTTP, R.string.app_nav_network_http, Icons.Outlined.Language, implStage = "P3"),
-    Destination(Routes.NETWORK_PING, R.string.app_nav_network_ping, Icons.Outlined.Router, implStage = "P3"),
-    Destination(Routes.NETWORK_DNS, R.string.app_nav_network_dns, Icons.Outlined.Dns, implStage = "P3"),
-    Destination(Routes.NETWORK_PORT_SCAN, R.string.app_nav_network_port_scan, Icons.Outlined.Router, implStage = "P3"),
-    Destination(Routes.NETWORK_WHOIS, R.string.app_nav_network_whois, Icons.Outlined.Public, implStage = "P3"),
-    Destination(Routes.NETWORK_ENV, R.string.app_nav_network_env, Icons.Outlined.Hub, implStage = "P3"),
+    Destination(Routes.NETWORK_HTTP, R.string.app_nav_network_http, AgentIcons.ic_globe, implStage = "P3"),
+    Destination(Routes.NETWORK_PING, R.string.app_nav_network_ping, AgentIcons.ic_svc_load_balancer, implStage = "P3"),
+    Destination(Routes.NETWORK_DNS, R.string.app_nav_network_dns, AgentIcons.ic_svc_dns, implStage = "P3"),
+    Destination(Routes.NETWORK_PORT_SCAN, R.string.app_nav_network_port_scan, AgentIcons.ic_svc_load_balancer, implStage = "P3"),
+    Destination(Routes.NETWORK_WHOIS, R.string.app_nav_network_whois, AgentIcons.ic_globe, implStage = "P3"),
+    Destination(Routes.NETWORK_ENV, R.string.app_nav_network_env, AgentIcons.ic_orchestration, implStage = "P3"),
 )
 
 /** 抽屉底部固定项。 */
 val DrawerFooter: List<Destination> = listOf(
-    Destination(Routes.ABOUT, R.string.app_nav_about, Icons.Outlined.Info),
-    Destination(Routes.TOOLS, R.string.app_drawer_group_tools, Icons.Outlined.GridView),
-    Destination(Routes.SKILLS, R.string.app_nav_skills, Icons.Outlined.Extension),
-    Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, Icons.Outlined.AutoAwesome),
-    Destination(Routes.SETTINGS, R.string.app_nav_settings, Icons.Outlined.Settings),
+    Destination(Routes.ABOUT, R.string.app_nav_about, AgentIcons.ic_info),
+    Destination(Routes.TOOLS, R.string.app_drawer_group_tools, AgentIcons.ic_svc_project_board),
+    Destination(Routes.SKILLS, R.string.app_nav_skills, AgentIcons.ic_plugin),
+    Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, AgentIcons.ic_ai_sparkle),
+    Destination(Routes.SETTINGS, R.string.app_nav_settings, AgentIcons.ic_settings),
 )
 

@@ -1,90 +1,132 @@
 package com.mcp.toolbox.feature.home
 
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
-
-/** 一条对话消息。 */
+/**
+ * 一条对话消息。
+ *
+ * ## 关键设计：AI 的「过程」属于消息本身
+ *
+ * 思考、工具调用、正文是**同一轮回答的内容**，不是「界面临时状态」。所以
+ * [segmentsJson] 里存着这一轮的完整过程时间线，和消息一起落盘。
+ *
+ * 早先时间线只活在界面内存、而消息只存纯文本，直接导致：
+ * 切后台回来过程丢失、点停止没有过程记录、第二轮工具卡不出现、
+ * 新一轮的问题跑到上一轮过程块下面。这些都不是独立的 bug，是同一个错误的四种表现。
+ */
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: Role,
     val content: String,
     val time: Long = System.currentTimeMillis(),
+
     /**
-     * 随本条消息一起发出的图片（content URI）。
+     * 随本条消息一起发出的图片（content URI）。只用于当次请求的多模态输入。
      *
-     * 只用于当次请求的多模态输入，不写入本地会话文件：会话记录只保留文本，
-     * 避免把 base64 或失效的临时 URI 长期留在磁盘上。
+     * 保留在消息里（不再像早先那样落盘时剥掉）是为了让气泡能画出缩略图——
+     * 用户发了图却在对话里看不到任何痕迹，是一个明显的体感缺陷。
+     * URI 可能随进程死亡失效，渲染端必须能退回只显示标签。
      */
     val imageUris: List<String> = emptyList(),
-    /** 工具调用名称（role == TOOL 时有值）。 */
-    val toolName: String = "",
-    /** 工具调用参数（role == TOOL 时有值）。 */
-    val toolArguments: String = "",
+
+    /** 随消息一起发出的文件 / 文件夹 / 手输路径（只存展示所需的信息）。 */
+    val attachments: List<AttachmentRef> = emptyList(),
+
+    /**
+     * 只发给模型、**不上屏**的上下文文本（附件内容等）。
+     *
+     * 早先它被当成第二条 `role = USER` 的消息塞进会话，结果界面上出现两个用户气泡、
+     * 第二个还是一大段原始上下文。现在把它挂在同一条消息上，仅在建请求时拼接。
+     */
+    val modelContext: String? = null,
+
+    /** AI 消息：这一轮的过程时间线（JSON 数组）。由 `AgentSegmentCodec` 编解码。 */
+    val segmentsJson: String? = null,
+
+    /** AI 消息：这一轮的终态。用于渲染断点卡片、区分正常完成与中断。 */
+    val turnState: TurnState = TurnState.Done,
+
     /** 用户编辑过本条消息。 */
     val edited: Boolean = false,
-    /**
-     * 这是过程里的中间旁白，不是最终答复。
-     *
-     * 带工具调用那一轮模型的正文只是「我要去调用工具」的过渡语句。它要以
-     * ASSISTANT 身份留给模型看，但界面上不该出现复制 / 重说 / 删除——
-     * 用户要操作的是最终答复，不是过程的碎片。
-     */
-    val intermediate: Boolean = false,
-    /**
-     * 该步骤的耗时（毫秒）。
-     *
-     * 只对过程消息（深度思考 / 工具调用）有意义：结果落盘后仍要显示「用时 N 秒」，
-     * 所以必须持久化，不能只留在内存里的实时状态。
-     */
-    val elapsedMs: Long = 0,
 ) {
     enum class Role {
         USER,
         ASSISTANT,
         SYSTEM,
+    }
 
-        /** 深度思考过程：模型推理文本。 */
-        REASONING,
+    /** 是否是「被中断 / 失败」的一轮（冷启动时要渲染恢复卡片）。 */
+    val isUnfinished: Boolean
+        get() = role == Role.ASSISTANT &&
+            (turnState == TurnState.Running || turnState == TurnState.Interrupted)
+}
 
-        /** 一次工具调用：content 为结果，toolName/toolArguments 为调用信息。 */
-        TOOL,
+/** 一轮回答的终态。 */
+enum class TurnState {
+    /** 正在跑（进程被杀后冷启动读到它，就说明上次没跑完）。 */
+    Running,
+    Done,
+
+    /** 用户主动停止。 */
+    Interrupted,
+
+    /** 请求失败。 */
+    Failed,
+}
+
+/**
+ * 附件的展示信息。
+ *
+ * 只存「画出来需要什么」，不存内容：文件正文已经进了 [ChatMessage.modelContext]，
+ * 图片走 [ChatMessage.imageUris]。
+ */
+data class AttachmentRef(
+    val kind: Kind,
+    val label: String,
+) {
+    enum class Kind {
+        FILE,
+        FOLDER,
+        PATH,
+        IMAGE,
+    }
+
+    companion object {
+        fun encode(list: List<AttachmentRef>): String {
+            val arr = JSONArray()
+            list.forEach { a ->
+                arr.put(JSONObject().put("k", a.kind.name).put("l", a.label))
+            }
+            return arr.toString()
+        }
+
+        fun decode(text: String?): List<AttachmentRef> {
+            if (text.isNullOrBlank()) return emptyList()
+            return runCatching {
+                val arr = JSONArray(text)
+                (0 until arr.length()).mapNotNull { i ->
+                    val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                    val kind = runCatching {
+                        Kind.valueOf(o.optString("k"))
+                    }.getOrNull() ?: return@mapNotNull null
+                    AttachmentRef(kind, o.optString("l"))
+                }
+            }.getOrDefault(emptyList())
+        }
     }
 }
 
 /**
- * 正在进行的回复里的一步。
+ * 会把 [modelContext] 拼进 `content` 的历史副本。
  *
- * 只用于实时展示：请求结束后这些会按同一顺序落成正式消息
- * （Thinking -> REASONING，Tool -> TOOL，Narration / 最终文本 -> ASSISTANT）。
- *
- * 之所以是一条混排的时间线而不是按类型分开的两个列表：一次回复里
- * 「思考 → 工具 → 继续思考 → 再调用工具」是交替的，分成两个列表就只能
- * 整块渲染，界面必然显示成「所有思考都在所有工具之上」。
+ * 只影响发给模型的请求，不动界面渲染与落盘的数据——
+ * 这样「界面上看到一条干净的用户消息」与「模型拿到完整附件上下文」可以同时成立。
  */
-sealed interface RunningStep {
-    /**
-     * 一段深度思考。
-     *
-     * [live] 表示这段思考仍在（或刚刚结束）生成。只有时间线上**最后一条**且
-     * [live] 为 true 时界面才显示「深度思考中…」；一旦后面出现了工具调用或正文，
-     * 同一条会原地变成「已深度思考」，不会残留在思考中状态。
-     */
-    data class Thinking(
-        val text: String,
-        val live: Boolean = false,
-        val elapsedMs: Long = 0,
-    ) : RunningStep
-
-    /** 模型带工具调用那一轮的过渡正文。 */
-    data class Narration(val text: String) : RunningStep
-
-    /** 一次工具调用。 */
-    data class Tool(
-        val name: String,
-        val arguments: String = "",
-        val result: String = "",
-        val elapsedMs: Long = 0,
-    ) : RunningStep
+fun List<ChatMessage>.forModel(): List<ChatMessage> = map { m ->
+    val extra = m.modelContext?.takeIf { it.isNotBlank() }
+    if (extra == null) m else m.copy(content = m.content + "\n\n" + extra)
 }
 
 /** 一次对话（会话），包含其全部消息。 */

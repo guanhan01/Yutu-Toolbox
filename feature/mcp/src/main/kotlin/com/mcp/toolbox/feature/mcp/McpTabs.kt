@@ -21,18 +21,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixCard
 import com.mcp.toolbox.core.design.component.MiuixFilterChip
@@ -142,7 +135,7 @@ private fun ServerSectionHeader(count: Int, toolCount: Int, onAdd: () -> Unit) {
             text = "添加",
             onClick = onAdd,
             size = MiuixButtonSize.SMALL,
-            leadingIcon = Icons.Outlined.Add,
+            leadingIconRes = AgentIcons.ic_plus,
         )
     }
 }
@@ -201,21 +194,21 @@ private fun ServerCard(
                     onClick = onConnect,
                     size = MiuixButtonSize.SMALL,
                     loading = busy,
-                    leadingIcon = if (state.state == McpConnectionState.READY) Icons.Outlined.Refresh else Icons.Outlined.PlayArrow,
+                    leadingIconRes = if (state.state == McpConnectionState.READY) AgentIcons.ic_refresh else AgentIcons.ic_play_circle,
                 )
                 MiuixButton(
                     text = "编辑",
                     onClick = onEdit,
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.Edit,
+                    leadingIconRes = AgentIcons.ic_edit,
                 )
                 MiuixButton(
                     text = "删除",
                     onClick = onDelete,
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.TEXT,
-                    leadingIcon = Icons.Outlined.Delete,
+                    leadingIconRes = AgentIcons.ic_trash,
                 )
             }
             Spacer(Modifier.height(spacing.sm))

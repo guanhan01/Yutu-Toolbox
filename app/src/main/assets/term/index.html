@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<!--
+  Termux 模式的终端页面。仿真交给 xterm.js（MIT）。
+
+  ===================== 文字选取：自绘手柄 + 逐字 =====================
+  本页提供「长按选词 + 拖手柄逐字调整选区」，**不含放大镜**（放大镜留待手柄确认
+  稳定后再加）。选区高亮由 xterm 自己画，手柄是自绘的。
+
+  三条硬约束（每条都是实测踩出来的，改动时不要退回）：
+
+  1. **表现层一律读 xterm 画好的选区矩形**（.xterm-selection > div 的
+     left/top/right/bottom），不要自己按「列 × 单元格宽」推算手柄位置 ——
+     自己算与 xterm 实际渲染总有偏差（.xterm 自身有偏移/内边距），
+     表现就是手柄永远不跟手。这是前面多版失败的根因。
+
+  2. **单元格宽 = 行元素宽 / cols**，不能用 .xterm-char-measure-element 的宽度：
+     那个元素里放的是一长串字符（xterm 靠它测宽），取它的 rect.width 会把
+     cellW 放大十几倍，列号恒为 0（手柄跑到最左边、选区从行首开始）。
+
+  3. **选区长度必须按「去掉行尾空格」的内容长度算**。xterm 的行是空格补齐到
+     cols 的，直接按列算会选到行尾空白，高亮一直画到右边缘（看着像选中整行）。
+
+  另：不要给 .xterm-helper-textarea 加 pointer-events:none —— 实测会让长按
+  完全失效（菜单与选区都不出现）。键盘靠 term.focus() 程序化聚焦，无需它被点到。
+
+  与 Kotlin 的约定：
+    Kotlin -> JS : termWrite(str) / termSetFont(px) / termTheme(obj)
+                   termScrollPage(dir) / termScrollBottom() / termFocus()
+    JS -> Kotlin : onInput(str) / onResize(cols,rows) / onSelection(text)
+                   onTitle(title) / onFontSize(px) / onReady()
+
+  两个方向传的都是「字节按 Latin-1 映射成的字符串」，必须原样搬运字节：
+  - 输出：不能把串直接交给 term.write()，它会再按 UTF-8 编码一次，中文变 "ç»ç«"
+  - 输入：不能拿 charCode 当字节，中文码点 > 0xFF 会被截断
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+  /* 左边距：整体右移一点点。
+     xterm 按 clientWidth/cellWidth 算列数、没有余量，边界字形会被裁掉，
+     这个内边距同时也让首字符离开屏幕边缘。左 10px / 右 6px 是不对称的：
+     左侧是文字起点、需要更多余量，右侧留白只为了避免出现横向滚动条。 */
+  #term { position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+          padding-left: 10px; padding-right: 6px; box-sizing: border-box; }
+  /* 万一行内容超宽，也别让整页横向滚动——那会把右侧内容推到屏幕外 */
+  html, body { overflow-x: hidden; }
+  .xterm-viewport::-webkit-scrollbar { display: none; }
+
+  /* 关掉系统文本选取：选区完全自建，否则系统那套会和自绘手柄叠在一起
+     （而且系统在 WebView 上给不出手柄）。 */
+  .xterm, .xterm-rows, .xterm-rows > div, .xterm-rows span {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* 自绘手柄浮层。容器不吃指针，避免挡住终端的滚动与点击；
+     只有手柄图形本身接收触摸。 */
+  #selov { position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+           pointer-events: none; z-index: 40; }
+  #selov svg { pointer-events: auto; }
+
+  /* 放大镜：圆角矩形局部浮窗。
+     几何与阴影在这里，**颜色由 JS 按终端真实配色设置** ——
+     写死深浅色会在另一种主题下糊成一块（踩过）。 */
+  #selov .loupe {
+    position: absolute; overflow: hidden; display: none;
+    /* 14px：仍然圆润，但圆角处的裁剪区（约 5.6px）小于内边距 10px，
+       内容与高亮不会被切到。20px 时裁剪区约 10px，会切掉高亮的左上/左下角。 */
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+  }
+  /* 内容层：逐字符绝对定位，所以这里只放公共字体设置 */
+  #selov .loupe .ch {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    white-space: pre; line-height: 1; font-family: monospace;
+  }
+  /* 命中列的位置竖线 */
+  #selov .loupe .bar {
+    position: absolute; top: 20%; bottom: 20%; width: 2px;
+  }
+  /* 选区高亮块：高度接近整格，与终端里的高亮观感一致
+     （原来上下各留 18%，只剩 64% 高，看起来是条细线而不是高亮） */
+  #selov .loupe .mark {
+    /* 直角：与终端里 xterm 画的高亮一致；带圆角会在边缘留出小缺口 */
+    position: absolute; top: 6%; bottom: 6%; border-radius: 0;
+  }
+
+  /* 复制按钮：被控手柄上方。
+     只在「有选区且未在拖手柄」时显示 —— 拖手柄时放大镜出现，此按钮隐藏，
+     避免两块的视野互相遮挡。 */
+  #selov .cpy {
+    position: absolute; display: none; pointer-events: auto;
+    height: 38px; padding: 0 18px; border: 0; border-radius: 19px;
+    font-size: 14px; font-family: inherit; font-weight: 500;
+    /* 白底黑字（用户指定）：与终端浅色背景协调，也比蓝底更不抢视线 */
+    background: #ffffff; color: #000000;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .26);
+  }
+</style>
+</head>
+<body>
+<div id="term"></div>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+<script>
+(function () {
+  var term = new Terminal({
+    fontFamily: 'monospace',
+    fontSize: 14,
+    cursorBlink: true,
+    scrollback: 5000
+  });
+
+  var fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  var termEl = document.getElementById('term');
+  term.open(termEl);
+
+  // ---- 字节搬运 ----
+  function latin1ToBytes(str) {
+    var out = new Uint8Array(str.length);
+    for (var i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xFF;
+    return out;
+  }
+  function bytesToLatin1(bytes) {
+    var s = '', chunk = 8192;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return s;
+  }
+  function utf8Bytes(str) {
+    if (window.TextEncoder) return new TextEncoder().encode(str);
+    var escaped = unescape(encodeURIComponent(str));
+    var out = new Uint8Array(escaped.length);
+    for (var i = 0; i < escaped.length; i++) out[i] = escaped.charCodeAt(i) & 0xFF;
+    return out;
+  }
+
+  // ---- 尺寸 ----
+  var lastCols = 0, lastRows = 0;
+  function doFit(force) {
+    if (!termEl || termEl.clientWidth < 20 || termEl.clientHeight < 20) return;
+    try { fit.fit(); } catch (e) { return; }
+    if (!force && term.cols === lastCols && term.rows === lastRows) return;
+    lastCols = term.cols;
+    lastRows = term.rows;
+    if (window.Android && window.Android.onResize) {
+      window.Android.onResize(term.cols, term.rows);
+    }
+  }
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { doFit(false); scheduleOverlay(); }).observe(termEl);
+  }
+  window.addEventListener('resize', function () { doFit(false); scheduleOverlay(); });
+  // 初始 fit 要等布局稳定：只调一次 rAF 时会算成极小行列、渲染成空白
+  requestAnimationFrame(function () {
+    doFit(true);
+    setTimeout(function () { doFit(true); }, 60);
+    setTimeout(function () { doFit(true); }, 250);
+    setTimeout(function () {
+      doFit(true);
+      // 必须回调 onReady：Kotlin 侧把它当「可以开始写输出」的闸门，少了会白屏
+      if (window.Android && window.Android.onReady) window.Android.onReady();
+    }, 600);
+  });
+
+  // ==================================================================
+  // 坐标层：屏幕坐标 <-> 单元格。这是唯一的换算入口。
+  // ==================================================================
+
+  function rowsBox() { return termEl.querySelector('.xterm-rows'); }
+
+  /** 首行的实测几何。用行元素，不用 char-measure（那是整串宽度）。 */
+  function metrics() {
+    var rows = rowsBox();
+    if (!rows || !rows.children.length) return null;
+    var r0 = rows.children[0].getBoundingClientRect();
+    var host = termEl.getBoundingClientRect();
+    return {
+      baseLeft: r0.left - host.left,
+      baseTop: r0.top - host.top,
+      cellW: r0.width / Math.max(1, term.cols),
+      rowH: r0.height,
+      host: host
+    };
+  }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  /** 屏幕坐标 -> 缓冲区单元格（y 含 scrollback 绝对行号）。 */
+  function cellAt(clientX, clientY) {
+    var m = metrics();
+    if (!m) return null;
+    var col = Math.floor((clientX - m.host.left - m.baseLeft) / m.cellW);
+    var row = Math.floor((clientY - m.host.top - m.baseTop) / m.rowH);
+    return {
+      x: clamp(col, 0, term.cols - 1),
+      y: clamp(row, 0, term.rows - 1) + term.buffer.active.viewportY
+    };
+  }
+
+  /** 该行在屏幕上显示的真实文本（含行尾补的空格）。 */
+  function rowText(y) {
+    var rows = rowsBox();
+    if (!rows) return '';
+    var idx = y - term.buffer.active.viewportY;
+    if (idx < 0 || idx >= rows.children.length) return '';
+    return rows.children[idx].textContent || '';
+  }
+
+  /** 有效长度：去掉行尾补的空格（约束 3）。 */
+  function contentLen(y) {
+    return rowText(y).replace(/\s+$/, '').length;
+  }
+
+  /**
+   * 解析该行的「字符」序列，并标出每个字符占哪些格子。
+   *
+   * 为什么需要它：行文本的**字符数**与终端的**格子数**不是一回事
+   * （CJK 占 2 格：实测 "终端" 是 2 个字符 4 个格子，而整行 13 字符 = 45 格）。
+   * 手柄的 col 是**格子**列号，选区文本又是**字符**，两者必须显式换算，
+   * 否则会出现「放大镜里两个字重合」「高亮宽度与终端不一致」这类问题。
+   *
+   * 换算依据 span 结构（xterm 按样式分段生成的）：
+   *     colsForSpan = round(spanW / cellW)
+   *     该 span 内每字符占 colsForSpan / textLen 格
+   * 实测 "终端"(W32/2字符) -> 2 格/字符；"Yutu"(W32/4字符) -> 1 格/字符。
+   *
+   * 返回 [{ch, colStart(小数), colSpan}]，按屏幕顺序。
+   */
+  function rowChars(rowY) {
+    var rows = rowsBox();
+    if (!rows) return [];
+    var idx = rowY - term.buffer.active.viewportY;
+    if (idx < 0 || idx >= rows.children.length) return [];
+    var el = rows.children[idx];
+    var m = metrics();
+    if (!m) return [];
+
+    var out = [];
+    // ⚠ 格子边界必须用**整数**，不能小数累加。
+    // 小数累加（colCursor += colsPerSpan / text.length）会累积浮点误差：
+    // 「终」的 colStart 会变成 12.999... 而不是 13，随后与整数窗口边界比较时
+    // 被判成「在窗口外」而整个字符被丢弃 —— 放大镜最左边那一格就空了（实测）。
+    var colCursor = 0;
+    for (var n = el.firstChild; n; n = n.nextSibling) {
+      var text = n.textContent || '';
+      if (!text.length) continue;
+      var w = (n.offsetWidth && n.offsetWidth > 0) ? n.offsetWidth : (text.length * m.cellW);
+      var colsForSpan = Math.max(text.length, Math.round(w / m.cellW));
+      // 把整段格子按字符数均分，但用「余数逐个摊」的整数分法，保证首尾相接、
+      // 总和恰好等于 colsForSpan（宽字符 = 2 格）。
+      var base = Math.floor(colsForSpan / text.length);
+      var extra = colsForSpan - base * text.length;
+      for (var i = 0; i < text.length; i++) {
+        var span = base + (i < extra ? 1 : 0);
+        out.push({ ch: text.charAt(i), colStart: colCursor, colSpan: span });
+        colCursor += span;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 选区在指定行覆盖的格子范围（用于放大镜里的高亮）。
+   *
+   * 语义与 term.select 的扁平范围一致：
+   *   首行从 head.x 到行尾；末行从 0 到 tail.x；中间行整行。
+   * 返回 null 表示该行不在选区内。
+   */
+  function selRangeOnRow(rowY) {
+    var h = head(), t = tail();
+    if (!h || !t) return null;
+    if (rowY < h.y || rowY > t.y) return null;
+    var lo = (rowY === h.y) ? h.x : 0;
+    var hi = (rowY === t.y) ? t.x : term.cols;
+    if (hi <= lo) return null;
+    return { start: lo, span: hi - lo };
+  }
+
+  /** 该行在格子 col 处对应的字符项（取覆盖该格的字符）。 */
+  function charAtCol(chars, col) {
+    for (var i = 0; i < chars.length; i++) {
+      var c = chars[i];
+      if (col >= Math.floor(c.colStart) &&
+          col < Math.floor(c.colStart + c.colSpan)) return c;
+    }
+    return null;
+  }
+
+  /**
+   * 格子列 -> 字符索引。
+   *
+   * ⚠ 这两个坐标系**不是一回事**：行文本是「字符」序列（"终端" 是 2 个字符），
+   * 而手柄/选区用的是「格子」列号（"终端" 占 4 格）。
+   * 之前多处（wordAt、放大镜竖线）直接把格子列号当字符索引用，
+   * 结果在含中文的行上全部错位 —— 中文行必然踩到，不是偶发。
+   *
+   * @returns {index, chars} 字符索引，以及覆盖该格的那个字符项（可能为 null）
+   */
+  function colToCharIndex(chars, col) {
+    for (var i = 0; i < chars.length; i++) {
+      var c = chars[i];
+      if (col >= Math.floor(c.colStart) && col < Math.floor(c.colStart + c.colSpan)) {
+        return { index: i, chars: c };
+      }
+    }
+    // 落在行尾空白（超出字符序列）：用字符数兜底
+    return { index: chars.length, chars: null };
+  }
+
+  /** 字符索引 -> 格子列（该字符的起始格）。 */
+  function charIndexToCol(chars, index) {
+    if (!chars.length) return 0;
+    if (index <= 0) return 0;
+    if (index >= chars.length) {
+      var last = chars[chars.length - 1];
+      return Math.round(last.colStart + last.colSpan);
+    }
+    return Math.round(chars[index].colStart);
+  }
+
+  /**
+   * 单元格 -> 相对 termEl 的像素位置（CSS px）。
+   *
+   * 这是**手柄定位的唯一来源**：手柄只认自己的 (col, row)。
+   * 不要从 .xterm-selection 反推手柄位置 —— 那样手柄 y 会被固定成选区那一行
+   * （不跟手换行），而且会随另一个手柄的移动而变（另一个手柄不该受影响）。
+   *
+   * 返回该单元格的左上角；越出可视区的行返回 null（手柄随之隐藏）。
+   */
+  function cellPixel(col, row) {
+    var m = metrics();
+    if (!m) return null;
+    var screenRow = row - term.buffer.active.viewportY;
+    if (screenRow < 0 || screenRow >= term.rows) return null;
+    return {
+      x: m.baseLeft + col * m.cellW,
+      y: m.baseTop + screenRow * m.rowH,
+      w: m.cellW,
+      h: m.rowH
+    };
+  }
+
+  /**
+   * 把单元格夹进终端的合法范围。
+   *
+   * ⚠ **只夹到 [0, cols-1]，不按内容长度裁剪**。
+   * 曾按「该行有效内容长度」裁剪，空白行 contentLen=0 会把任何列夹成 0 ——
+   * 手柄于是只能停在最左边，无法跟随手指移到空白处（用户报的 bug）。
+   * 终端整行都是可选区域（行尾空白也算），所以只受列数约束。
+   */
+  function clampToContent(c) {
+    var x = clamp(c.x, 0, term.cols - 1);
+    return { x: snapToCharEdge(c.y, x), y: c.y };
+  }
+
+  /**
+   * 把格子列号吸附到**字符边界**。
+   *
+   * 为什么必须吸附：宽字符占 2 格（「端」= col 13、14）。
+   * 若手柄能停在 col 14，它就在「端」的正中间，随之而来的高亮只能覆盖半边
+   * （13→14），而另一端的手柄又从 14 起算、漏掉 13 格 ——
+   * 表现为「高亮停在端字中间」与「端字左边一小块没高亮」（用户报的两个现象，
+   * 根因是同一个）。吸附后手柄只落在 13 或 15，两个问题一起消失。
+   *
+   * @returns 吸附后的格子列（可能等于 x，若 x 本来就在字符边界上）
+   */
+  function snapToCharEdge(rowY, col) {
+    var chars = rowChars(rowY);
+    if (!chars.length) return col;
+    var hit = charAtCol(chars, col);
+    if (!hit) return col;                       // 落在行尾空白，无需吸附
+    var cStart = Math.round(hit.colStart);
+    var cEnd = Math.round(hit.colStart + hit.colSpan);
+    if (cEnd - cStart <= 1) return col;         // 单格字符，任何列都是边界
+    // 宽字符：吸附到离得更近的那一侧
+    var mid = (cStart + cEnd) / 2;
+    return (col + 0.5 <= mid) ? cStart : cEnd;
+  }
+
+  // ==================================================================
+  // 选区层：只在这里写 term.select()
+  // ==================================================================
+
+  // 两个**独立**手柄，各自记录自己的位置（缓冲区单元格）。
+  // 不绑定「选区首/尾」：用户拖哪个，另一个就待在原地不动也不消失。
+  // 选区范围由两者之间的文本序区间决定（谁前谁后都成立，允许交叉）。
+  var hA = null, hB = null, selText = '';
+
+  /** a 是否在文本序上不晚于 b。 */
+  function aFirst() {
+    if (!hA || !hB) return true;
+    return !(hA.y > hB.y || (hA.y === hB.y && hA.x > hB.x));
+  }
+  /** 选区两端（文本序）。交叉时也成立：小的当起点、大的当终点。 */
+  function head() { return aFirst() ? hA : hB; }
+  function tail() { return aFirst() ? hB : hA; }
+
+  /** 手柄（'a' | 'b'）当前的位置单元格。 */
+  function handleCell(which) { return which === 'a' ? hA : hB; }
+  function setHandleCell(which, c) { if (which === 'a') hA = c; else hB = c; }
+
+  /** 两单元格之间的字符数。跨行时换行按 1 个字符计（xterm 的语义）。 */
+  /**
+   * 两个单元格之间的「选区长度」，用于 term.select(col, row, length)。
+   *
+   * ⚠ length **不是实际字符数**，而是「每行都按 cols 宽」的扁平偏移量。
+   * 实测（cols=45）：select(0,1,50) -> pos=0,1 -> 5,2，
+   * 即 flat = 1*45+0+50 = 95 -> row=2, col=5。xterm 内部就是这么折算的。
+   *
+   * 曾按「各行实际内容长度」累加，跨行时长度算错，xterm 把选区截断在错误位置，
+   * 表现就是「高亮不跟随手柄跨行」。这里改成扁平公式，跨行才正确。
+   */
+  function lenBetween(a, b) {
+    return (b.y - a.y) * term.cols + (b.x - a.x);
+  }
+
+  /**
+   * 选区对应的文本。
+   *
+   * 与 length 的扁平语义保持一致：中间行整行，首行从 a.x 到行尾，末行从 0 到 b.x。
+   * 行尾空白去掉（肉眼不希望在复制内容里拖一堆空格），但**空行保留为换行**，
+   * 否则跨空白区选择时行数会对不上。
+   */
+  function textBetween(a, b) {
+    var out = [];
+    for (var y = a.y; y <= b.y; y++) {
+      var t = rowText(y);
+      var from = (y === a.y) ? a.x : 0;
+      var to = (y === b.y) ? b.x : term.cols;
+      out.push(t.slice(from, to).replace(/\s+$/, ''));
+    }
+    return out.join('\n');
+  }
+
+  function applySelection() {
+    // 注意：这里**只**根据两个手柄算出选区，绝不反过来改手柄位置。
+    // 手柄位置的唯一来源是用户拖动（或长按初始化）。
+    var a = head(), b = tail();
+    if (!a || !b || (a.x === b.x && a.y === b.y)) {
+      // 两柄重合 = 零长度选区：不清手柄，只清高亮
+      term.clearSelection();
+      selText = '';
+    } else {
+      // 一律按**文本序**下发：a 是文本序靠前的那端。
+      // xterm 的 select(col, row, length) 内部把 selectionEnd 记成
+      // (col + length, row)，方向敏感；两柄交叉时若把「靠后」的那端当起点传进去，
+      // 高亮只会画出起点所在的那一个字符（实测：选区数据是 6 个字符，高亮只有 1 个）。
+      // 这里先归一化再传，交叉与否都能正确渲染。
+      term.select(a.x, a.y, Math.max(1, Math.round(lenBetween(a, b))));
+      selText = textBetween(a, b);
+    }
+    // xterm 下一帧才把选区矩形写进 DOM
+    scheduleOverlay();
+    if (window.Android && window.Android.onSelection) window.Android.onSelection(selText);
+  }
+
+  function clearSelection() {
+    hA = null; hB = null; selText = '';
+    term.clearSelection();
+    hideHandles();
+    if (cpyBtn) cpyBtn.style.display = 'none';
+    if (window.Android && window.Android.onSelection) window.Android.onSelection('');
+  }
+
+  /** 长按点的「词」范围：按空白切分（命令、路径可整段选中）。 */
+  /** 某个手柄当前对应的单元格（start = 选区首，end = 选区末）。 */
+  function visualCellFor(which) {
+    return handleCell(which);
+  }
+
+  /**
+   * 长按点的「词」范围，返回**格子列**区间。
+   *
+   * ⚠ 必须用 rowChars() 的「字符<->格子」映射，不能拿 c.x（格子列）
+   * 直接当字符索引去 charAt —— 含中文时两套坐标不同，边界必然算错。
+   * 这里以字符序列找词边界，再换算回格子列。
+   */
+  function wordAt(c) {
+    var chars = rowChars(c.y);
+    if (!chars.length) return null;
+    var hit = colToCharIndex(chars, c.x);
+    var idx = hit.index;
+    if (idx >= chars.length) return null;      // 落在行尾空白
+
+    function isSpace(i) {
+      if (i < 0 || i >= chars.length) return true;
+      return /\s/.test(chars[i].ch);
+    }
+    var s = idx, e = idx;
+    while (s > 0 && !isSpace(s - 1)) s--;
+    while (e < chars.length && !isSpace(e)) e++;
+    if (s === e) {
+      // 命中空白格：只选它自己
+      s = idx; e = idx + 1;
+    }
+    // 字符索引 -> 格子列
+    var colStart = charIndexToCol(chars, s);
+    var colEnd = charIndexToCol(chars, e);
+    return { s: colStart, e: colEnd };
+  }
+
+  // ==================================================================
+  // 表现层：读 xterm 的选区矩形摆手柄（约束 1）
+  // ==================================================================
+
+  function selectionRects() {
+    var host = termEl.getBoundingClientRect();
+    var box = termEl.querySelector('.xterm-selection');
+    if (!box) return [];
+    var out = [];
+    for (var i = 0; i < box.children.length; i++) {
+      var r = box.children[i].getBoundingClientRect();
+      if (r.height <= 0.5 || r.width <= 0.5) continue;   // 空行占位
+      out.push({
+        left: r.left - host.left,
+        top: r.top - host.top,
+        right: r.right - host.left,
+        bottom: r.bottom - host.top
+      });
+    }
+    out.sort(function (p, q) { return p.top - q.top; });
+    return out;
+  }
+
+  var ov = document.createElement('div');
+  ov.id = 'selov';
+  ov.innerHTML = '<div class="loupe"><div class="mark"></div>' +
+                 '<div class="chars"></div><div class="bar"></div></div>' +
+                 '<button class="cpy">复制</button>';
+  termEl.appendChild(ov);
+  var cpyBtn = ov.querySelector('.cpy');
+  var loupe = ov.querySelector('.loupe');
+  var loupeChars = ov.querySelector('.chars');
+  var loupeBar = ov.querySelector('.bar');
+  var loupeMark = ov.querySelector('.mark');
+
+  /**
+   * 水滴手柄。参照 Material 规范：可见 22x22，尖端即锚点。
+   * 用 SVG 一条闭合路径画，边缘干净（CSS 圆角拼水滴会露出白边，踩过）。
+   */
+  var H_W = 22, H_H = 26, TIP_X = 11;
+  function makeHandle(tipDown) {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', String(H_W));
+    svg.setAttribute('height', String(H_H));
+    svg.setAttribute('viewBox', '0 0 ' + H_W + ' ' + H_H);
+    svg.style.cssText = 'position:absolute;display:none;'
+      + 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));';
+    var path = document.createElementNS(NS, 'path');
+    // tipDown=true：尖端在底部（贴选区上沿，指向下方文字）
+    // tipDown=false：尖端在顶部（贴选区下沿，指向上方文字）
+    path.setAttribute('d', tipDown
+      ? 'M11 25 C11 25 2.5 15.5 2.5 9 A8.5 8.5 0 1 1 19.5 9 C19.5 15.5 11 25 11 25 Z'
+      : 'M11 1 C11 1 2.5 10.5 2.5 17 A8.5 8.5 0 1 0 19.5 17 C19.5 10.5 11 1 11 1 Z');
+    path.setAttribute('fill', '#3b7bff');
+    path.setAttribute('stroke', '#ffffff');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    ov.appendChild(svg);
+    return svg;
+  }
+  var hStart = makeHandle(true);    // 选区上沿，尖端朝下
+  var hEnd = makeHandle(false);     // 选区下沿，尖端朝上
+
+  /**
+   * 手柄尖端位置（相对 termEl）。
+   *
+   * 按**手柄自己的位置**在选区里的文本序挑端点：
+   *  · 该手柄是文本序靠前的那端 -> 贴选区首行的左边缘
+   *  · 是靠后的那端 -> 贴选区末行的右边缘
+   * 交叉时（拖到对方前面）自动换成另一端，因此手柄始终贴在选区边缘，
+   * 而两个手柄本身的位置数据互不影响 —— 这就是「拖一个，另一个不动」。
+   */
+  function handleTip(which) {
+    var c = handleCell(which);
+    if (!c) return null;
+    var p = cellPixel(c.x, c.y);
+    if (!p) return null;
+    // 锚点取**本行垂直中心**，不是行沿。
+    // 行沿正好是相邻两行的分界，落在边界上的点用 floor() 换算行号会倒向相邻行，
+    // 表现为「手指换行了但手柄不换行」；取中心则远离边界，换算稳定。
+    // 两个手柄锚点都用中心，形状上：
+    //   A（尖端朝下）盒子画在中心上方，B（尖端朝上）盒子画在中心下方。
+    return { x: p.x, y: p.y + p.h / 2 };
+  }
+
+  // ---- 终端真实配色（放大镜要用；由 Kotlin 的 termTheme 提供） ----
+  var termBg = '#ffffff', termFg = '#000000', termSel = '#3b7bff';
+
+  var LOUPE_ZOOM = 2.4;      // 放大倍率
+  // 显示区宽度按**格子**算。5 格 = 命中格左右各 2 格：
+  // 6 格时仍偏长（用户反馈），5 格够看清命中字符与紧邻上下文。
+  var LOUPE_COLS = 5;
+  var LOUPE_GAP = 12;        // 贴近锚点，别飘太远
+  // 左右内边距。必须 ≥ 圆角在该高度处的内缩量，否则内容（含高亮）
+  // 会被放大镜的圆角裁掉，表现为「左边一小块半圆没上高亮」（实测 R=20 时
+  // 内缩约 10px，而内边距只有 5px，于是被裁掉约 5px）。
+  var LOUPE_PADX = 10;
+
+  /**
+   * 显示放大镜。
+   *
+   * 全部按**格子**几何绘制（宽度、位置、高亮都用格子数 × cellW × ZOOM），
+   * 字符内容用 rowChars() 的「字符<->格子」映射取值 —— 这样宽字符
+   * （中文占 2 格）既不会重叠，高亮也和终端里一致。
+   *
+   * @param which 'a' | 'b'  正在拖的手柄（用于避让它的图形）
+   * @param cell  当前命中的单元格（格子坐标）
+   */
+  function showLoupe(which, cell) {
+    if (!cell) { hideLoupe(); return; }
+    var m = metrics();
+    if (!m) return;
+    var col = clamp(cell.x, 0, term.cols - 1);
+
+    // 显示区：**固定宽度**，不随选区变化。
+    //
+    // 上一版为了不让高亮切在宽字符中间，把窗口并上了整段选区 ——
+    // 结果选区一长放大镜就撑开（实测盖住半个屏幕，用户反馈）。
+    // 正确做法：宽度固定，只把**边界吸附到字符边缘**，
+    // 这样高亮裁剪线一定落在字符之间，宽度又不变。
+    var sel = selRangeOnRow(cell.y);
+    var cols = Math.min(LOUPE_COLS, term.cols);
+    var from = clamp(col - Math.floor(cols / 2), 0, Math.max(0, term.cols - cols));
+    var charsForEdge = rowChars(cell.y);
+
+    // 边界吸附：起点若落在某个宽字符内部，挪到该字符的起始格。
+    if (charsForEdge.length) {
+      var atStart = charAtCol(charsForEdge, from);
+      if (atStart && Math.floor(atStart.colStart) !== from && from > Math.floor(atStart.colStart)) {
+        from = Math.floor(atStart.colStart);
+      }
+    }
+    var to = from + cols;
+    // 右边界同理：若落在宽字符内部，扩到该字符结束处（宁可多一格，也不切字）
+    if (charsForEdge.length) {
+      var atEnd = charAtCol(charsForEdge, to - 1);
+      if (atEnd) {
+        var cEnd = Math.ceil(atEnd.colStart + atEnd.colSpan);
+        if (cEnd > to) to = cEnd;
+      }
+    }
+    from = clamp(from, 0, Math.max(0, term.cols - 1));
+    to = clamp(to, from + 1, term.cols);
+    cols = to - from;
+
+    var chars = rowChars(cell.y);
+    var cw = m.cellW * LOUPE_ZOOM;
+    var fs = (term.options.fontSize || 14) * LOUPE_ZOOM;
+    var width = Math.round(cols * cw + LOUPE_PADX * 2);
+    var height = Math.round(m.rowH * LOUPE_ZOOM + 8);
+
+    // 逐**字符**摆放（不是逐格子），每个字符按其真实格跨度定位与留宽
+    loupeChars.innerHTML = '';
+    loupeChars.style.cssText = 'position:absolute;top:0;bottom:0;' +
+      'left:' + LOUPE_PADX + 'px;right:' + LOUPE_PADX + 'px;';
+    // 摆放字符：位置按格子估算，**宽度交给字体**（不设 width）。
+    // 同时记录元素，稍后用它的真实 offsetLeft/offsetWidth 来对齐高亮 ——
+    // 字体渲染宽度与 cellW*ZOOM 有取整差异，靠推算必然错位（实测高亮会切在宽字符中间）。
+    for (var i = 0; i < chars.length; i++) {
+      var c = chars[i];
+      if (c.colStart + c.colSpan <= from || c.colStart >= to) continue;   // 不在显示区
+      var sp = document.createElement('span');
+      sp.className = 'ch';
+      sp.textContent = c.ch;
+      // 位置按**格子**算，宽度交给字体自然渲染。
+      // 这样同一套 cw 同时决定了字符位置、竖线、高亮 —— 三者必然对齐。
+      sp.style.left = Math.round((c.colStart - from) * cw) + 'px';
+      sp.style.fontSize = fs + 'px';
+      loupeChars.appendChild(sp);
+    }
+
+    loupe.style.width = width + 'px';
+    loupe.style.height = height + 'px';
+    loupe.style.background = termBg;
+    loupeBar.style.background = termSel;
+    loupeMark.style.background = termSel;
+    loupeMark.style.opacity = '0.28';
+
+    // 高亮 = 选区在本行覆盖的格子范围。
+    //
+    // 贴边规则（与参考图一致）：
+    //   选区延伸出窗口左/右边缘时，高亮**直接顶到放大镜边缘**（不留内边距），
+    //   由容器的圆角 + overflow:hidden 自然裁出弧形 —— 这才是「真放大镜」的观感。
+    //   之前高亮永远缩进 PADX，窗口边缘处就露出一块没高亮的月牙（用户反复指出）。
+    //   选区完全在窗口内时，才按格子位置缩进摆放。
+    if (sel) {
+      var vs = Math.max(sel.start, from);
+      var ve = Math.min(sel.start + sel.span, to);
+      if (ve > vs) {
+        var mL, mR;
+        // 左边缘：选区越过窗口左界 -> 顶到放大镜左缘（0）
+        if (sel.start <= from) mL = 0;
+        else mL = LOUPE_PADX + (vs - from) * cw;
+        // 右边缘：选区越过窗口右界 -> 顶到放大镜右缘（width）
+        if (sel.start + sel.span >= to) mR = width;
+        else mR = LOUPE_PADX + (ve - from) * cw;
+        loupeMark.style.left = Math.round(mL) + 'px';
+        loupeMark.style.width = Math.round(mR - mL) + 'px';
+        loupeMark.style.display = 'block';
+      } else {
+        loupeMark.style.display = 'none';
+      }
+    } else {
+      loupeMark.style.display = 'none';
+    }
+    // 命中位置的竖线：必须吸附到**字符边界**，不能落在宽字符中间。
+    // 原来直接用格子列号 (col - from) * cw，而「端」占 2 格，
+    // 列号落在它内部时竖线就画到了字中间（用户报的 bug）。
+    // 这里按「手柄位于字符的哪一侧」吸附到该字符的左边界或右边界。
+    // 竖线：贴命中字符的**格子边界**（左或右，取离手柄更近的一侧），
+    // 用与高亮相同的格子坐标 —— 这样「高亮跟着指示器」，两者不会各走一套。
+    // 若无字符（落在空白），直接用命中格自身的边界。
+    var hitChar = charAtCol(chars, col);
+    var barCol = col;
+    if (hitChar) {
+      var cStart = hitChar.colStart;
+      var cEnd = hitChar.colStart + hitChar.colSpan;
+      var mid = (cStart + cEnd) / 2;
+      barCol = (col + 0.5 <= mid) ? cStart : cEnd;
+    }
+    loupeBar.style.left = Math.round(LOUPE_PADX + (barCol - from) * cw) + 'px';
+
+    // 锚点像素位置
+    var p = cellPixel(col, cell.y);
+    if (!p) { hideLoupe(); return; }
+    var ax = p.x, ay = p.y + p.h / 2;
+
+    // 避让：手柄 A 的盒子在锚点**上方**、B 在**下方**，
+    // 所以拖 A 时放大镜优先放下方，拖 B 时优先放上方。
+    //
+    // ⚠ 但**绝不往手指那边翻**：原实现是「上方放不下 -> 翻到下方」，
+    // 下方正是手指所在处，于是放大镜被手指挡住看不见（用户报的问题）。
+    // 现在改成：优先位放不下就**贴容器边缘**，并做横向让位。
+    var top;
+    if (which === 'a') {
+      top = ay + LOUPE_GAP;
+      if (top + height > termEl.clientHeight - 2) {
+        // 下方也放不下：贴顶（不是翻到手指那一侧）
+        top = 2;
+      }
+    } else {
+      top = ay - LOUPE_GAP - height;
+      if (top < 2) {
+        // 上方放不下：贴顶。此时放大镜可能与手指同侧，
+        // 靠下面的横向让位把它挪开手指。
+        top = 2;
+      }
+    }
+    top = clamp(top, 2, Math.max(2, termEl.clientHeight - height - 2));
+
+    // 水平：让命中格在放大镜里保持与终端相同的相对位置，再夹进容器
+    var left = ax - (LOUPE_PADX + (col - from) * cw);
+    left = clamp(left, 2, Math.max(2, termEl.clientWidth - width - 2));
+
+    // 贴顶时做横向让位：把放大镜挪到手指左边或右边（哪边空间大去哪边），
+    // 避免放大镜正好压住手指导致看不见。
+    if (top <= 2) {
+      var fingerX = ax;
+      var toRight = fingerX + 40;
+      var toLeft = fingerX - width - 40;
+      if (toRight + width <= termEl.clientWidth - 2) {
+        left = toRight;
+      } else if (toLeft >= 2) {
+        left = toLeft;
+      }
+      left = clamp(left, 2, Math.max(2, termEl.clientWidth - width - 2));
+    }
+
+    loupe.style.left = Math.round(left) + 'px';
+    loupe.style.top = Math.round(top) + 'px';
+    loupe.style.display = 'block';
+    // 放大镜与复制按钮不同时出现（避免互相遮挡、也避免挡住视野）
+    cpyBtn.style.display = 'none';
+  }
+
+  function hideLoupe() {
+    loupe.style.display = 'none';
+    loupeChars.innerHTML = '';
+  }
+
+  /**
+   * 摆放复制按钮：在被控手柄的**上方**。
+   *
+   * 用户要求：放大镜出现（正在拖手柄）时此按钮**隐藏**，避免视线互相遮挡。
+   * 采用「最近操作过的那个手柄」作为锚点：拖完松手后按钮就出现在那个手柄旁边。
+   */
+  function renderCopyButton() {
+    // 条件：有选区、不在拖手柄（放大镜已隐藏）、有可选文本
+    if (!hA || !hB || dragging || !selText) {
+      cpyBtn.style.display = 'none';
+      return;
+    }
+    var which = lastTouched || 'b';
+    var p = handleTip(which);
+    if (!p) { cpyBtn.style.display = 'none'; return; }
+
+    var bw = cpyBtn.offsetWidth || 72;
+    var bh = cpyBtn.offsetHeight || 38;
+    // 手柄锚点上方；上方放不下就放下方
+    var y = p.y - H_H - bh - 6;
+    if (y < 2) y = p.y + H_H + 6;
+    y = clamp(y, 2, Math.max(2, termEl.clientHeight - bh - 2));
+    var x = clamp(p.x - bw / 2, 2, Math.max(2, termEl.clientWidth - bw - 2));
+
+    cpyBtn.style.left = Math.round(x) + 'px';
+    cpyBtn.style.top = Math.round(y) + 'px';
+    cpyBtn.style.display = 'block';
+  }
+
+  function hideHandles() {
+    hStart.style.display = 'none';
+    hEnd.style.display = 'none';
+  }
+
+  function renderOverlay() {
+    // 注意：**不要求选区存在**。两个手柄重合（零长度选区）时它们仍要显示，
+    // 否则用户一拖到重合就看不见手柄了。手柄只依赖自己的 (col,row)。
+    if (!hA || !hB) { hideHandles(); return; }
+
+    // 手柄要整块留在可视范围内：选区贴着屏幕左右边缘时
+    // （例如从第 0 列开始），按尖端对齐会让手柄有一半被裁掉 —— 实测如此。
+    // 注意只夹**视觉位置**，尖端锚点仍对准字符边界，命中判定不受影响。
+    var w = termEl.clientWidth;
+    var pad = 1;   // 留 1px，避免描边被切
+    // 手柄 A / B 各自摆位，互不干扰
+    var pa = handleTip('a');
+    if (pa) {
+      var ax = clamp(pa.x - TIP_X, pad, Math.max(pad, w - H_W - pad));
+      hStart.style.left = Math.round(ax) + 'px';
+      hStart.style.top = Math.round(pa.y - H_H) + 'px';   // 尖端朝下：盒在锚点上方
+      hStart.style.display = 'block';
+    }
+    var pb = handleTip('b');
+    if (pb) {
+      var bx = clamp(pb.x - TIP_X, pad, Math.max(pad, w - H_W - pad));
+      hEnd.style.left = Math.round(bx) + 'px';
+      hEnd.style.top = Math.round(pb.y) + 'px';           // 尖端朝上：盒在锚点下方
+      hEnd.style.display = 'block';
+    }
+    // 手柄位置定了之后再摆复制按钮（它依赖手柄锚点）
+    renderCopyButton();
+  }
+
+  var overlayRaf = 0, overlayTimer = 0;
+  function scheduleOverlay() {
+    if (!overlayRaf) {
+      overlayRaf = requestAnimationFrame(function () {
+        overlayRaf = 0;
+        renderOverlay();
+      });
+    }
+    // 再补一次延迟重绘：xterm 更新选区 DOM 的时机可能比我们的 rAF 晚一帧，
+    // 只读一次会拿到**旧几何** —— 表现就是高亮已经变了、手柄却停在上一次的位置
+    // （实测：选区缩到 10 个字符，右手柄仍停在 17 的位置）。
+    if (overlayTimer) clearTimeout(overlayTimer);
+    overlayTimer = setTimeout(function () { overlayTimer = 0; renderOverlay(); }, 60);
+  }
+
+  // ==================================================================
+  // 手势
+  // ==================================================================
+
+  // --- 双指缩放字号 ---
+  var MIN_FONT = 8, MAX_FONT = 32;
+  var pinchStartDist = 0, pinchStartFont = 0, pinchActive = false;
+  var pendingFont = 0, rafId = 0;
+
+  function clampFont(px) { return clamp(px, MIN_FONT, MAX_FONT); }
+  function applyPendingFont() {
+    rafId = 0;
+    if (!pendingFont) return;
+    var px = clampFont(pendingFont);
+    if (px === term.options.fontSize) return;
+    term.options.fontSize = px;
+    doFit(true);
+    if (window.Android && window.Android.onFontSize) window.Android.onFontSize(px);
+    if (hA && hB) scheduleOverlay();
+  }
+  function scheduleFont(px) {
+    pendingFont = px;
+    if (!rafId) rafId = requestAnimationFrame(applyPendingFont);
+  }
+  function touchDist(t) {
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // --- 长按与拖手柄 ---
+  var LP_MS = 450;
+  var lpTimer = 0, lpFrom = null;
+  var dragging = null;        // 'start' | 'end'
+
+  /**
+   * 手指是否落在手柄上。
+   *
+   * 按**手柄图形的矩形**判定，不是按到尖端的距离：
+   * 图形主体在尖端旁边（尖端只是锚点），用户实际点的是图形本身。
+   * 曾用「到尖端 30px 内」判定，实测手指按在图形上却判不中（偏离超过 30px），
+   * 结果是拖不动手柄，还会在松手时被当成「点了别处」把选区清掉。
+   *
+   * 热区再向外扩 PAD，因为手指接触面比图形大。
+   */
+  function handleBox(el) {
+    var host = termEl.getBoundingClientRect();
+    var r = el.getBoundingClientRect();
+    return {
+      l: r.left - host.left, t: r.top - host.top,
+      r: r.right - host.left, b: r.bottom - host.top
+    };
+  }
+
+  function hitHandle(clientX, clientY) {
+    if (!hA || !hB) return null;
+    var host = termEl.getBoundingClientRect();
+    var x = clientX - host.left, y = clientY - host.top;
+    var PAD = 16;   // 热区外扩（CSS px）
+    function inBox(b) {
+      return x >= b.l - PAD && x <= b.r + PAD && y >= b.t - PAD && y <= b.b + PAD;
+    }
+    var visible = function (el) { return el.style.display !== 'none'; };
+    var hs = visible(hStart) && inBox(handleBox(hStart));
+    var he = visible(hEnd) && inBox(handleBox(hEnd));
+    if (hs && !he) return 'a';
+    if (he && !hs) return 'b';
+    if (hs && he) {
+      // 两柄太近时取更近的那个
+      var bs = handleBox(hStart), be = handleBox(hEnd);
+      var ds = Math.hypot(x - (bs.l + bs.r) / 2, y - (bs.t + bs.b) / 2);
+      var de = Math.hypot(x - (be.l + be.r) / 2, y - (be.t + be.b) / 2);
+      return ds <= de ? 'a' : 'b';
+    }
+    return null;
+  }
+
+  /** 把某个手柄移动到 cell，并阻止两柄交叉（方案 B：不允许交叉）。 */
+  /**
+   * 移动某个手柄到 cell。
+   *
+   * **不做任何交叉限制**：允许拖到另一手柄前面（用户明确要求）。
+   * 只改这一个手柄的位置，另一个保持原值 —— 因此它不会动也不会消失。
+   * 选区由 applySelection() 按两者的文本序重新算。
+   */
+  function moveHandle(which, cell) {
+    setHandleCell(which, clampToContent(cell));
+    applySelection();
+  }
+
+  // --- 自动滚动 ---
+  var EDGE = 0.10;            // 上下各 10% 触发
+  var scrollTimer = 0;
+  function autoScrollFor(clientY, cell) {
+    var r = termEl.getBoundingClientRect();
+    var rel = (clientY - r.top) / r.height;
+    var dir = 0;
+    if (rel < EDGE) dir = -1;
+    else if (rel > 1 - EDGE) dir = 1;
+    if (!dir) { stopAutoScroll(); return; }
+    // 越靠边越快，最多 3 行/帧
+    var strength = dir < 0 ? (EDGE - rel) / EDGE : (rel - (1 - EDGE)) / EDGE;
+    var lines = Math.max(1, Math.round(clamp(strength, 0, 1) * 3)) * dir;
+
+    if (!scrollTimer) {
+      var step = function () {
+        term.scrollLines(lines);
+        // 滚动后同一屏幕坐标命中不同行，重算一次
+        if (dragging) {
+          var c = cellAt(lastX, lastY);
+          if (c) moveHandle(dragging, c);
+        } else {
+          scheduleOverlay();
+        }
+        scrollTimer = requestAnimationFrame(step);
+      };
+      scrollTimer = requestAnimationFrame(step);
+    }
+  }
+  function stopAutoScroll() {
+    if (scrollTimer) { cancelAnimationFrame(scrollTimer); scrollTimer = 0; }
+  }
+
+  var lastX = 0, lastY = 0;
+  // 拖拽时「手柄锚点」与「手指」之间的固定 Y 偏移。
+  //
+  // 手柄图形画在文字行的**外侧**（右手柄在行下方），手指点到的是图形本体，
+  // 而命中单元格必须按**锚点所在行**算。直接用手指的 Y 会落到下一行（实测：
+  // 拖右手柄命中的是下一行的空行，选区因此看不出变化）。
+  // 记下按下瞬间的偏移，拖动时用「手指 Y + 偏移」还原成锚点所在位置。
+  var grabOffsetY = 0;
+
+  termEl.addEventListener('touchstart', function (e) {
+    clearTimeout(lpTimer);
+
+    if (e.touches.length === 2) {
+      pinchActive = true;
+      pinchStartDist = touchDist(e.touches);
+      pinchStartFont = term.options.fontSize;
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+    if (e.touches.length !== 1) return;
+
+    var t = e.touches[0];
+    lastX = t.clientX; lastY = t.clientY;
+    lpFrom = { x: t.clientX, y: t.clientY };
+
+    // 改选区只有一条入口：按住手柄。
+    // （曾写成「长按后任何滑动都算拖」—— 手指轻微抖动就把选区拉成整行/多行。）
+    var near = hitHandle(t.clientX, t.clientY);
+    if (near) {
+      clearTimeout(lpTimer);
+      dragging = near;
+      lastTouched = near;
+      // 偏移基准用「锚点所在行的**中心**」，不是锚点边缘：
+      // 锚点落在行的上下边界上（如 y=176 正好是第 10/11 行分界），
+      // 直接用它换算会被 floor() 判到相邻行，行号与手柄就对不上了。
+      // 以行中心为基准后，手指上下移动一个行高，行号正好变化 1，是干净的 1:1。
+      var hr = termEl.getBoundingClientRect();
+      var mc = metrics();
+      var ac = visualCellFor(near);
+      if (mc && ac) {
+        var centerCss = mc.baseTop
+          + (ac.y - term.buffer.active.viewportY) * mc.rowH + mc.rowH / 2;
+        grabOffsetY = centerCss - (t.clientY - hr.top);
+      } else {
+        grabOffsetY = 0;
+      }
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+
+    lpTimer = setTimeout(function () {
+      var c = cellAt(lastX, lastY);
+      if (!c) return;
+      c = clampToContent(c);
+      var w = wordAt(c);
+      if (!w) { clearSelection(); return; }
+      hA = { x: w.s, y: c.y };
+      hB = { x: w.e, y: c.y };
+      lastTouched = 'b';
+      applySelection();
+    }, LP_MS);
+  }, { passive: false });
+
+  termEl.addEventListener('touchmove', function (e) {
+    if (pinchActive && e.touches.length === 2) {
+      var d = touchDist(e.touches);
+      if (pinchStartDist > 0 && d > 0) scheduleFont(pinchStartFont * (d / pinchStartDist));
+      if (e.cancelable) e.preventDefault();
+      return;
+    }
+
+    var t = e.touches[0];
+    if (!t) return;
+    lastX = t.clientX; lastY = t.clientY;
+
+    if (dragging) {
+      // 用「手指 Y + 固定偏移」还原到锚点所在位置，行号才跟着手柄走
+      var c = cellAt(lastX, lastY + grabOffsetY);
+      if (c) {
+        moveHandle(dragging, c);
+        // 放大镜跟着当前命中单元格走（它读的是手柄自己的 cell，不是手指）
+        showLoupe(dragging, handleCell(dragging));
+      }
+      autoScrollFor(lastY + grabOffsetY, c);
+      if (e.cancelable) e.preventDefault();   // 拖手柄时不要滚动页面
+      return;
+    }
+
+    // 不在拖手柄：手指移动即滚动，取消长按候选并把事件让给 xterm 的滚动
+    if (lpFrom && (Math.abs(lastX - lpFrom.x) > 8 || Math.abs(lastY - lpFrom.y) > 8)) {
+      clearTimeout(lpTimer);
+      lpFrom = null;
+    }
+  }, { passive: false });
+
+  termEl.addEventListener('touchend', function (e) {
+    // 收尾
+    if (pinchActive) {
+      if (!e.touches || e.touches.length < 2) {
+        pinchActive = false;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+        applyPendingFont();
+      }
+      return;
+    }
+    clearTimeout(lpTimer);
+    stopAutoScroll();
+
+    if (dragging) {
+      dragging = null;
+      scheduleOverlay();       // 松手后冻结：不再改动选区
+      hideLoupe();
+      return;
+    }
+
+    var t2 = e.changedTouches && e.changedTouches[0];
+    if (!hA || !hB) {
+      // 没有选区：这是一次点按，聚焦终端让键盘可用
+      setTimeout(function () { try { term.focus(); } catch (err) {} }, 0);
+    } else if (t2 && !hitHandle(t2.clientX, t2.clientY)) {
+      clearSelection();        // 点别处取消选区
+    }
+  }, { passive: false });
+
+  termEl.addEventListener('touchcancel', function (e) {
+    clearTimeout(lpTimer);
+    stopAutoScroll();
+    if (pinchActive && (!e.touches || e.touches.length < 2)) {
+      pinchActive = false;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      applyPendingFont();
+    }
+    if (dragging) { dragging = null; scheduleOverlay(); hideLoupe(); }
+  }, { passive: false });
+
+  // 滚动/重排后手柄要跟着走
+  if (term.onScroll) term.onScroll(function () { if (hA && hB) scheduleOverlay(); });
+
+  // ---- 回调 ----
+  term.onData(function (data) {
+    if (window.Android && window.Android.onInput) {
+      window.Android.onInput(bytesToLatin1(utf8Bytes(data)));
+    }
+  });
+  term.onTitleChange(function (title) {
+    if (window.Android && window.Android.onTitle && title) window.Android.onTitle(title);
+  });
+
+  // ---- 暴露给 Kotlin ----
+  cpyBtn.addEventListener('click', function (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!selText) return;
+    // 交给 Kotlin 写系统剪贴板（比 JS 的 navigator.clipboard 稳：
+    // 后者在 WebView 里常因缺少用户手势授权而失败）
+    if (window.Android && window.Android.onCopy) window.Android.onCopy(selText);
+  });
+
+  window.termWrite = function (bytesAsLatin1) {
+    term.write(latin1ToBytes(bytesAsLatin1));
+  };
+  window.termReset = function () { term.reset(); clearSelection(); };
+  window.termSetFont = function (px) {
+    var v = clampFont(px);
+    term.options.fontSize = v;
+    pendingFont = v;
+    doFit(true);
+    if (hA && hB) scheduleOverlay();
+    if (dragging) showLoupe(dragging, handleCell(dragging));
+  };
+  window.termTheme = function (t) {
+    term.options.theme = t;
+    if (t) {
+      // 放大镜要用**不透明**底色：xterm 主题里的 background 参与混合，
+      // 这里优先用 Kotlin 传的不透明底色，拿不到才退回背景色。
+      if (t._bgOpaque) termBg = t._bgOpaque;
+      else if (t.background) termBg = t.background;
+      if (t.foreground) termFg = t.foreground;
+      if (t.cursor) termSel = t.cursor;
+      if (termBg === '#00000000' || termBg === 'transparent') termBg = '#ffffff';
+    }
+    loupeChars.style.color = termFg;
+  };
+  window.termScrollPage = function (dir) {
+    term.scrollLines(dir * Math.max(1, Math.floor(term.rows * 0.8)));
+    if (hA && hB) scheduleOverlay();
+  };
+  window.termScrollBottom = function () {
+    term.scrollToBottom();
+    if (hA && hB) scheduleOverlay();
+  };
+  window.termFocus = function () { term.focus(); };
+
+
+  // ---- 诊断：把「有文字的行」及其对应的设备坐标打出来 ----
+  // 用途：真机上 input 用的是设备像素，而页面里是 CSS 像素，
+  // 两者差一个 devicePixelRatio 与 WebView 顶部偏移。靠肉眼估坐标会一直落空，
+  // 这里直接把换算后的设备坐标算出来，供 adb 直接使用。
+  window.dumpRows = function () {
+    var m = metrics();
+    if (!m) { console.log('ROWDUMP no metrics'); return; }
+    var dpr = window.devicePixelRatio || 1;
+    // WebView 顶部在设备坐标里的偏移：用 window 高度差推算
+    var out = [];
+    for (var r = 0; r < term.rows; r++) {
+      var y = r + term.buffer.active.viewportY;
+      var t = rowText(y);
+      var visible = t.replace(/\s+$/, '');
+      if (!visible.length) continue;
+      // CSS -> 设备坐标
+      var devY = Math.round((m.baseTop + r * m.rowH + m.rowH / 2) * dpr) + 0;
+      out.push('r' + r + ' devY=' + devY + ' "' + visible.slice(0, 28) + '"');
+    }
+    console.log('ROWDUMP dpr=' + dpr + ' baseTop=' + m.baseTop +
+      ' rowH=' + m.rowH + ' off=' + OFF + ' | ' + out.join(' | '));
+  };
+})();
+</script>
+
+
+
+</body>
+</html>

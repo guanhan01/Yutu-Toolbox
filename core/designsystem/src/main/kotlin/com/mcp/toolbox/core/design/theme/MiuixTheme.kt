@@ -54,10 +54,15 @@ object MiuixTheme {
         @Composable @ReadOnlyComposable get() = LocalMiuixThemeConfig.current
 }
 
-/** 计算当前深浅模式（支持按模块强制深色）。 */
+/**
+ * 计算当前深浅模式（支持按模块强制深色）。
+ *
+ * 纯白只在 [colorCustomize] 打开时才算数：关闭时整套配色交给官方默认，
+ * 那时再按纯白强制浅色就会出现「官方深色配色被强压成浅色」的错乱。
+ */
 fun ThemeConfig.resolveDark(systemDark: Boolean, moduleId: String? = null): Boolean {
     // 纯白模式下强制浅色：整个页面是白底，混入深色分支会前后矛盾
-    if (pureWhite) return false
+    if (colorCustomize && pureWhite) return false
     return when (darkMode) {
         DarkModeSetting.FOLLOW_SYSTEM -> systemDark
         DarkModeSetting.LIGHT -> false
@@ -69,10 +74,15 @@ fun ThemeConfig.resolveDark(systemDark: Boolean, moduleId: String? = null): Bool
 /**
  * 解析最终配色。
  *
- * 来源只有两条：开了动态取色就跟随系统（Monet），否则用 [ThemeConfig.customSeedArgb]。
+ * 【Customize 取色关闭】整套配色直接取官方 Miuix 默认调色板（见 [MiuixOfficialPalette]）：
+ * 主色、动态取色、AMOLED 纯黑、纯白全部不参与，界面与「真 Miuix」一致。
+ *
+ * 【Customize 取色打开】来源两条：开了动态取色就跟随系统（Monet），否则用
+ * [ThemeConfig.customSeedArgb]；纯黑与纯白作为覆盖层叠在结果之上。
  * 色彩风格固定活力、对比度固定标准 —— 这两个档位已从界面下线，避免同一颗 Seed 出多种观感。
  */
 fun resolveColors(context: Context, config: ThemeConfig, isDark: Boolean): MiuixColors {
+    if (!config.colorCustomize) return MiuixOfficialPalette.colors(isDark)
     val seed = config.customSeedArgb.toInt()
     val fixed = FIXED_PALETTE_STYLE
     // 纯白下页面是白底，主色若沿用原饱和度会显得发灰发淡：
@@ -124,8 +134,10 @@ fun MiuixForceLightSurface(
     val lightColors = remember(config) {
         resolveColors(
             context,
+            // 强制浅色 = 同一套配色换成浅色版。故意不动 colorCustomize /
+            // pureWhite：这里要的是「原本是什么配色，就给它的浅色版」，
+            // 而不是把用户的自定义设置就地改写。关闭 Customize 时自然落到官方浅色。
             config.copy(
-                pureWhite = true,
                 darkMode = DarkModeSetting.LIGHT,
                 amoled = false,
             ),
@@ -160,6 +172,7 @@ fun MiuixTheme(
     // 用它当 key 会让 resolveColors 每帧重跑（HCT 从 seed 生成整套配色，几毫秒起）—— 这就是拖动掉帧的主因。
     // 下面 dimens / typography / motion 本来就是按字段 remember 的，只有配色这行漏了。
     val target = remember(
+        config.colorCustomize,
         config.customSeedArgb,
         config.dynamicEnabled,
         config.saturation,

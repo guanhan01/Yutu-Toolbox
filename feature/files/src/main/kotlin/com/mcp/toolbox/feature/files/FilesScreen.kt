@@ -1,5 +1,7 @@
 package com.mcp.toolbox.feature.files
 
+import androidx.annotation.DrawableRes
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import android.os.Environment
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,23 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.DriveFileRenameOutline
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import com.mcp.toolbox.core.design.component.MiuixFab
 import com.mcp.toolbox.core.design.component.MiuixFilterChip
@@ -65,9 +51,6 @@ import com.mcp.toolbox.core.design.component.TypeColorTile
 import com.mcp.toolbox.core.design.component.miuixClickable
 import com.mcp.toolbox.core.design.component.rememberMiuixPressState
 import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.window.Dialog
@@ -97,8 +80,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.ui.platform.LocalContext
 import com.mcp.toolbox.core.common.PrivilegeManager
 import com.mcp.toolbox.core.design.component.MiuixButton
@@ -153,15 +134,15 @@ private fun kindColor(kind: FileKind): Color = when (kind) {
     FileKind.UNKNOWN -> MiuixTheme.colors.outline
 }
 
-private fun kindIcon(kind: FileKind): ImageVector = when (kind) {
-    FileKind.FOLDER -> Icons.Outlined.Folder
-    FileKind.IMAGE -> Icons.Outlined.Image
-    FileKind.ARCHIVE -> Icons.Outlined.Archive
-    FileKind.PACKAGE -> Icons.Outlined.Android
-    FileKind.DOC -> Icons.Outlined.Description
-    FileKind.VIDEO -> Icons.Outlined.Movie
-    FileKind.AUDIO -> Icons.Outlined.MusicNote
-    FileKind.CODE, FileKind.UNKNOWN -> Icons.Outlined.InsertDriveFile
+private fun kindIcon(kind: FileKind): Int = when (kind) {
+    FileKind.FOLDER -> AgentIcons.ic_folder
+    FileKind.IMAGE -> AgentIcons.ic_image
+    FileKind.ARCHIVE -> AgentIcons.ic_archive
+    FileKind.PACKAGE -> AgentIcons.ic_phone_device
+    FileKind.DOC -> AgentIcons.ic_file_text
+    FileKind.VIDEO -> AgentIcons.ic_video
+    FileKind.AUDIO -> AgentIcons.ic_music
+    FileKind.CODE, FileKind.UNKNOWN -> AgentIcons.ic_file
 }
 
 internal fun formatSize(bytes: Long): String = when {
@@ -396,21 +377,21 @@ fun FilesScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = if (selecting) "已选 ${selected.size} 项" else "文件",
-                navigationIcon = Icons.Outlined.Folder,
+                navigationIconRes = AgentIcons.ic_folder,
                 onNavigationClick = onOpenDrawer,
                 actions = {
-                    MiuixIconButton(Icons.Outlined.Search, "搜索", onClick = {})
+                    MiuixIconButton(AgentIcons.ic_search, "搜索", onClick = {})
                     Box {
-                        MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
-                            MiuixMenuItem("新建文件夹", { menuOpen = false; newFolderOpen = true }, icon = Icons.Outlined.CreateNewFolder)
-                            MiuixMenuItem("申请所有文件访问权限", { menuOpen = false; openStorageSettings(context, onToast) }, icon = Icons.Outlined.Android)
-                            MiuixMenuItem("按名称排序", { menuOpen = false }, icon = Icons.Outlined.Sort)
+                            MiuixMenuItem("新建文件夹", { menuOpen = false; newFolderOpen = true }, iconRes = AgentIcons.ic_folder_add)
+                            MiuixMenuItem("申请所有文件访问权限", { menuOpen = false; openStorageSettings(context, onToast) }, iconRes = AgentIcons.ic_phone_device)
+                            MiuixMenuItem("按名称排序", { menuOpen = false }, iconRes = AgentIcons.ic_sort)
                             MiuixMenuItem("全选", {
                                 menuOpen = false
                                 selecting = true
                                 selected = visible.map { it.path }.toSet()
-                            }, icon = Icons.Outlined.SelectAll)
+                            }, iconRes = AgentIcons.ic_check)
                         }
                     }
                 },
@@ -584,7 +565,7 @@ fun FilesScreen(
             )
         } else {
             MiuixFab(
-                icon = Icons.Outlined.Add,
+                iconRes = AgentIcons.ic_plus,
                 contentDescription = "新建",
                 onClick = { onToast("新建菜单：文件夹 / 文本 / 导入") },
                 modifier = Modifier
@@ -769,7 +750,7 @@ private fun FileRow(
                         .background(colors.primary.copy(alpha = 0.72f), RoundedCornerShape(44.dp * 0.28f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    MiuixIcon(Icons.Outlined.SelectAll, "已选择", tint = Color.White, size = 20.dp)
+                    MiuixIcon(AgentIcons.ic_check, "已选择", tint = Color.White, size = 20.dp)
                 }
             }
         }
@@ -794,15 +775,15 @@ private fun FileRow(
             )
         }
         if (selecting) {
-            MiuixIcon(
-                icon = if (entry.isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
+            MiuixIconRes(
+                iconRes = if (entry.isDir) AgentIcons.ic_folder else AgentIcons.ic_file,
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,
                 size = 18.dp,
                 modifier = Modifier.miuixClickable(rememberMiuixPressState(), true, onClick = onToggleSelect),
             )
         } else {
-            MiuixIcon(Icons.Outlined.ChevronRight, null, tint = colors.onSurfaceVariant, size = 18.dp)
+            MiuixIcon(AgentIcons.ic_chevron_right, null, tint = colors.onSurfaceVariant, size = 18.dp)
         }
     }
     MiuixDivider(startIndent = 76.dp)
@@ -833,15 +814,15 @@ private fun SelectionActionBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             listOf(
-                Triple("分享", Icons.Outlined.Share, false),
-                Triple("移动", Icons.Outlined.DriveFileMove, false),
-                Triple("删除", Icons.Outlined.Delete, true),
-                Triple("重命名", Icons.Outlined.DriveFileRenameOutline, false),
-                Triple("更多", Icons.Outlined.MoreHoriz, false),
+                Triple("分享", AgentIcons.ic_share, false),
+                Triple("移动", AgentIcons.ic_svc_file_sync, false),
+                Triple("删除", AgentIcons.ic_trash, true),
+                Triple("重命名", AgentIcons.ic_edit, false),
+                Triple("更多", AgentIcons.ic_more_horiz, false),
             ).forEach { (label, icon, danger) ->
                 SelectionAction(
                     label = label,
-                    icon = icon,
+                    iconRes = icon,
                     danger = danger,
                     enabled = count > 0,
                     onClick = { onAction(label) },
@@ -882,7 +863,7 @@ private fun SelectionActionBar(
 @Composable
 private fun SelectionAction(
     label: String,
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     danger: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -898,7 +879,8 @@ private fun SelectionAction(
         modifier = modifier.miuixClickable(press, enabled, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        MiuixIcon(icon, label, tint = if (enabled) tint else colors.onSurfaceVariant, size = 22.dp)
+        MiuixIconRes(
+iconRes, label, tint = if (enabled) tint else colors.onSurfaceVariant, size = 22.dp)
         Spacer(Modifier.height(spacing_4))
         MiuixText(
             text = label,

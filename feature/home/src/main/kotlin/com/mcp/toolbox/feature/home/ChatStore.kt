@@ -13,15 +13,24 @@ import java.io.File
 /**
  * 对话记录的本地存储。
  *
- * 落盘为 filesDir 下的一个 JSON 文件，全程不上传；文件损坏时按空列表降级，
- * 对话记录只保留文本，消息上的图片 URI 不写入磁盘。
+ * 落盘为 filesDir 下的一个 JSON 文件，全程不上传；文件损坏时按空列表降级。
  * 不会因为一条坏记录导致整个对话页打不开。
+ *
+ * ## 为什么 AI 的过程也要落盘
+ *
+ * 一条 AI 消息 = 一段完整的过程时间线（思考 / 工具 / 正文 / 系统卡），
+ * 见 [ChatMessage.segmentsJson]。这一点必须持久化，否则会出现一串连带缺陷：
+ * 切后台回来过程丢失、停止后没有过程记录、第二轮工具卡不出现、
+ * 新一轮的问题排到上一轮过程块下面。详见 `AgentSegmentCodec` 的注释。
  */
 object ChatStore {
 
     private const val FILE_NAME = "chat-sessions.json"
     private const val MAX_SESSIONS = 100
     private const val MAX_MESSAGES_PER_SESSION = 500
+
+    /** 过程时间线很大，单条消息的段数也要有上限，避免一条超长回答把文件撑爆。 */
+    private const val MAX_SEGMENTS_KEPT = 400
 
     private val _sessions = MutableStateFlow<List<ChatSession>>(emptyList())
     val sessions: StateFlow<List<ChatSession>> = _sessions.asStateFlow()
@@ -37,11 +46,47 @@ object ChatStore {
     suspend fun load(context: Context) = withContext(Dispatchers.IO) {
         if (loaded) return@withContext
         val file = File(context.filesDir, FILE_NAME)
-        _sessions.value = runCatching {
+        val parsed = runCatching {
             if (!file.exists()) emptyList() else parse(file.readText(Charsets.UTF_8))
         }.getOrDefault(emptyList())
-        _currentId.value = _sessions.value.firstOrNull()?.id
+        // 读回来的 `Running` 一律定型为「被中断」：进程都已经重启了，
+        // 那轮不可能还在跑。不定型的话界面会把它当成**仍在流式**——
+        // 光标一直闪、计时从 00:00 重新开始，而且永远不会停。
+        val (fixed, hadRunning) = sealRunningTurns(parsed)
+        _sessions.value = fixed
+        _currentId.value = fixed.firstOrNull()?.id
         loaded = true
+        // 定型结果要写回，否则下次冷启动又得重算一遍
+        if (hadRunning) persist(context)
+    }
+
+    /**
+     * 把 `turnState == Running` 的消息定型为 `Interrupted`，
+     * 并把它时间线里仍在 `Running` 的段一并冻结。
+     *
+     * 返回「定型后的会话列表」与「是否真的改过」。
+     */
+    private fun sealRunningTurns(
+        sessions: List<ChatSession>,
+    ): Pair<List<ChatSession>, Boolean> {
+        var changed = false
+        val out = sessions.map { session ->
+            var sessionChanged = false
+            val messages = session.messages.map { m ->
+                if (m.turnState != TurnState.Running) return@map m
+                sessionChanged = true
+                m.copy(
+                    turnState = TurnState.Interrupted,
+                    segmentsJson = m.segmentsJson?.let { json ->
+                        com.mcp.toolbox.feature.home.agent.AgentSegmentCodec
+                            .sealRunning(json)
+                    },
+                )
+            }
+            if (sessionChanged) changed = true
+            if (sessionChanged) session.copy(messages = messages) else session
+        }
+        return out to changed
     }
 
     /** 新建会话并设为当前会话。 */
@@ -87,6 +132,60 @@ object ChatStore {
     }
 
     /**
+     * 把一轮 AI 回答落盘（**幂等**）。
+     *
+     * 一次请求的生命周期里会调用多次：
+     * - 请求开始时用一条空的 `Running` 消息占位（这样切后台再回来，能看到「上次没跑完」）
+     * - 每有过程进展（思考增量 / 工具状态变化 / 正文提交）更新同一条
+     * - 收尾时写入终态与最终正文
+     *
+     * 用 [messageId] 定位同一条，所以**重复调用不会堆积多条**。
+     * 早先每轮只在最后 `append` 一条纯文本，导致中断与进程死亡时过程全丢。
+     */
+    suspend fun upsertAssistant(
+        context: Context,
+        sessionId: String,
+        messageId: String,
+        content: String,
+        segmentsJson: String?,
+        turnState: TurnState,
+        time: Long = System.currentTimeMillis(),
+    ) {
+        _sessions.value = _sessions.value
+            .map { session ->
+                if (session.id != sessionId) session
+                else {
+                    val existing = session.messages.indexOfFirst { it.id == messageId }
+                    val updated = if (existing < 0) {
+                        session.messages + ChatMessage(
+                            id = messageId,
+                            role = ChatMessage.Role.ASSISTANT,
+                            content = content,
+                            time = time,
+                            segmentsJson = segmentsJson,
+                            turnState = turnState,
+                        )
+                    } else {
+                        val old = session.messages[existing]
+                        session.messages.toMutableList().also { list ->
+                            list[existing] = old.copy(
+                                content = content,
+                                segmentsJson = segmentsJson,
+                                turnState = turnState,
+                            )
+                        }
+                    }
+                    session.copy(
+                        messages = updated.takeLast(MAX_MESSAGES_PER_SESSION),
+                        updatedAt = time,
+                    )
+                }
+            }
+            .sortedByDescending { it.updatedAt }
+        persist(context)
+    }
+
+    /**
      * 就地更新一条消息（用户长按编辑）。
      * 编辑会刷新会话 updatedAt，会话因此在列表里上浮。
      */
@@ -114,6 +213,31 @@ object ChatStore {
                 )
             }
             .sortedByDescending { it.updatedAt }
+        persist(context)
+    }
+
+    /**
+     * 补写用户消息上的「附件展示信息」与「只发给模型的上下文」。
+     *
+     * 单独开一个方法而不是扩充 [updateMessage]：那个方法的签名被会话列表、
+     * 编辑等好几处使用，加两个只有编辑路径需要的参数会让所有调用点都要跟着改。
+     */
+    suspend fun patchUserExtras(
+        context: Context,
+        sessionId: String,
+        messageId: String,
+        attachments: List<AttachmentRef>,
+        modelContext: String?,
+    ) {
+        _sessions.value = _sessions.value.map { session ->
+            if (session.id != sessionId) session
+            else session.copy(
+                messages = session.messages.map { m ->
+                    if (m.id != messageId) m
+                    else m.copy(attachments = attachments, modelContext = modelContext)
+                },
+            )
+        }
         persist(context)
     }
 
@@ -199,11 +323,13 @@ object ChatStore {
                         .put("role", m.role.name)
                         .put("content", m.content)
                         .put("time", m.time)
-                        .put("toolName", m.toolName)
-                        .put("toolArgs", m.toolArguments)
                         .put("edited", m.edited)
-                        .put("elapsedMs", m.elapsedMs)
-                        .put("intermediate", m.intermediate),
+                        .put("turnState", m.turnState.name)
+                        .put("imageUris", m.imageUris.let { list -> JSONArray().also { a -> list.forEach(a::put) } })
+                        .put("attachments", m.attachments.takeIf { it.isNotEmpty() }
+                            ?.let { AttachmentRef.encode(it) } ?: JSONObject.NULL)
+                        .put("modelContext", m.modelContext ?: JSONObject.NULL)
+                        .put("segments", m.segmentsJson ?: JSONObject.NULL),
                 )
             }
             arr.put(
@@ -235,11 +361,22 @@ object ChatStore {
                     }.getOrDefault(ChatMessage.Role.USER),
                     content = m.optString("content"),
                     time = m.optLong("time"),
-                    toolName = m.optString("toolName"),
-                    toolArguments = m.optString("toolArgs"),
+                    imageUris = m.optJSONArray("imageUris")?.let { a ->
+                        (0 until a.length()).mapNotNull { k -> a.optString(k).takeIf { it.isNotBlank() } }
+                    }.orEmpty(),
+                    attachments = AttachmentRef.decode(
+                        m.optString("attachments").takeIf { it.isNotBlank() && it != "null" },
+                    ),
+                    modelContext = m.optString("modelContext").takeIf { it.isNotBlank() && it != "null" },
+                    // 只保留末尾若干段：超长回答可能积累出成百上千段，
+                    // 全量读回来会让冷启动变慢，而用户真正会看的是结尾。
+                    segmentsJson = m.optString("segments").takeIf { it.isNotBlank() && it != "null" }
+                        ?.let(::trimSegments),
+                    // 旧数据没有这个字段：默认 Done，避免把历史消息全判成「未完成」
+                    turnState = runCatching {
+                        TurnState.valueOf(m.optString("turnState"))
+                    }.getOrDefault(TurnState.Done),
                     edited = m.optBoolean("edited", false),
-                    elapsedMs = m.optLong("elapsedMs", 0),
-                    intermediate = m.optBoolean("intermediate", false),
                 )
             }
             ChatSession(
@@ -250,28 +387,23 @@ object ChatStore {
                     .takeIf { it.isNotBlank() && it != "null" },
                 createdAt = o.optLong("createdAt"),
                 updatedAt = o.optLong("updatedAt"),
-                // 迁移：`intermediate` 是后加的字段，此前落盘的中间旁白没有标记。
-                // 它们的特征很明确——ASSISTANT 后面紧跟 TOOL，就是模型「我要去调用
-                // 工具」的过渡语句。不改的话这些历史消息会一直带着复制/重说/删除按钮。
-                messages = markIntermediates(messages),
+                messages = messages,
             )
         }
     }
-}
 
-/** 按「assistant 紧跟 tool」的特征，把历史里的中间旁白补上标记。 */
-private fun markIntermediates(messages: List<ChatMessage>): List<ChatMessage> {
-    if (messages.isEmpty()) return messages
-    return messages.mapIndexed { index, message ->
-        val nextIsTool = messages.getOrNull(index + 1)?.role == ChatMessage.Role.TOOL
-        if (message.role == ChatMessage.Role.ASSISTANT &&
-            !message.intermediate &&
-            !message.edited &&
-            nextIsTool
-        ) {
-            message.copy(intermediate = true)
-        } else {
-            message
-        }
-    }
+    /**
+     * 段落数超限时**保留头部与尾部**：头部的思考/工具是「这轮做了什么」的索引，
+     * 尾部是用户最可能回看的结论，砍中间最不心疼。
+     */
+    private fun trimSegments(json: String): String = runCatching {
+        val arr = JSONArray(json)
+        if (arr.length() <= MAX_SEGMENTS_KEPT) return@runCatching json
+        val head = MAX_SEGMENTS_KEPT / 3
+        val tail = MAX_SEGMENTS_KEPT - head
+        val kept = JSONArray()
+        (0 until head).forEach { kept.put(arr.get(it)) }
+        (arr.length() - tail until arr.length()).forEach { kept.put(arr.get(it)) }
+        kept.toString()
+    }.getOrDefault(json)
 }

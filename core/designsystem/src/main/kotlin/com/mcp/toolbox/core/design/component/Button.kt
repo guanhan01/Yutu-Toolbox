@@ -1,5 +1,6 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +28,11 @@ import top.yukonga.miuix.kmp.basic.Button as OfficialButton
 import top.yukonga.miuix.kmp.basic.ButtonColors as OfficialButtonColors
 import top.yukonga.miuix.kmp.basic.Text as OfficialText
 import top.yukonga.miuix.kmp.theme.MiuixTheme as OfficialTheme
+import androidx.annotation.DrawableRes
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 
 /** 按钮视觉层级，与设计稿 Buttons 区一致：Filled / Tonal / Outlined / Text / Elevated。 */
 enum class MiuixButtonVariant { FILLED, TONAL, OUTLINED, TEXT, ELEVATED }
@@ -51,11 +57,11 @@ fun MiuixButton(
     size: MiuixButtonSize = MiuixButtonSize.MEDIUM,
     enabled: Boolean = true,
     loading: Boolean = false,
-    leadingIcon: ImageVector? = null,
-    trailingIcon: ImageVector? = null,
+    @DrawableRes leadingIconRes: Int? = null,
+    @DrawableRes trailingIconRes: Int? = null,
 ) {
     MiuixButtonOfficial(
-            text, onClick, modifier, variant, size, enabled, loading, leadingIcon, trailingIcon,
+            text, onClick, modifier, variant, size, enabled, loading, leadingIconRes, trailingIconRes,
         )
 }
 
@@ -70,8 +76,8 @@ private fun MiuixButtonOfficial(
     size: MiuixButtonSize,
     enabled: Boolean,
     loading: Boolean,
-    leadingIcon: ImageVector?,
-    trailingIcon: ImageVector?,
+    @DrawableRes leadingIconRes: Int?,
+    @DrawableRes trailingIconRes: Int?,
 ) {
     val colors = MiuixTheme.colors
     val typography = MiuixTheme.typography
@@ -140,28 +146,40 @@ private fun MiuixButtonOfficial(
         ) {
             when {
                 loading -> MiuixCircularProgress(size = iconSize, color = contentColor, strokeWidth = 2.dp)
-                leadingIcon != null -> MiuixIcon(leadingIcon, null, tint = contentColor, size = iconSize)
+                leadingIconRes != null -> MiuixIconRes(
+                    leadingIconRes,
+                    null,
+                    tint = contentColor,
+                    size = iconSize,
+                )
             }
             OfficialText(text = text, style = textStyle, color = contentColor, maxLines = 1)
-            if (trailingIcon != null) MiuixIcon(trailingIcon, null, tint = contentColor, size = iconSize)
+            if (trailingIconRes != null) MiuixIconRes(trailingIconRes, null, tint = contentColor, size = iconSize)
         }
     }
 }
 
 // ---------------- Classic（自绘） ----------------
 
+/**
+ * 图标按钮的公共实现。
+ *
+ * 之所以收敛到 `Painter`：图标现在有两个来源——`ImageVector`（历史调用点）和
+ * `@DrawableRes`（AI Agent 图标集）。两套重载都委托到这里，外观与交互只有一份实现，
+ * 不会出现「资源图标版和矢量版按压效果不一样」这种漂移。
+ */
 @Composable
-fun MiuixIconButton(
-    icon: ImageVector,
+private fun MiuixIconButtonImpl(
+    painter: Painter,
     contentDescription: String?,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    filled: Boolean = false,
-    tonal: Boolean = false,
-    buttonSize: Dp = 40.dp,
-    iconSize: Dp = 20.dp,
-    tint: Color = Color.Unspecified,
+    modifier: Modifier,
+    enabled: Boolean,
+    filled: Boolean,
+    tonal: Boolean,
+    buttonSize: Dp,
+    iconSize: Dp,
+    tint: Color,
 ) {
     val colors = MiuixTheme.colors
     val press = rememberMiuixPressState(enabled)
@@ -188,9 +206,70 @@ fun MiuixIconButton(
         contentAlignment = Alignment.Center,
     ) {
         if (press.pressed) Box(Modifier.matchParentSize().background(colors.pressedOverlay))
-        MiuixIcon(icon, contentDescription, tint = contentColor, size = iconSize)
+        Icon(
+            painter = painter,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(iconSize),
+        )
     }
 }
+
+@Composable
+fun MiuixIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    filled: Boolean = false,
+    tonal: Boolean = false,
+    buttonSize: Dp = 40.dp,
+    iconSize: Dp = 20.dp,
+    tint: Color = Color.Unspecified,
+) = MiuixIconButtonImpl(
+    painter = rememberVectorPainter(icon),
+    contentDescription = contentDescription,
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    filled = filled,
+    tonal = tonal,
+    buttonSize = buttonSize,
+    iconSize = iconSize,
+    tint = tint,
+)
+
+/**
+ * [MiuixIconButton] 的矢量资源重载（AI Agent 图标集）。
+ *
+ * 参数名刻意用 `iconRes` 而不是 `icon`：重载解析只看类型，但**读代码的人只看名字**——
+ * `iconRes = AgentIcons.ic_trash` 一眼能看出传的是资源 id 而不是 ImageVector。
+ */
+@Composable
+fun MiuixIconButton(
+    @DrawableRes iconRes: Int,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    filled: Boolean = false,
+    tonal: Boolean = false,
+    buttonSize: Dp = 40.dp,
+    iconSize: Dp = 20.dp,
+    tint: Color = Color.Unspecified,
+) = MiuixIconButtonImpl(
+    painter = painterResource(iconRes),
+    contentDescription = contentDescription,
+    onClick = onClick,
+    modifier = modifier,
+    enabled = enabled,
+    filled = filled,
+    tonal = tonal,
+    buttonSize = buttonSize,
+    iconSize = iconSize,
+    tint = tint,
+)
 
 /** 悬浮操作按钮（含扩展形态，设计稿右上角 + / + Add）。 */
 @Composable

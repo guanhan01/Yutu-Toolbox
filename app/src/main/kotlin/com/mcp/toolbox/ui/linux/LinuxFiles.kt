@@ -1,5 +1,6 @@
 package com.mcp.toolbox.ui.linux
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -20,9 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
@@ -280,8 +279,8 @@ fun LinuxFilesScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        MiuixIcon(
-                            icon = if (entry.isDir) Icons.Outlined.Folder else Icons.Outlined.Description,
+                        MiuixIconRes(
+                            iconRes = if (entry.isDir) AgentIcons.ic_folder else AgentIcons.ic_file_text,
                             contentDescription = null,
                             tint = colors.onSurfaceVariant,
                             size = 20.dp,

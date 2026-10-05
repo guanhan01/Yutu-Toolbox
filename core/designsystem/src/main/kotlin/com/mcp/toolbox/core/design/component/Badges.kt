@@ -1,5 +1,7 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -73,7 +75,7 @@ fun StatusCodeText(code: Int, modifier: Modifier = Modifier) {
 /** 文件与条目的类型色块：彩色圆角方块内嵌图标。 */
 @Composable
 fun TypeColorTile(
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     color: Color,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
@@ -85,6 +87,6 @@ fun TypeColorTile(
             .background(color, RoundedCornerShape(size * 0.28f)),
         contentAlignment = Alignment.Center,
     ) {
-        MiuixIcon(icon = icon, contentDescription = null, tint = Color.White, size = iconSize)
+        MiuixIconRes(iconRes, contentDescription = null, tint = Color.White, size = iconSize)
     }
 }

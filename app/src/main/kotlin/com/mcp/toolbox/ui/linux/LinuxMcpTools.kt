@@ -54,6 +54,9 @@ object LinuxMcpTools {
     fun all(context: Context): List<ToolDef> = listOf(
         envStatus(context),
         execTool(context),
+        shellRun(context),
+        shellStatus(context),
+        shellKill(context),
         fileList(context),
         fileRead(context),
         fileWrite(context),
@@ -130,6 +133,148 @@ object LinuxMcpTools {
                 put("distro", distro.displayName)
             }
             ToolResult(structured, out.combined, isError = !out.ok)
+        },
+    )
+
+    // ---------------- 持久 shell 会话 ----------------
+    //
+    // 与上面的 linux.exec 的区别：linux.exec 每次 `sh -c` 跑完即退，没有状态；
+    // 这里在 rootfs 里维持一个长期存活的 sh，cwd / 环境变量 / 后台任务跨调用保留。
+    //
+    // 会话放在进程级单例里：AI 对话是一轮轮来的，模型需要「上一步在哪个目录、
+    // 装了什么」在下一步仍然成立。应用被杀才会丢（这是有意的——进程没了还留着
+    // 一个 root shell 挂着并不安全）。
+
+    private var shell_: AiShellSession? = null
+
+    @Synchronized
+    private fun shell(context: Context): AiShellSession {
+        val distro = distroOf(context)
+        // 切换发行版要换一个会话：新会话指向另一个 rootfs
+        val existing = shell_
+        if (existing != null && existing.distro == distro) return existing
+        runCatching { runBlocking { existing?.kill() } }
+        return AiShellSession(context.applicationContext, distro).also { shell_ = it }
+    }
+
+    private fun shellRun(context: Context) = ToolDef(
+        name = "linux.shell",
+        title = "在 Linux 持久会话里执行命令",
+        description = "在**长期存活**的 shell 里执行命令，因此 `cd`、`export`、" +
+            "后台任务（`cmd &`）都会保留到后续调用，适合分步骤干活：" +
+            "先 `cd` 到项目目录，再 `apt install`，再跑构建，最后看日志。" +
+            "\n\n" +
+            "几个要点：\n" +
+            "· 退出码在返回值里，非 0 表示命令失败，`stderr` 已并入输出。\n" +
+            "· 命令里**不要写单独的 `exit`**：那是 shell 内建，会杀掉整个持久会话。" +
+            "要拿某个退出码用 `(exit N)`。\n" +
+            "· 交互式程序（`vim`、`top`、需要输入密码的 `ssh`）不适用：这里没有终端，" +
+            "它们会立刻失败或读不到输入。跑完即退的用法请改用 linux.exec，" +
+            "它每次都带完整初始化，更干净。\n" +
+            "· 长任务请自行放后台（`nohup cmd >log 2>&1 &`）或调大 timeoutMs；" +
+            "超时不会杀掉正在跑的任务，会话与任务都保留。",
+        schema = Schema.obj(
+            listOf(
+                "command" to Schema.string("要执行的 shell 命令（可多行）"),
+                "workdir" to Schema.string(
+                    "先切到该目录再执行（rootfs 内绝对路径）；不传则沿用会话当前目录",
+                ),
+                "timeoutMs" to Schema.integer(
+                    "等待上限毫秒；超时不杀任务",
+                    default = 120000,
+                    min = 1000,
+                    max = 600000,
+                ),
+            ),
+            required = listOf("command"),
+        ),
+        readOnly = false,
+        dangerous = true,
+        requiresPrivilege = true,
+        handler = { ctx, args ->
+            WriteGuard.requireWrite()
+            requireEnv(ctx, distroOf(ctx))
+            val command = args.getString("command")
+            if (command.isBlank()) throw IllegalArgumentException("命令不能为空")
+            val workdir = args.optString("workdir").takeIf { it.isNotBlank() }
+            val timeout = args.optInt("timeoutMs", 120000).toLong()
+            val result = runBlocking { shell(ctx).run(command, timeout, workdir) }
+            val structured = JSONObject().apply {
+                put("command", result.command)
+                put("exitCode", result.exitCode)
+                put("success", result.exitCode == 0)
+                put("output", result.output)
+                put("elapsedMs", result.elapsedMs)
+                put("sessionAlive", result.sessionAlive)
+                result.note?.let { put("note", it) }
+            }
+            // 失败时置 isError，模型据此判断是否要重试或换做法
+            ToolResult(structured, result.output, isError = result.exitCode != 0)
+        },
+    )
+
+    private fun shellStatus(context: Context) = ToolDef(
+        name = "linux.shell_status",
+        title = "查看持久会话状态",
+        description = "返回持久 shell 是否在运行、发行版、会话内当前目录，" +
+            "以及在会话里跑 `ps` 拿到的进程清单——用来确认之前放后台的任务是否还在跑。" +
+            "活动进程列表可能较长，默认只看末尾 40 行。",
+        schema = Schema.obj(
+            listOf(
+                "includeProcesses" to Schema.bool("是否附带会话内的进程列表", default = true),
+            ),
+        ),
+        readOnly = true,
+        requiresPrivilege = true,
+        handler = { ctx, args ->
+            requireEnv(ctx, distroOf(ctx))
+            val session = shell(ctx)
+            val alive = session.running
+            val structured = JSONObject().apply {
+                put("running", alive)
+                put("distro", distroOf(ctx).displayName)
+            }
+            val text = StringBuilder()
+            text.append("持久会话：").append(if (alive) "运行中" else "未运行（下次调用会自动建立）")
+            if (args.optBoolean("includeProcesses", true) && alive) {
+                // 一次往返同时取回 cwd 与进程表：模型据此判断「上一步 cd 到哪了」
+                // 以及「之前放后台的任务还在不在」
+                val probe = runBlocking {
+                    session.run("echo \"CWD=$(pwd)\"; ps 2>/dev/null | tail -40", 20000L)
+                }
+                structured.put("probe", probe.output)
+                val cwd = Regex("""(?:^|\n)CWD=(.*)""").find(probe.output)?.groupValues?.get(1)?.trim()
+                if (!cwd.isNullOrBlank()) structured.put("workdir", cwd)
+                text.append("\n\n会话内情况：\n").append(probe.output)
+            }
+            ToolResult(structured, text.toString())
+        },
+    )
+
+    private fun shellKill(context: Context) = ToolDef(
+        name = "linux.shell_kill",
+        title = "结束持久会话",
+        description = "结束当前持久 shell 会话，其中的后台任务会一并结束。" +
+            "之后再次调用 linux.shell 会自动建立全新会话（cwd 回到 /root，环境变量清空）。" +
+            "适合「上一步把环境弄脏了，想从头来」。",
+        schema = Schema.obj(emptyList()),
+        readOnly = false,
+        dangerous = true,
+        requiresPrivilege = true,
+        handler = { ctx, _ ->
+            val session = shell_
+            val had = session?.running == true
+            runBlocking { session?.kill() }
+            shell_ = null
+            val structured = JSONObject().apply {
+                put("killed", had)
+                put("distro", distroOf(ctx).displayName)
+            }
+            ToolResult(
+                structured,
+                if (had) "已结束持久会话，其中的后台任务一并结束。下次调用 linux.shell 会建立新会话。"
+                else "当前没有运行中的持久会话。",
+            )
         },
     )
 

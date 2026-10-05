@@ -12,11 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonSize
@@ -149,7 +145,7 @@ internal fun ToolInvokeSheet(
                     text = "调用工具",
                     onClick = { if (tool.isDangerous) confirmOpen = true else run() },
                     loading = running,
-                    leadingIcon = Icons.Outlined.PlayArrow,
+                    leadingIconRes = AgentIcons.ic_play_circle,
                 )
                 MiuixButton(
                     text = "重置表单",
@@ -158,7 +154,7 @@ internal fun ToolInvokeSheet(
                         errors = emptyMap()
                     },
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.Refresh,
+                    leadingIconRes = AgentIcons.ic_refresh,
                 )
             }
             record?.let { result ->
@@ -421,14 +417,14 @@ internal fun LogDetailSheet(
                     text = "重新执行",
                     onClick = { onReplay(record) },
                     size = MiuixButtonSize.SMALL,
-                    leadingIcon = Icons.Outlined.Refresh,
+                    leadingIconRes = AgentIcons.ic_refresh,
                 )
                 MiuixButton(
                     text = "导出 JSON",
                     onClick = { onExport(record) },
                     size = MiuixButtonSize.SMALL,
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.ContentCopy,
+                    leadingIconRes = AgentIcons.ic_copy,
                 )
                 MiuixButton(
                     text = "复制结果",
@@ -635,7 +631,7 @@ internal fun OutputFolderSheet(
                     text = "打开产物页",
                     onClick = onOpenArtifacts,
                     variant = MiuixButtonVariant.OUTLINED,
-                    leadingIcon = Icons.Outlined.Folder,
+                    leadingIconRes = AgentIcons.ic_folder,
                 )
             }
             Spacer(Modifier.height(spacing.sm))

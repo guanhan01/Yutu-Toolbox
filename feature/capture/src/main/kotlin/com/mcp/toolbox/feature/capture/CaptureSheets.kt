@@ -22,9 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.common.PrivilegeBackend
 import com.mcp.toolbox.core.common.PrivilegeManager
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixBottomSheet
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixButtonVariant
@@ -143,7 +141,7 @@ fun CaptureDetailSheet(
 
                 Spacer(Modifier.width(spacing.sm))
                 MiuixIconButton(
-                    if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                    if (expanded) AgentIcons.ic_chevron_down else AgentIcons.ic_chevron_up,
                     if (expanded) "收起详情" else "展开详情",
                     onClick = { expanded = !expanded },
                 )

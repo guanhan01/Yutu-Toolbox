@@ -1,0 +1,41 @@
+<!-- ic_file_sheet -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.6,3H6.6C5.7,3 5,3.7 5,4.6V19.4C5,20.3 5.7,21 6.6,21H17.4C18.3,21 19,20.3 19,19.4V8.4L13.6,3Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M13.4,3V8.6H18.8" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M8.8,11.4H15.6A1.2,1.2 0 0 1 16.8,12.6V18.4A1.2,1.2 0 0 1 15.6,19.6H8.8A1.2,1.2 0 0 1 7.6,18.4V12.6A1.2,1.2 0 0 1 8.8,11.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:fillType="evenOdd"
+        android:pathData="M7.6,14.4H16.8M11.2,11.4V19.6" />
+
+</vector>

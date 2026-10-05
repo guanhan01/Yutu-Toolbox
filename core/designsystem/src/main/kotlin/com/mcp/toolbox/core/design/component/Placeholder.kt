@@ -1,5 +1,7 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -76,7 +78,7 @@ fun MiuixEmptyState(
     title: String,
     modifier: Modifier = Modifier,
     description: String? = null,
-    icon: ImageVector? = null,
+    @DrawableRes iconRes: Int? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     val colors = MiuixTheme.colors
@@ -87,14 +89,14 @@ fun MiuixEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (icon != null) {
+        if (iconRes != null) {
             OfficialSurface(
                 modifier = Modifier.size(72.dp),
                 shape = CircleShape,
                 color = colors.surfaceContainerHigh,
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    MiuixIcon(icon, null, tint = colors.onSurfaceVariant, size = 32.dp)
+                    MiuixIconRes(iconRes!!, null, tint = colors.onSurfaceVariant, size = 32.dp)
                 }
             }
             Spacer(Modifier.height(16.dp))

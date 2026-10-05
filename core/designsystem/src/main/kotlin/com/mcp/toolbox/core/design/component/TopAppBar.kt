@@ -1,5 +1,6 @@
 package com.mcp.toolbox.core.design.component
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Row
@@ -29,7 +30,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar as OfficialTopAppBar
 fun MiuixTopAppBar(
     title: String,
     modifier: Modifier = Modifier,
-    navigationIcon: ImageVector? = null,
+    @DrawableRes navigationIconRes: Int? = null,
     onNavigationClick: (() -> Unit)? = null,
     scrolled: Boolean = false,
     centeredTitle: Boolean = false,
@@ -55,9 +56,9 @@ fun MiuixTopAppBar(
     )
 
     val nav: @Composable () -> Unit = {
-        if (navigationIcon != null) {
+        if (navigationIconRes != null) {
             MiuixIconButton(
-                icon = navigationIcon,
+                iconRes = navigationIconRes,
                 contentDescription = title,
                 onClick = onNavigationClick ?: {},
                 buttonSize = 44.dp,

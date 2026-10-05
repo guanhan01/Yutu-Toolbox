@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mcp.toolbox.R
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixSectionCard
@@ -103,7 +102,7 @@ fun LinuxChoiceSheet(
                             )
                         }
                         if (active) {
-                            MiuixIcon(Icons.Outlined.Check, null, tint = colors.primary, size = 18.dp)
+                            MiuixIcon(AgentIcons.ic_check, null, tint = colors.primary, size = 18.dp)
                         }
                     }
                 }
@@ -161,7 +160,9 @@ internal suspend fun probeVersions(
         echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
         echo "SSH=${'$'}(ssh -V 2>&1 | head -n 1)"
         echo "JAVA=${'$'}(java -version 2>&1 | head -n 1)"
-        echo "APK=${'$'}(jadx --version 2>&1 | head -n 1)"
+        // 组件名是「APK 分析」，主工具是 Apktool：取它的版本才与标题对得上。
+        // 原来取 jadx 的版本（显示成 1.5.1），与标题不符。
+        echo "APK=${'$'}(apktool --version 2>&1 | head -n 1)"
         echo "GIT=${'$'}(git --version 2>&1 | head -n 1)"
     """.trimIndent()
     val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
@@ -326,7 +327,7 @@ fun LinuxCheckScreen(
                             ) {
                                 if (status.installed) {
                                     MiuixIcon(
-                                        Icons.Outlined.Check,
+                                        AgentIcons.ic_check,
                                         null,
                                         tint = colors.onPrimary,
                                         size = 14.dp,

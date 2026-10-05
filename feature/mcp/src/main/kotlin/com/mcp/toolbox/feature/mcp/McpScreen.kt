@@ -19,18 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixButton
 import com.mcp.toolbox.core.design.component.MiuixDivider
 import com.mcp.toolbox.core.design.component.MiuixEmptyState
@@ -166,11 +155,11 @@ fun McpScreen(
         Column(Modifier.fillMaxSize()) {
             MiuixTopAppBar(
                 title = "MCP",
-                navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
+                navigationIconRes = AgentIcons.ic_chevron_left,
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { menuOpen = true })
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
                         MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
                             MiuixMenuItem(
                                 text = "连接全部已启用 Server",
@@ -178,22 +167,22 @@ fun McpScreen(
                                     menuOpen = false
                                     servers.forEach { connect(it) }
                                 },
-                                icon = Icons.Outlined.Refresh,
+                                iconRes = AgentIcons.ic_refresh,
                             )
                             MiuixMenuItem(
                                 text = "输出文件夹设置",
                                 onClick = { menuOpen = false; outputSheetOpen = true },
-                                icon = Icons.Outlined.Folder,
+                                iconRes = AgentIcons.ic_folder,
                             )
                             MiuixMenuItem(
                                 text = "打开 MCP 产物页",
                                 onClick = { menuOpen = false; onOpenArtifacts() },
-                                icon = Icons.Outlined.Folder,
+                                iconRes = AgentIcons.ic_folder,
                             )
                             MiuixMenuItem(
                                 text = "导出调用日志",
                                 onClick = { menuOpen = false; exportLog() },
-                                icon = Icons.Outlined.ContentCopy,
+                                iconRes = AgentIcons.ic_copy,
                             )
                             MiuixMenuItem(
                                 text = "清空调用日志",
@@ -202,7 +191,7 @@ fun McpScreen(
                                     McpRegistry.clearLog(context)
                                     onToast("调用日志已清空")
                                 },
-                                icon = Icons.Outlined.Delete,
+                                iconRes = AgentIcons.ic_trash,
                                 danger = true,
                             )
                         }

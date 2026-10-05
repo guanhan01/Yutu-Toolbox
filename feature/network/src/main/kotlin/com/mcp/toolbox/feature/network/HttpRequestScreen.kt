@@ -17,12 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.DataObject
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.Send
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +33,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.CodeEditor
 import com.mcp.toolbox.core.design.component.CodeLanguage
 import com.mcp.toolbox.core.design.component.MethodBadge
@@ -189,12 +184,12 @@ fun HttpRequestScreen(
     Column(modifier = modifier.fillMaxSize().background(colors.background)) {
         MiuixTopAppBar(
             title = "HTTP 构造器",
-            navigationIcon = Icons.Outlined.ArrowBack,
+            navigationIconRes = AgentIcons.ic_chevron_left,
             onNavigationClick = onBack,
             actions = {
                 MiuixTag(text = "测试环境 dev", color = colors.tertiary, filled = true)
                 Box {
-                    MiuixIconButton(Icons.Outlined.MoreHoriz, "更多", onClick = { moreMenu = true })
+                    MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { moreMenu = true })
                     MiuixOverflowMenu(expanded = moreMenu, onDismiss = { moreMenu = false }) {
                         MiuixMenuItem(
                             "复制为 cURL",
@@ -202,9 +197,9 @@ fun HttpRequestScreen(
                                 moreMenu = false
                                 onToast("已复制 cURL（演示）")
                             },
-                            icon = Icons.Outlined.ContentCopy)
+                            iconRes = AgentIcons.ic_copy)
                         MiuixMenuItem(
-                            "格式化 JSON", { moreMenu = false }, icon = Icons.Outlined.DataObject)
+                            "格式化 JSON", { moreMenu = false }, iconRes = AgentIcons.ic_json_data)
                     }
                 }
             },
@@ -298,7 +293,7 @@ fun HttpRequestScreen(
                         com.mcp.toolbox.core.design.component.MiuixCircularProgress(
                             size = 20.dp, color = colors.onPrimary)
                     } else {
-                        MiuixIcon(Icons.Outlined.Send, "发送", tint = colors.onPrimary, size = 20.dp)
+                        MiuixIcon(AgentIcons.ic_send, "发送", tint = colors.onPrimary, size = 20.dp)
                     }
                 }
             }
@@ -459,7 +454,7 @@ private fun ResponseCard(result: HttpResult, onCopy: () -> Unit) {
                 color = colors.onSurfaceVariant,
             )
             MiuixIconButton(
-                icon = Icons.Outlined.ContentCopy,
+                iconRes = AgentIcons.ic_copy,
                 contentDescription = "复制",
                 onClick = onCopy,
             )

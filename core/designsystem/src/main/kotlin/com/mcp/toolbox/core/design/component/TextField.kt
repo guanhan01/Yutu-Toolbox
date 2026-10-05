@@ -1,17 +1,16 @@
 package com.mcp.toolbox.core.design.component
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
+import androidx.annotation.DrawableRes
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -32,7 +31,7 @@ fun MiuixTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String? = null,
-    leadingIcon: ImageVector? = null,
+    @DrawableRes leadingIconRes: Int? = null,
     prefix: String? = null,
     suffix: String? = null,
     supportingText: String? = null,
@@ -57,10 +56,15 @@ fun MiuixTextField(
 
     // leading：图标 + 前缀文字，按顺序排（官方只提供一个槽位）
     val leading: (@Composable () -> Unit)? = when {
-        leadingIcon != null -> {
+        leadingIconRes != null -> {
             {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MiuixIcon(leadingIcon, null, tint = colors.onSurfaceVariant, size = 18.dp)
+                    MiuixIconRes(
+                        iconRes = leadingIconRes,
+                        contentDescription = null,
+                        tint = colors.onSurfaceVariant,
+                        size = 18.dp,
+                    )
                     if (prefix != null) {
                         Spacer(Modifier.width(6.dp))
                         MiuixText(prefix, style = typography.bodyMedium, color = colors.onSurfaceVariant)
@@ -85,7 +89,7 @@ fun MiuixTextField(
                     if (showClear && value.isNotEmpty() && enabled) {
                         if (suffix != null) Spacer(Modifier.width(6.dp))
                         MiuixIconButton(
-                            icon = Icons.Outlined.Close,
+                            iconRes = AgentIcons.ic_close,
                             contentDescription = "清除",
                             onClick = { onValueChange("") },
                             buttonSize = 28.dp,
@@ -147,7 +151,7 @@ fun MiuixSearchField(
         onValueChange = onValueChange,
         modifier = modifier,
         placeholder = placeholder,
-        leadingIcon = Icons.Outlined.Search,
+        leadingIconRes = AgentIcons.ic_search,
         enabled = enabled,
     )
 }

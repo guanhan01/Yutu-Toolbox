@@ -23,7 +23,6 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.core.ktx)
     implementation(project(":core:designsystem"))
     implementation(project(":core:common"))

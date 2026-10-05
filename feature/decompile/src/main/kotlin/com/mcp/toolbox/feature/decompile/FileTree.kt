@@ -1,5 +1,6 @@
 package com.mcp.toolbox.feature.decompile
 
+import com.mcp.toolbox.core.design.component.MiuixIconRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,16 +13,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.mcp.toolbox.core.design.icon.AgentIcons
 import com.mcp.toolbox.core.design.component.MiuixIcon
 import com.mcp.toolbox.core.design.component.MiuixSearchField
 import com.mcp.toolbox.core.design.component.MiuixText
@@ -172,11 +170,11 @@ private fun FileTreeRow(
             .padding(start = (4 + row.depth * 12).dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MiuixIcon(
-            icon = when {
-                !node.isDirectory -> Icons.Outlined.Code
-                isExpanded -> Icons.Outlined.FolderOpen
-                else -> Icons.Outlined.Folder
+        MiuixIconRes(
+            iconRes = when {
+                !node.isDirectory -> AgentIcons.ic_code
+                isExpanded -> AgentIcons.ic_folder
+                else -> AgentIcons.ic_folder
             },
             contentDescription = null,
             tint = if (isSelected) colors.primary else colors.onSurfaceVariant,

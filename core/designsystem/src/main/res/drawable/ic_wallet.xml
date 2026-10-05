@@ -1,0 +1,29 @@
+<!-- ic_wallet -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M5.8,5.4H18.2A2.4,2.4 0 0 1 20.6,7.8V16.2A2.4,2.4 0 0 1 18.2,18.6H5.8A2.4,2.4 0 0 1 3.4,16.2V7.8A2.4,2.4 0 0 1 5.8,5.4Z" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M16,5.4V4C16,3.4 16.5,3 17,3H20C20.6,3 21,3.4 21,4V5.6" />
+
+    <path
+        android:fillColor="#1F2333"
+        android:strokeColor="@null"
+        android:pathData="M14.8,12A1.6,1.6 0 1 0 18,12A1.6,1.6 0 1 0 14.8,12Z" />
+
+</vector>

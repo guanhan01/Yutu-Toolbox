@@ -23,6 +23,9 @@ slf4j = "2.0.16"
 xerces = "2.12.2"
 shizuku = "13.1.5"
 miuix = "0.9.2"
+junit = "4.13.2"
+androidxTest = "1.6.2"
+androidxTestExt = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -38,7 +41,10 @@ androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
-androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "icons" }
+# material3 传递依赖 material-icons-core（它要 1.6.0，缓存里只有 1.7.8）。
+# 显式对齐版本，避免离线构建时找不到 1.6.0；本工程已不使用任何 Material 图标，
+# 这条只是替 material3 把传递版本钉住，不是在用它的图标。
+androidx-compose-material-icons-core = { module = "androidx.compose.material:material-icons-core", version.ref = "icons" }
 
 material-color-utilities = { module = "com.materialkolor:material-color-utilities", version.ref = "materialColorUtilities" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
@@ -67,6 +73,10 @@ compose-ui-graphics = { module = "org.jetbrains.compose.ui:ui-graphics", version
 # 官方 Miuix（compose-miuix-ui/miuix）：0.9.2 对齐 Compose 1.11.1 / Kotlin 2.4.x
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version.ref = "miuix" }
 miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons", version.ref = "miuix" }
+
+junit = { module = "junit:junit", version.ref = "junit" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTest" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExt" }
 
 # 高权限后端（P1）：Shizuku 的 binder 通道
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
