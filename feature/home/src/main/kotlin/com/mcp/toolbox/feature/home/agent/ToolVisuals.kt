@@ -57,6 +57,37 @@ object ToolVisuals {
         }
     }
 
+    /**
+     * `system.wait` 的总秒数；不是等待类工具、或参数缺失/非法时返回 0。
+     *
+     * 纯函数：等待胶囊的文案与进度都靠它，必须可测（参数是模型给的 JSON，
+     * 完全可能不给、或给个负数）。
+     */
+    fun waitTotalSeconds(argsJson: String?): Int = runCatching {
+        org.json.JSONObject(argsJson.orEmpty()).optInt("seconds", 0)
+    }.getOrDefault(0).coerceIn(0, 600)
+
+    /**
+     * 等待胶囊的单行文案。
+     *
+     * - 进行中：`计时 12s / 100s`（0 → x 顺序递增，一眼看出进到哪了）
+     * - 正常结束：`计时完成（共 100 秒）`
+     * - 被中断/失败：`计时已中断（12s / 100s）` —— **不谎报成完成**：
+     *   用户点了停止却看到「计时完成」，会以为真的等够了
+     *
+     * 纯函数，单测覆盖三种形态与边界。
+     */
+    fun waitCapsuleText(elapsedSeconds: Long, totalSeconds: Int, running: Boolean): String {
+        val total = totalSeconds.coerceAtLeast(0)
+        val elapsed = elapsedSeconds.coerceAtLeast(0L)
+        if (total <= 0) return "计时"
+        return when {
+            running -> "计时 ${elapsed}s / ${total}s"
+            elapsed >= total -> "计时完成（共 $total 秒）"
+            else -> "计时已中断（${elapsed}s / ${total}s）"
+        }
+    }
+
     /** 兜底图标：未知工具也用一枚「插件」而不是空白。 */
     @DrawableRes
     val fallback: Int = AgentIcons.ic_plugin
