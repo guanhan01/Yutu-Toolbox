@@ -103,13 +103,18 @@ fun ProcessGroupCard(
 
     Column(modifier = modifier.fillMaxWidth()) {
         // ── 组头：一个统计胶囊 ──
+        //
+        // 底色用 surface（浅色主题下即纯白）而不是 surfaceContainerHigh（灰）：
+        // 组头是这一栏的「标题」，压一层灰会显得和下面的内容一样重（用户要求背景换白）。
+        // 描边改成 1.5dp + 略深一档的 outline，比 1dp outlineVariant 更有轮廓感，
+        // 又不至于变成一块厚重的黑框。外圈再叠一层极淡的主色，做出「简洁但有点质感」。
         Row(
             modifier = Modifier
                 .height(GROUP_HEADER_HEIGHT)
                 .miuixTouchTarget(GROUP_HEADER_HEIGHT)
                 .miuixClickable(press, true, onClick = onToggle)
-                .sqSurface(colors.surfaceContainerHigh, SquircleRadii.card)
-                .sqBorder(1.dp, colors.outlineVariant, SquircleRadii.card)
+                .sqSurface(colors.surface, SquircleRadii.card)
+                .sqBorder(HEADER_BORDER_WIDTH, colors.outline.copy(alpha = 0.45f), SquircleRadii.card)
                 .padding(horizontal = GROUP_HEADER_PADDING)
                 .semantics {
                     contentDescription =
@@ -141,6 +146,12 @@ fun ProcessGroupCard(
                 )
             }
         }
+
+        // 组头与组内容之间留出间距。
+        // 之前两者直接相邻，组头的下边框和第一张工具卡的上边框贴在一起，
+        // 看起来像共用一条线（用户实测反馈「边框重合」）。
+        // 连接线仍会向上补画 GAP_ABOVE_FIRST，所以视觉上依旧连成一体。
+        Spacer(Modifier.height(HEADER_CONTENT_GAP))
 
         // ── 组内：树形连接线 + 各块 ──
         AnimatedVisibility(
@@ -258,6 +269,12 @@ private fun buildSummary(thinkCount: Int, toolCount: Int, okCount: Int): String 
 }
 
 private val GROUP_HEADER_HEIGHT = 36.dp
+
+/** 组头描边宽度。1dp 太细、2dp 太重，1.5 在这种小尺寸上最有轮廓感。 */
+private val HEADER_BORDER_WIDTH = 1.5.dp
+
+/** 组头与组内容之间的竖直间距；连接线会补画这一段，视觉上仍相连。 */
+private val HEADER_CONTENT_GAP = 8.dp
 
 /**
  * 组头的水平内边距。
