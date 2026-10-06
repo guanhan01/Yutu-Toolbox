@@ -233,9 +233,35 @@ fun AiSettingsScreen(
     val context = LocalContext.current
     val config by AiConfigStore.config.collectAsState()
     val allowWrite by WriteGuard.allowed.collectAsState()
+    val sshRemote by com.mcp.toolbox.ui.linux.SshRemote.enabled.collectAsState()
+    val sshScope = rememberCoroutineScope()
+    // 开关只负责「跑没跑」；用哪个发行版跟着开发环境里的选择走
+    val sshDistro = remember { com.mcp.toolbox.ui.linux.LinuxPrefs.distro(context) }
 
     remember(config) { AiConfigStore.load(context); config }
     remember { WriteGuard.load(context) }
+    remember { com.mcp.toolbox.ui.linux.SshRemote.load(context) }
+
+    /**
+     * 打开 SSH 开关：把「想要」落到「真的在跑」。
+     *
+     * 起不来时**明确告诉用户原因**并把开关拨回去 —— 不留下一个「看着开着、
+     * 实际 22 端口没人听」的假状态（这正是本功能最初的 bug 形态）。
+     */
+    fun toggleSshRemote(on: Boolean) {
+        sshScope.launch {
+            val ok = com.mcp.toolbox.ui.linux.SshRemote.set(context, on, sshDistro)
+            if (!ok) {
+                com.mcp.toolbox.ui.linux.SshRemote.set(context, false, sshDistro)
+                android.widget.Toast.makeText(
+                    context,
+                    if (on) "SSH 启动失败：请先在「开发环境」里安装「SSH 远程访问」组件，并确认已获取 root"
+                    else "SSH 停止失败：请重试",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -298,6 +324,14 @@ fun AiSettingsScreen(
                     subtitle = stringResource(R.string.ai_allow_write_desc),
                     checked = allowWrite,
                     onCheckedChange = { WriteGuard.set(context, it) },
+                )
+                // SSH 远程访问：只回答「跑没跑」。装没装由开发环境页的组件检测负责，
+                // 这里不重复表达，避免两个地方都能改同一件事。
+                MiuixSuperSwitch(
+                    title = stringResource(R.string.ai_ssh_remote),
+                    subtitle = stringResource(R.string.ai_ssh_remote_desc),
+                    checked = sshRemote,
+                    onCheckedChange = { on -> toggleSshRemote(on) },
                 )
             }
         }

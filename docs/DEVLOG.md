@@ -361,6 +361,7 @@ echo '\ \ / /_   _| |_ _   _'             # 正确
 | **朗读回答** | §5.7 操作条 | **没有 TTS 实现**。菜单项已存在并置灰。要做需接 `android.speech.tts.TextToSpeech`：初始化异步、语言包可能缺失、需随生命周期 shutdown。 |
 | **侧边栏重构** | §9 全节 | **0.9.2 没有 `miuix-preference`**：`SwitchPreference` / `SliderPreference` / `OverlaySpinnerPreference` 全不存在。要做得先用 `miuix-ui` 官方组件自建等价物。属独立模块，不应混在回答区做。 |
 | **玻璃层 / 实时模糊** | §2.2、§9.3 | **0.9.2 没有 blur API**（`miuix-blur` 整包不存在）。做要自研：`RenderEffect.createBlurEffect`（API 31+）+ `graphicsLayer`，低端机降级纯色。 |
+| **局域网直连 SSH（从电脑连手机）** | §10 终端 | **用户已明确说是「以后计划的事」**。现状：`SshRemote` 只能把 sshd 拉起来并绑 0.0.0.0:22（设备实测 `Server listening on 0.0.0.0 port 22`，`/proc/net/tcp` 里 0016 为 LISTEN），但**同网段的电脑能否真连上，没有验证过**——这依赖 Android 网络栈在 chroot 场景下的转发行为，出问题的话可能要额外做端口转发或改绑定策略。要把「本地能跑」升级成「电脑能连」，先做这一步实测再谈实现。 |
 | **内嵌浏览器「返回对话」胶囊** | §7.4 | 现用 `WebScreen`（有顶部进度条），但**没有底部「返回对话」浮层**。属 web 模块改动。 |
 | **本机终端的 pty（待办 B，用户已选定）** | §10 终端 | 本机模式目前**完全不可用**（连输入都送不进去，不只是没提示符）。方案 B：**借用已装 Linux 环境 rootfs 里的 `script`**（`/data/data/<pkg>/files/linux-env/<distro>/rootfs/bin/script`，已实测应用身份可访问）。代价：本机模式将**要求 Linux 环境已安装**，与「不用装环境」的原始前提冲突——用户已知悉并选择此路线。 |
 

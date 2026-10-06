@@ -256,6 +256,8 @@
     <string name="ai_section_tools">Tool permissions</string>
     <string name="ai_allow_write">Allow write actions</string>
     <string name="ai_allow_write_desc">When off, file writes, APK rebuilds and database writes are rejected. Read-only tools are unaffected. Off by default.</string>
+    <string name="ai_ssh_remote">SSH remote access</string>
+    <string name="ai_ssh_remote_desc">Starts sshd (port 22) inside the Linux environment so a computer on the same network can connect. Requires the "SSH remote access" component to be installed first. Stops when the app is reclaimed by the system or the device reboots.</string>
     <string name="ai_group_generic">Generic</string>
     <string name="ai_group_vendors">Vendors</string>
     <string name="ai_custom_add">Add custom provider</string>
