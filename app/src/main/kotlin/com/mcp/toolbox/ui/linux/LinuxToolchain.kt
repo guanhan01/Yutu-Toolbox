@@ -236,7 +236,8 @@ object LinuxToolchain {
                 §PKG ${if (alpine) "openssh" else "openssh-server openssh-client"}
                 mkdir -p /run/sshd /root/.ssh
                 chmod 700 /root/.ssh
-                echo "ssh: §(ssh -V 2>&1)"
+                # 回显服务端版本：ssh 是客户端，装了它不代表 SSH 远程访问可用
+                echo "sshd: ${'$'}(sshd -V 2>&1 | head -n 1)"
             """.trimIndent()
 
             LinuxComponent.JAVA -> """

@@ -155,15 +155,26 @@ internal suspend fun probeVersions(
     context: Context,
     distro: LinuxDistro,
 ): Map<LinuxComponent, String> {
+    // ⚠️ 每个组件都必须成对出现：`[ -x <声明路径> ]` 先确认**能力**就位，
+    // 再去取版本。不能只 echo 一行命令的输出 —— 那会把「基础镜像自带的同名
+    // 客户端」误判成「扩展工具已安装」。
+    //
+    // 实测踩到的正是这个：SSH 的声明路径是 /usr/sbin/sshd（服务端），
+    // 而这里原来探的是 `ssh -V`（**客户端**，基础镜像自带 openssh-client）。
+    // 于是只装了 Debian、根本没装 openssh-server 时，检测页照样显示
+    // 「SSH 远程访问 ready」并给出客户端版本号（用户实测反馈）。
+    //
+    // 各组件的能力判据与 [LinuxComponent.probe] 保持一致。
     val script = """
-        echo "PYTHON=${'$'}(uv --version 2>&1 | head -n 1)"
-        echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
-        echo "SSH=${'$'}(ssh -V 2>&1 | head -n 1)"
-        echo "JAVA=${'$'}(java -version 2>&1 | head -n 1)"
-        // 组件名是「APK 分析」，主工具是 Apktool：取它的版本才与标题对得上。
-        // 原来取 jadx 的版本（显示成 1.5.1），与标题不符。
-        echo "APK=${'$'}(apktool --version 2>&1 | head -n 1)"
-        echo "GIT=${'$'}(git --version 2>&1 | head -n 1)"
+        [ -x /usr/local/bin/uv ] && echo "PYTHON=${'$'}(uv --version 2>&1 | head -n 1)"
+        [ -x /usr/local/bin/node ] && echo "NODE=${'$'}(node --version 2>&1 | head -n 1)"
+        # 服务端，不是客户端：openssh-client 基础镜像就有，不能当判据
+        [ -x /usr/sbin/sshd ] && echo "SSH=${'$'}(sshd -V 2>&1 | head -n 1)"
+        [ -x /usr/bin/java ] && echo "JAVA=${'$'}(java -version 2>&1 | head -n 1)"
+        # 组件名是「APK 分析」，主工具是 Apktool：取它的版本才与标题对得上。
+        # 原来取 jadx 的版本（显示成 1.5.1），与标题不符。
+        [ -x /opt/apktool/apktool ] && echo "APK=${'$'}(apktool --version 2>&1 | head -n 1)"
+        [ -x /usr/bin/git ] && echo "GIT=${'$'}(git --version 2>&1 | head -n 1)"
     """.trimIndent()
     val out = LinuxRuntime.exec(context, distro, script, timeoutMs = 30_000)
     val versions = mutableMapOf<LinuxComponent, String>()

@@ -188,7 +188,11 @@ enum class LinuxComponent(
     // 「只装了客户端、服务端根本没装」也会被判成「SSH 已安装」——实测就是这个
     // 状态（dpkg 里 openssh-server 是 un，/usr/sbin/sshd 不存在，界面却显示已安装）。
     // 探针换成 sshd 才能真正代表「SSH 远程访问」这个能力可用。
-    SSH("SSH 远程访问", "sshd 服务端，以及 ssh、ssh-keygen 客户端", "/usr/sbin/sshd"),
+    SSH(
+        "SSH 远程访问",
+        "需要 sshd 服务端（基础镜像自带的 ssh 是客户端，不算已装）",
+        "/usr/sbin/sshd",
+    ),
     // smali / baksmali 不是独立的可执行文件，是 apktool 内置的（2.11.1 带 3.0.9）。
     // 原描述会让使用者和 AI 去找不存在的命令（实测 command -v smali/baksmali 均失败）。
     APK("APK 分析", "JADX 与 Apktool（内置 smali / baksmali，含 OpenJDK）", "/opt/apktool/apktool"),

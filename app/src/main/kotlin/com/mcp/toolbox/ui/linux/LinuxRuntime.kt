@@ -257,9 +257,11 @@ object LinuxRuntime {
         val args = when (component) {
             LinuxComponent.PYTHON -> "uv --version 2>/dev/null || true"
             LinuxComponent.NODE -> "node --version 2>/dev/null || true"
-            // 与探针一致：sshd 就位后取 OpenSSH 版本。
-            // 先试 sshd -V，再退回 ssh -V（同属一个 openssh 版本号）。
-            LinuxComponent.SSH -> "sshd -V 2>&1 | head -n 1 || ssh -V 2>&1 | head -n 1 || true"
+            // 与探针一致：只认 **sshd**（服务端）。
+            //
+            // 不能再退回 `ssh -V`：ssh 属于 openssh-client，基础镜像自带，
+            // 一旦退回就会在「服务端根本没装」时也取到版本号，把该组件判成已安装。
+            LinuxComponent.SSH -> "sshd -V 2>&1 | head -n 1 || true"
             LinuxComponent.JAVA -> "java -version 2>&1 | head -n 1 || true"
             LinuxComponent.APK -> "apktool --version 2>/dev/null || true"
             LinuxComponent.GIT -> "git --version 2>/dev/null || true"
