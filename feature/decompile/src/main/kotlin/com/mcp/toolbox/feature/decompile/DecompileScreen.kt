@@ -49,6 +49,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -142,6 +144,7 @@ fun DecompileScreen(
     var view by remember { mutableStateOf(DecompileView.JAVA) }
     var source by remember { mutableStateOf<ApkSource>(ApkSource.SelfApp) }
     var menuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var taskCenterOpen by remember { mutableStateOf(false) }
     var overviewOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
@@ -285,8 +288,11 @@ fun DecompileScreen(
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
-                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
+                                                // 记下按钮矩形给菜单用：anchor 必填，不传位置会退回父布局（菜单跑偏）。
+                        Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                            MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
+                        }
+                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, anchor = menuAnchor) {
                             MiuixMenuItem(
                                 "来源与概览",
                                 {

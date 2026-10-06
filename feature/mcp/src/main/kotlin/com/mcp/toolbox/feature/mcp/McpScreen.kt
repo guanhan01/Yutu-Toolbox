@@ -31,6 +31,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.icon.AgentIcons
@@ -87,6 +89,7 @@ fun McpScreen(
 
     var tab by remember { mutableStateOf(McpTab.SERVERS) }
     var menuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var addOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<McpServerConfig?>(null) }
     var invoking by remember { mutableStateOf<Pair<McpServerConfig, McpToolInfo>?>(null) }
@@ -159,8 +162,11 @@ fun McpScreen(
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
-                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
+                        // 记下按钮矩形给菜单用：anchor 必填，不传位置就会退回父布局（菜单跑偏）。
+                        Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                            MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
+                        }
+                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, anchor = menuAnchor) {
                             MiuixMenuItem(
                                 text = "连接全部已启用 Server",
                                 onClick = {

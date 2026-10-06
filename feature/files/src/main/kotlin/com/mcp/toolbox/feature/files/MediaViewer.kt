@@ -43,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
@@ -174,6 +176,8 @@ fun MediaViewerOverlay(
     var dragging by remember(path) { mutableStateOf(false) }
     var dragValue by remember(path) { mutableStateOf(0f) }
     var speedMenu by remember(path) { mutableStateOf(false) }
+    /** 倍速按钮的窗口矩形：anchor 必填，不传位置会退回父布局。 */
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
 
     /**
      * 画面填充方式，默认「适应」：始终保持片源原始比例，
@@ -620,6 +624,7 @@ fun MediaViewerOverlay(
                         Box(Modifier.align(Alignment.CenterEnd)) {
                             Box(
                                 modifier = Modifier
+                                    .onGloballyPositioned { menuAnchor = it.boundsInWindow() }
                                     .clip(RoundedCornerShape(50))
                                     .background(Color.White.copy(alpha = 0.18f))
                                     .clickable { speedMenu = true }
@@ -634,7 +639,7 @@ fun MediaViewerOverlay(
                                     color = Color.White,
                                 )
                             }
-                            MiuixOverflowMenu(expanded = speedMenu, onDismiss = { speedMenu = false }) {
+                            MiuixOverflowMenu(expanded = speedMenu, onDismiss = { speedMenu = false }, anchor = menuAnchor) {
                                 MiuixMenuGroupLabel("播放速度")
                                 PLAYBACK_SPEEDS.forEach { value ->
                                     MiuixMenuItem(

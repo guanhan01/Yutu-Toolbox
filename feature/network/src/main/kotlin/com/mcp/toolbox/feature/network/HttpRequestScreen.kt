@@ -164,6 +164,7 @@ fun HttpRequestScreen(
     // 方法菜单和按钮不同层（平级），所以记下按钮矩形给菜单当锚点。
     var methodAnchor by remember { mutableStateOf<Rect?>(null) }
     var moreMenu by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var history by remember {
         mutableStateOf(
             listOf(
@@ -189,8 +190,11 @@ fun HttpRequestScreen(
             actions = {
                 MiuixTag(text = "测试环境 dev", color = colors.tertiary, filled = true)
                 Box {
-                    MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { moreMenu = true })
-                    MiuixOverflowMenu(expanded = moreMenu, onDismiss = { moreMenu = false }) {
+                                        // 记下按钮矩形给菜单用：anchor 必填，不传位置会退回父布局。
+                    Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { moreMenu = true })
+                    }
+                    MiuixOverflowMenu(expanded = moreMenu, onDismiss = { moreMenu = false }, anchor = menuAnchor) {
                         MiuixMenuItem(
                             "复制为 cURL",
                             {

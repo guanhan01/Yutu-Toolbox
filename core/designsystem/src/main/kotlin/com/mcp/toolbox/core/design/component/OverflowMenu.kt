@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalView
@@ -175,6 +176,34 @@ private val MenuFractionSpec = spring<Float>(
     visibilityThreshold = 0.0001f,
 )
 
+/**
+ * 溢出菜单的锚点持有者。
+ *
+ * 用法：
+ * ```
+ * val anchor = rememberOverflowAnchor()
+ * Box {
+ *     MiuixIconButton(..., modifier = Modifier.overflowAnchor(anchor))
+ *     MiuixOverflowMenu(anchor = anchor.rect, ...) { ... }
+ * }
+ * ```
+ *
+ * 注意 `Modifier.overflowAnchor` 要放在**内边距之后**：修饰符从左到右包裹，
+ * 放在 padding 之前量到的是含内缩的外框，菜单会偏（抽屉那一处正是这么错的）。
+ */
+@androidx.compose.runtime.Stable
+class OverflowAnchor {
+    var rect by androidx.compose.runtime.mutableStateOf<Rect?>(null)
+        internal set
+}
+
+@Composable
+fun rememberOverflowAnchor(): OverflowAnchor = remember { OverflowAnchor() }
+
+/** 把此节点登记为溢出菜单的锚点。放在内边距**之后**。 */
+fun Modifier.overflowAnchor(anchor: OverflowAnchor): Modifier =
+    this.onGloballyPositioned { anchor.rect = it.boundsInWindow() }
+
 /** 菜单内容宽度与外框左右内边距。定位预判与渲染必须共用同一组值，否则方向会算错。 */
 private val MenuContentWidth = 200.dp
 private val MenuEdgePadding = 8.dp
@@ -186,7 +215,18 @@ fun MiuixOverflowMenu(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     offset: IntOffset = IntOffset(0, 0),
-    anchor: Rect? = null,
+    /**
+     * 菜单要贴住的那个节点的窗口矩形。**必填、没有默认值。**
+     *
+     * 刻意不给默认值：早先它是可选的，忘了传不会报错，只会静默退回「Popup 父布局
+     * 矩形」定位 —— 于是「输入栏一角的按钮，菜单却跑到屏幕最边」这类问题
+     * 反复出现，而且只有用户看得见（实测踩过三次：模型菜单、加号菜单、抽屉菜单）。
+     * 改成必填后，漏传会在**编译期**全部暴露。
+     *
+     * 用什么当锚点：想贴住哪个节点，就把那个节点的矩形给它。
+     * 用 [rememberOverflowAnchor] + [Modifier.overflowAnchor] 可以少写样板。
+     */
+    anchor: Rect?,
     /** 强制从锚点左边缘向右展开；用在锚点本身靠左的场景（例如输入栏的加号）。 */
     alignStart: Boolean = false,
     /**

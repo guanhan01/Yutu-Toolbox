@@ -27,6 +27,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mcp.toolbox.core.design.icon.AgentIcons
@@ -80,6 +82,7 @@ fun ArtifactsScreen(
     var query by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<ArtifactStore.Session?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
 
     fun reload() {
@@ -113,8 +116,11 @@ fun ArtifactsScreen(
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
-                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
+                        // 记下按钮矩形给菜单用：anchor 必填，不传位置就会退回父布局（菜单跑偏）。
+                        Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                            MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
+                        }
+                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, anchor = menuAnchor) {
                             MiuixMenuItem(
                                 text = "刷新列表",
                                 onClick = { menuOpen = false; reload() },

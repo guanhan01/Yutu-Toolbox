@@ -50,6 +50,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -138,6 +140,7 @@ fun WebScreen(
 
     var sheetVisible by remember { mutableStateOf(false) }
     var overflowVisible by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var startQuery by remember { mutableStateOf("") }
     var downloads by remember { mutableStateOf<List<DownloadRecord>>(emptyList()) }
 
@@ -212,12 +215,15 @@ fun WebScreen(
                     },
                 )
                 Box {
-                    MiuixIconButton(
-                        iconRes = AgentIcons.ic_more_vert,
-                        contentDescription = "更多",
-                        onClick = { overflowVisible = true },
-                    )
-                    MiuixOverflowMenu(expanded = overflowVisible, onDismiss = { overflowVisible = false }) {
+                                        // 记下按钮矩形给菜单用：anchor 必填，不传位置会退回父布局（菜单跑偏）。
+                    Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                        MiuixIconButton(
+                                                iconRes = AgentIcons.ic_more_vert,
+                                                contentDescription = "更多",
+                                                onClick = { overflowVisible = true },
+                                            )
+                    }
+                    MiuixOverflowMenu(expanded = overflowVisible, onDismiss = { overflowVisible = false }, anchor = menuAnchor) {
                         MiuixMenuItem(text = "分享当前页", iconRes = AgentIcons.ic_share, onClick = {
                             overflowVisible = false
                             shareUrl(context, activeTab.url)

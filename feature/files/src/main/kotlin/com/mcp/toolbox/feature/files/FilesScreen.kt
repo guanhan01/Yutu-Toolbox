@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.Color
@@ -292,6 +294,7 @@ fun FilesScreen(
     var selecting by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var menuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var pendingDelete by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<FileEntry?>(null) }
     var transferMode by remember { mutableStateOf<String?>(null) }
@@ -382,8 +385,11 @@ fun FilesScreen(
                 actions = {
                     MiuixIconButton(AgentIcons.ic_search, "搜索", onClick = {})
                     Box {
-                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
-                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
+                        // 记下按钮矩形给菜单用：anchor 必填，不传位置就会退回父布局（菜单跑偏）。
+                        Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                            MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
+                        }
+                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, anchor = menuAnchor) {
                             MiuixMenuItem("新建文件夹", { menuOpen = false; newFolderOpen = true }, iconRes = AgentIcons.ic_folder_add)
                             MiuixMenuItem("申请所有文件访问权限", { menuOpen = false; openStorageSettings(context, onToast) }, iconRes = AgentIcons.ic_phone_device)
                             MiuixMenuItem("按名称排序", { menuOpen = false }, iconRes = AgentIcons.ic_sort)

@@ -760,6 +760,12 @@ fun HomeScreen(
         anchor = attachAnchor,
         alignStart = true,
         stickToBottom = true,
+        // 从加号左边缘再往左挪一点：贴着按钮显得太靠右，但直接对齐屏幕边又太贴边
+        // （用户口径「可以再左一点，但不要到边」）。这里用一个固定的左移量。
+        offset = androidx.compose.ui.unit.IntOffset(
+            x = with(androidx.compose.ui.platform.LocalDensity.current) { (-10).dp.roundToPx() },
+            y = 0,
+        ),
         // 非焦点模式：不抢输入框焦点，输入法保持弹出
         focusable = false,
     ) {

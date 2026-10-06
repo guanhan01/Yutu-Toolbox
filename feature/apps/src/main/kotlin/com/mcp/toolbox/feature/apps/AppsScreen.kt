@@ -29,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -201,6 +203,7 @@ fun AppsScreen(
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var icons by remember { mutableStateOf<Map<String, ImageBitmap>>(emptyMap()) }
     var menuOpen by remember { mutableStateOf(false) }
+    var menuAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var actionTarget by remember { mutableStateOf<InstalledApp?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -232,8 +235,11 @@ fun AppsScreen(
                 onNavigationClick = onBack,
                 actions = {
                     Box {
-                        MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
-                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }) {
+                        // 记下按钮矩形给菜单用：anchor 必填，不传位置就会退回父布局（菜单跑偏）。
+                        Box(modifier = Modifier.onGloballyPositioned { menuAnchor = it.boundsInWindow() }) {
+                            MiuixIconButton(AgentIcons.ic_more_horiz, "更多", onClick = { menuOpen = true })
+                        }
+                        MiuixOverflowMenu(expanded = menuOpen, onDismiss = { menuOpen = false }, anchor = menuAnchor) {
                             MiuixMenuItem(
                                 text = if (includeSystem) "只看用户应用" else "显示系统应用",
                                 onClick = {
