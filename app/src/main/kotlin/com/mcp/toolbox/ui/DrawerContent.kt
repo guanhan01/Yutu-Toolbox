@@ -124,8 +124,10 @@ fun DrawerContent(
             DrawerItem(
                 destination = Destination(
                     route = Routes.MEMORY,
+                    // 原来与「思考能力」共用 ic_brain，两处长得一样。
+                    // 长期记忆有专门的图标，语义也更准。
                     labelRes = R.string.app_nav_memory,
-                    icon = AgentIcons.ic_brain,
+                    icon = AgentIcons.ic_long_term_memory,
                 ),
                 selected = currentRoute == Routes.MEMORY,
                 onClick = { onNavigate(Routes.MEMORY) },

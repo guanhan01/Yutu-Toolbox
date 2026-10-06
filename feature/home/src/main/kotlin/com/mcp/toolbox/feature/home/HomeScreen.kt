@@ -1491,7 +1491,9 @@ private fun InputBar(
                     contentAlignment = Alignment.Center,
                 ) {
                     MiuixIcon(
-                        AgentIcons.ic_brain,
+                        // 与「记忆」入口分开：原来两处都是 ic_brain，看不出区别。
+                        // 芯片＝算力＝推理档位，且这个图标全仓库未被他处占用。
+                        AgentIcons.ic_ai_chip,
                         stringResource(R.string.chat_pick_reasoning),
                         tint = if (reasoningActive) colors.primary else colors.onSurfaceVariant,
                         size = 20.dp,

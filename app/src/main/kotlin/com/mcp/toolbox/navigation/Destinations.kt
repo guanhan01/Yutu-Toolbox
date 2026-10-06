@@ -48,7 +48,9 @@ object Routes {
 
 /** 抽屉一级入口：只保留首页，工具统一收进「应用工具」子页面。 */
 val DrawerPrimary: List<Destination> = listOf(
-    Destination(Routes.HOME, R.string.app_nav_home, AgentIcons.ic_globe),
+    // 原来是 ic_globe（地球），与「对话记录」这个用途毫不相干。
+    // 换成对话清单形态的图标；刻意不用 ic_chat —— 那个是顶栏「新建对话」在用。
+    Destination(Routes.HOME, R.string.app_nav_home, AgentIcons.ic_dialog),
 )
 
 /** 「应用工具」子页面里的工具入口。 */
