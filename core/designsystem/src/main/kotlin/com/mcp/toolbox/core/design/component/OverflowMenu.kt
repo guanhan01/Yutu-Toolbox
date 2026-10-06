@@ -118,11 +118,19 @@ object MenuScrim {
  */
 @Composable
 fun MenuScrimOverlay(onDismiss: () -> Unit) {
-    if (!MenuScrim.visible) return
+    // 淡入淡出而不是直接出现/消失：菜单收起本身有个收缩动画（约 200ms），
+    // 压暗若瞬间撤掉，会看到「暗层先没了、菜单还在缩」的闪一下。
+    val target = if (MenuScrim.visible) 1f else 0f
+    val alpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(if (MenuScrim.visible) 160 else 220),
+        label = "menu-scrim-alpha",
+    )
+    if (alpha <= 0.001f) return
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.32f))
+            .background(Color.Black.copy(alpha = 0.32f * alpha))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -373,16 +381,27 @@ private fun MiuixOverflowMenuOfficial(
         if (expanded) {
             mounted = true
             withFrameNanos {}
+            // 两个量一起跑到终点，**不能让 alpha 先到**：
+            // 早先 alpha 用 150ms tween、scale 用 170ms tween，alpha 先归零，
+            // 视觉上就成了「先整体消失、再缩回去」——看起来像直接弹出（用户实测反馈）。
+            // 另外收回用 tween、展开用 spring，两者曲线不同，也就没有「倒溢出」的观感。
+            //
+            // 现在两侧都用同一个 spring，只是初值方向相反：收起就是展开的逆放。
             launch { alphaAnim.animateTo(1f, tween(200)) }
             fraction.animateTo(
                 1f,
                 spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f),
             )
         } else {
-            // 这里恒为 !expanded，原先那句 `if (expanded) lastDismissAt[0] = ...` 是死代码
-            launch { alphaAnim.animateTo(0f, tween(150)) }
-            fraction.animateTo(0f, tween(170))
-            mounted = false
+            // 先缩、缩完再撤掉：alpha 跟着 scale 一起收，不再抢跑
+            launch {
+                fraction.animateTo(
+                    0f,
+                    spring(dampingRatio = 0.9f, stiffness = 420f, visibilityThreshold = 0.0001f),
+                )
+                alphaAnim.snapTo(0f)
+                mounted = false
+            }
         }
     }
     if (!mounted) return

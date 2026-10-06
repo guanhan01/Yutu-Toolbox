@@ -175,6 +175,13 @@ fun HomeScreen(
     var input by remember { mutableStateOf("") }
     val sending = running
     var picker by remember { mutableStateOf<PickerKind?>(null) }
+    /**
+     * 输入栏里「模型」按钮的窗口矩形。
+     *
+     * 菜单定位需要它：不传 anchor 时菜单会退回用 Popup 的父布局矩形，而父布局
+     * 约等于整条输入栏，右对齐就落到屏幕最右侧，与那颗按钮的实际位置对不上。
+     */
+    var modelAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var showOverflow by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
@@ -798,12 +805,15 @@ fun HomeScreen(
         )
     }
 
-    // 模型：锚定到右下角的模型按钮，右对齐展开
+    // 模型：锚定到模型按钮本身，右对齐展开
     MiuixOverflowMenu(
         expanded = picker == PickerKind.MODEL,
         onDismiss = { picker = null },
+        anchor = modelAnchor,
         stickToBottom = true,
-        focusable = false,
+        // focusable=true：才拦得住返回手势/返回键，并让「点外部收回」成立。
+        // 这里不再需要「保持输入法」——连点菜单时输入框并非必然处于编辑焦点。
+        focusable = true,
     ) {
         if (modelOptions.isEmpty() && availableModels.isEmpty()) {
             MiuixMenuItem(
@@ -1325,6 +1335,7 @@ private enum class PickerKind { MODEL, REASONING }
 /** 输入栏：发送按钮内嵌在气泡里；有内容时气泡变白。 */
 @Composable
 private fun InputBar(
+    onModelAnchorChange: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     modifier: Modifier = Modifier,
     value: String,
     onValueChange: (String) -> Unit,
@@ -1503,10 +1514,15 @@ private fun InputBar(
                 Spacer(Modifier.weight(1f))
 
                 // 模型：品牌色圆底 + 白色图形，放在发送键左侧
+                //
+                // 记下自身矩形传给菜单。**不传 anchor 时菜单会退回用 Popup 的父布局
+                // 矩形定位**，而父布局约等于整条输入栏，右对齐就落到屏幕最右侧 ——
+                // 与这颗按钮的实际位置对不上（用户实测反馈「按按钮位置算不对」）。
                 Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
+                        .onGloballyPositioned { onModelAnchorChange(it.boundsInWindow()) }
                         .clickable(onClick = onPickModel),
                     contentAlignment = Alignment.Center,
                 ) {
