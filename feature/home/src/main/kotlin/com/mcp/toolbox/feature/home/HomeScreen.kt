@@ -664,6 +664,9 @@ fun HomeScreen(
             InputBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 onHeightMeasured = { inputBarHeightPx = it },
+                // 把「模型」按钮的窗口矩形收上来：菜单要用它定位。
+                // 按钮在 InputBar 内部，菜单在外层，只能这样传。
+                onModelAnchorChange = { modelAnchor = it },
                 value = input,
                 onValueChange = { input = it },
                 sending = sending,

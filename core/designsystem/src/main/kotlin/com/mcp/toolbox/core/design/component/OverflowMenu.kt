@@ -120,10 +120,18 @@ object MenuScrim {
 fun MenuScrimOverlay(onDismiss: () -> Unit) {
     // 淡入淡出而不是直接出现/消失：菜单收起本身有个收缩动画（约 200ms），
     // 压暗若瞬间撤掉，会看到「暗层先没了、菜单还在缩」的闪一下。
-    val target = if (MenuScrim.visible) 1f else 0f
+    // 压暗的进出场照官方 `ListPopupDefaults` 的 Dim 规格：
+    //   DimEnter = tween(300, SinOutEasing) / DimExit = tween(150, SinOutEasing)
+    // 官方把压暗单独做成一对规格（而不是跟着菜单缩放走），
+    // 说明它本来就该比菜单「慢进快出」；早先我让它瞬间消失，于是会闪一下。
+    val visible = MenuScrim.visible
+    val target = if (visible) 1f else 0f
     val alpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = target,
-        animationSpec = tween(if (MenuScrim.visible) 160 else 220),
+        animationSpec = tween(
+            durationMillis = if (visible) 300 else 150,
+            easing = top.yukonga.miuix.kmp.anim.SinOutEasing,
+        ),
         label = "menu-scrim-alpha",
     )
     if (alpha <= 0.001f) return
@@ -138,6 +146,16 @@ fun MenuScrimOverlay(onDismiss: () -> Unit) {
             ),
     )
 }
+
+/**
+ * 菜单缩放动画规格。**展开与收起共用同一个** —— 这是「倒溢出」的关键，
+ * 同一条曲线正反跑才互为逆放。数值取自官方 `ListPopupDefaults`。
+ */
+private val MenuFractionSpec = spring<Float>(
+    dampingRatio = 0.82f,
+    stiffness = 362.5f,
+    visibilityThreshold = 0.0001f,
+)
 
 /** 菜单内容宽度与外框左右内边距。定位预判与渲染必须共用同一组值，否则方向会算错。 */
 private val MenuContentWidth = 200.dp
@@ -378,27 +396,25 @@ private fun MiuixOverflowMenuOfficial(
     }
 
     LaunchedEffect(expanded) {
+        // 参数取自官方 `ListPopupDefaults`（miuix-ui 0.9.2 字节码）：
+        //   FractionAnimationSpec = spring(0.82f, 362.5f, visibilityThreshold = 1e-4f)
+        //   ResetAnimationSpec    = 同上（**同一个 spring**）
+        //   AlphaEnter = tween(200) / AlphaExit = tween(150)
+        //
+        // 「倒溢出」的本质就在第一行：展开与收起用**完全相同的 spring**，
+        // 同一条曲线正反跑，收起天然就是展开的逆放。
+        // 早先我给收起换了另一条 spring（0.9/420），曲线不同，所以不像逆放。
         if (expanded) {
             mounted = true
             withFrameNanos {}
-            // 两个量一起跑到终点，**不能让 alpha 先到**：
-            // 早先 alpha 用 150ms tween、scale 用 170ms tween，alpha 先归零，
-            // 视觉上就成了「先整体消失、再缩回去」——看起来像直接弹出（用户实测反馈）。
-            // 另外收回用 tween、展开用 spring，两者曲线不同，也就没有「倒溢出」的观感。
-            //
-            // 现在两侧都用同一个 spring，只是初值方向相反：收起就是展开的逆放。
+            // alpha 与 scale 并行推进。这里 alpha 保留独立时长（官方也是两个规格），
+            // 但不能让它单独把「已卸载」提前触发 —— 卸载只由 scale 的终点决定。
             launch { alphaAnim.animateTo(1f, tween(200)) }
-            fraction.animateTo(
-                1f,
-                spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f),
-            )
+            fraction.animateTo(1f, MenuFractionSpec)
         } else {
-            // 先缩、缩完再撤掉：alpha 跟着 scale 一起收，不再抢跑
+            // 先缩、缩完再撤：alpha 跟着一起收，卸载时机由 scale 决定
             launch {
-                fraction.animateTo(
-                    0f,
-                    spring(dampingRatio = 0.9f, stiffness = 420f, visibilityThreshold = 0.0001f),
-                )
+                fraction.animateTo(0f, MenuFractionSpec)
                 alphaAnim.snapTo(0f)
                 mounted = false
             }
