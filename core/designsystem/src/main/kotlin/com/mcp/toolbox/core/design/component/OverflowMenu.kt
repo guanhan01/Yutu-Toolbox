@@ -28,6 +28,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalView
+import android.view.View
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -171,18 +175,41 @@ private class OverflowMenuPositionProvider(
 }
 
 /**
- * 把 Popup 铺满整个窗口。
+ * 把压暗层的 Dialog 窗口撑到系统栏之下。
  *
- * 压暗层要盖住全部内容，而 Popup 默认按内容尺寸定位，所以显式返回 (0,0) ——
- * 内容自身用 `fillMaxSize` 撑开。
+ * Compose 的 Dialog 默认把内容限制在系统栏以内（状态栏与底部手势条那两条盖不到），
+ * 于是「压暗背景」看起来只在中间一块生效。这里清掉 inset 适配并允许越界布局。
+ *
+ * **不能用 FLAG_NOT_TOUCHABLE**：压暗层必须收到点击才能「点暗处收回」。
+ * 与 Toast 的处理同源（那边是为了去 dim、且它本来就不需要接收触摸）。
  */
-private object FullScreenPositionProvider : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset = IntOffset.Zero
+private fun applyScrimWindowParams(view: View) {
+    var parent: android.view.ViewParent? = view.parent
+    while (parent != null) {
+        if (parent is androidx.compose.ui.window.DialogWindowProvider) {
+            val w = parent.window ?: return
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            w.setDimAmount(0f)
+            w.setLayout(
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            )
+            w.setGravity(android.view.Gravity.TOP or android.view.Gravity.START)
+            // 不抢焦点（返回键留给菜单那层），但要能收点击，故不加 NOT_TOUCHABLE
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            // 关键两条：允许窗口画到系统栏之下
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+            // Android 11+ 默认按系统栏内缩窗口；清掉 inset 类型才是真正铺满整屏。
+            // 直接调 w.setFitInsetsTypes(0) 在这个编译环境里解析不到（compileSdk 与
+            // 该 API 的可见性对不上），走 androidx 的 WindowCompat 等价且更稳。
+            runCatching {
+                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
+            }
+            return
+        }
+        parent = (parent as? View)?.parent
+    }
 }
 
 /** 菜单项：前导图标 + 文案，danger = 红字，checked 显示复选状态。 */
@@ -339,12 +366,33 @@ private fun MiuixOverflowMenuOfficial(
 
     if (scrim) {
         // 压暗层：全屏、不吃焦点、点击即收回。
-        // 它在菜单 Popup 之前声明，因此叠在菜单下面、盖住应用内容。
-        Popup(
+        //
+        // 用 Dialog 而不是 Popup：Popup 是「面板」类窗口，受限于应用的**内容区**，
+        // 状态栏与底部手势条那两条系统区域盖不到（用户实测反馈「小白条、状态栏没压暗」）。
+        // Dialog 的窗口参数可以直接改，把窗口撑到系统栏之下 —— 见 applyScrimWindowParams。
+        // 项目里的 Toast 已用同一套手法处理窗口参数。
+        //
+        // 它在菜单 Popup 之前声明，因此窗口叠在菜单下面；菜单在上层，
+        // 点菜单项不会被它截走。
+        Dialog(
             onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
-            popupPositionProvider = remember { FullScreenPositionProvider },
-            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                // 返回键交给菜单那一层（它才是 focusable 的）
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
         ) {
+            val dialogView = LocalView.current
+            DisposableEffect(dialogView) {
+                val listener = object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) = applyScrimWindowParams(v)
+                    override fun onViewDetachedFromWindow(v: View) {}
+                }
+                dialogView.addOnAttachStateChangeListener(listener)
+                if (dialogView.isAttachedToWindow) applyScrimWindowParams(dialogView)
+                onDispose { dialogView.removeOnAttachStateChangeListener(listener) }
+            }
             Box(
                 Modifier
                     .fillMaxSize()
@@ -379,7 +427,6 @@ private fun MiuixOverflowMenuOfficial(
                     transformOrigin = TransformOrigin(originX, if (preferAbove) 1f else 0f)
                 }
                 .padding(8.dp)
-                .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(MiuixTheme.radius.menu))
                 .clip(RoundedCornerShape(MiuixTheme.radius.menu))
                 // 用 surface（浅色主题下就是纯白）而不是 surfaceContainerHigh（灰）。
                 // 菜单是浮在内容之上的独立层，灰底会和底下的卡片糊在一起（用户实测反馈）。
