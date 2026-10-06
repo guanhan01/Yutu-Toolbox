@@ -85,7 +85,7 @@ val DrawerNetworkChildren: List<Destination> = listOf(
 val DrawerFooter: List<Destination> = listOf(
     Destination(Routes.ABOUT, R.string.app_nav_about, AgentIcons.ic_info),
     Destination(Routes.TOOLS, R.string.app_drawer_group_tools, AgentIcons.ic_svc_project_board),
-    Destination(Routes.SKILLS, R.string.app_nav_skills, AgentIcons.ic_plugin),
+    Destination(Routes.SKILLS, R.string.app_nav_skills, AgentIcons.ic_knowledge_graph),
     Destination(Routes.AI_SETTINGS, R.string.app_nav_ai, AgentIcons.ic_ai_sparkle),
     Destination(Routes.SETTINGS, R.string.app_nav_settings, AgentIcons.ic_settings),
 )
