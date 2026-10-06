@@ -292,6 +292,10 @@ object AgentIcons {
     val ic_timer: Int get() = R.drawable.ic_timer
     @get:DrawableRes
     val ic_clock: Int get() = R.drawable.ic_clock
+    
+    /** 手绘补充的沙漏（原图标集里没有）；等待类工具用。 */
+    @get:DrawableRes
+    val ic_hourglass: Int get() = R.drawable.ic_hourglass
     @get:DrawableRes
     val ic_scholar: Int get() = R.drawable.ic_scholar
     @get:DrawableRes

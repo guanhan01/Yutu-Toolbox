@@ -1,0 +1,48 @@
+<!-- ic_hourglass -->
+<!--
+  手绘补充：整套 364 枚图标里**没有沙漏/漏斗**（查过 ic_timeout / ic_pending /
+  ic_queued / ic_progress_bar / ic_progress_ring / ic_svc_sandbox 都不是）。
+  等待类工具需要一个「会翻过来的」形象，因此按同一套规范新增这一枚：
+  24dp 网格、2.0dp 主描边、圆角端点、无填充（可被 tint）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 上下盖板 -->
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M5.4,3.8L18.6,3.8M5.4,20.2L18.6,20.2" />
+
+    <!-- 上下两个斗，在中部收窄 -->
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M7.2,3.8V6.4L12,11.2L16.8,6.4V3.8" />
+
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@null"
+        android:pathData="M7.2,20.2V17.6L12,12.8L16.8,17.6V20.2" />
+
+    <!-- 中间那道细颈 -->
+    <path
+        android:strokeColor="#1F2333"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@null"
+        android:pathData="M12,11.2L12,12.8" />
+
+</vector>

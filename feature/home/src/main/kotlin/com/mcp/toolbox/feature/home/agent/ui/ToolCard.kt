@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -474,11 +475,14 @@ private fun WaitCapsule(segment: ToolCallSegment) {
     // 开了「减少动画」/ 低电量时不做无限动画 —— 那种设置下用户想去掉的正是这种一直转的东西。
     val flip = if (running && !motion.reduced) {
         val transition = rememberInfiniteTransition(label = "wait-flip")
+        // target 用 180 而不是 360：360 会让沙漏转到背面（镜像），看起来是「倒过来写」。
+        // 0 → 180（翻过去）→ 再回到 0（翻回来），配合 Reverse 才是「翻来翻去」。
         val angle by transition.animateFloat(
             initialValue = 0f,
-            targetValue = 360f,
+            targetValue = 180f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2400, easing = LinearEasing),
+                animation = tween(durationMillis = FLIP_MS, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
             ),
             label = "wait-flip-angle",
         )
@@ -497,9 +501,11 @@ private fun WaitCapsule(segment: ToolCallSegment) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         MiuixIconRes(
-            iconRes = AgentIcons.ic_timer,
+            iconRes = AgentIcons.ic_hourglass,
             contentDescription = null,
-            modifier = Modifier.graphicsLayer { rotationY = flip },
+            // rotationX（上下翻）而不是 rotationY（左右翻）：
+            // 沙漏要「翻过来」才是它在真实世界里倒转的样子，绕竖轴转是转圈，不像。
+            modifier = Modifier.graphicsLayer { rotationX = flip },
             tint = if (running) colors.primary else colors.onSurfaceVariant,
             size = 18.dp,
         )
@@ -512,6 +518,8 @@ private fun WaitCapsule(segment: ToolCallSegment) {
 }
 
 private val WAIT_CAPSULE_HEIGHT = 40.dp
+/** 沙漏翻转半圈（0→180 或 180→0）的时长。 */
+private const val FLIP_MS = 650
 private const val TICK_MS = 500L
 
 /**
