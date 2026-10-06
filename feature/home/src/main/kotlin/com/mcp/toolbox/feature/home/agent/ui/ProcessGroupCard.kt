@@ -156,9 +156,12 @@ fun ProcessGroupCard(
         // ── 组内：树形连接线 + 各块 ──
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(motion.cardEnter(), expandFrom = Alignment.Top) +
+            // clip = false：第一行的竖线要向组头方向**画出容器之外**（补到箭头尖端），
+            // 而 expandVertically 默认在动画期间做裁剪，会把这段补画的部分切掉 ——
+            // 用户看到的「刚展开时没接上、过一会儿才接上」正是这个（实测反馈）。
+            enter = expandVertically(motion.cardEnter(), expandFrom = Alignment.Top, clip = false) +
                 fadeIn(animationSpec = motion.fade(180)),
-            exit = shrinkVertically(motion.cardEnter(), shrinkTowards = Alignment.Top) +
+            exit = shrinkVertically(motion.cardEnter(), shrinkTowards = Alignment.Top, clip = false) +
                 fadeOut(animationSpec = motion.fade(140)),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -211,10 +214,15 @@ private fun TreeRow(
 
             // 竖线：末项止于转弯处（形成 └），其余画满整行。
             //
-            // 起点刻意**向上多画 [GAP_ABOVE_FIRST]**：组头与第一项之间有一段间距，
-            // 不补这段的话竖线会从间距下方才出现，看起来就与下括号的尖端断开了。
-            // 只有第一行需要补——后续行的竖线由上一行的末端接续。
-            val vStart = if (isFirst) -with(density) { GAP_ABOVE_FIRST.toPx() } else 0f
+            // 第一行要把竖线向上补到**箭头尖端**（不是组头底边）。
+            //
+            // 用 maxOf 兜底：若将来有人调大 CHILD_GAP 等间距，也不会把这根线缩回到
+            // 尖端以下 —— 少接一截看起来就是「没接上」（用户实测反馈过两次）。
+            val vStart = if (isFirst) {
+                -with(density) { maxOf(GAP_ABOVE_FIRST, LINE_REACH_ABOVE_CONTENT).toPx() }
+            } else {
+                0f
+            }
             val vEnd = if (isLast) ey else size.height
             if (vEnd > 0f) {
                 drawLine(
@@ -308,6 +316,21 @@ private val CONNECTOR_STROKE = 1.5.dp
  * 现在从同一个值派生，改一处即可。
  */
 private val GAP_ABOVE_FIRST = HEADER_CONTENT_GAP
+
+/**
+ * 第一行竖线要向上伸到「箭头尖端」所需的距离（相对第一行顶边的负偏移）。
+ *
+ * 箭头是 [AgentIcons.ic_chevron_down]，其尖端在 24 网格的 y=16；缩到
+ * [GROUP_HEADER_CHEVRON] 大小、并在 36dp 高的组头里居中对齐后，
+ * 尖端距组头顶边 = (36 − 16)/2 + 16/24 × 16 ≈ 20.67dp。
+ * 第一行顶边距组头顶边 = 组头高 + 间距，因此需要向上伸
+ *   36 + HEADER_CONTENT_GAP − 20.67。
+ *
+ * 写成算式而不是写死一个数：组头高、图标尺寸、间距任一变了都还成立。
+ */
+private val LINE_REACH_ABOVE_CONTENT =
+    GROUP_HEADER_HEIGHT + HEADER_CONTENT_GAP - (GROUP_HEADER_HEIGHT - GROUP_HEADER_CHEVRON) / 2f -
+        GROUP_HEADER_CHEVRON * (16f / 24f)
 
 /** 组内各项之间的间距。 */
 private val CHILD_GAP = 6.dp
