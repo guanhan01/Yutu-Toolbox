@@ -94,7 +94,7 @@ object SshRemote {
 
     /** 停止 sshd。返回是否已确认停掉（端口不再监听）。 */
     suspend fun stop(context: Context): Boolean = withContext(Dispatchers.IO) {
-        run(context, "for p in \$(pidof sshd); do kill \"\$p\" 2>/dev/null; done")
+        run(context, KILL_SCRIPT)
         repeat(6) {
             if (!isRunningRaw(context)) return@withContext true
             Thread.sleep(200)
@@ -129,6 +129,21 @@ object SshRemote {
             append("setsid chroot \"\$R\" /usr/sbin/sshd -D >/dev/null 2>&1 </dev/null & ")
         }
     }
+
+    /**
+     * 逐个读 /proc 下各进程的 comm 文件找 sshd 并结束它。
+     *
+     * **不能用 `pidof sshd`**：实测在 `su -c` 下也返回空（退出码 1）——
+     * Android 的 pidof 匹配不到这个进程，于是停止脚本静默什么都不做，
+     * 界面却报「SSH 停止失败」（用户实测反馈）。
+     * 逐个读 `/proc/<pid>/comm` 是可靠的，实测能拿到 11619 并成功结束。
+     *
+     * 只按进程名匹配：本机没有别的 sshd，而加路径匹配会让脚本依赖 rootfs
+     * 的绝对路径，反而更容易因路径变化而失配。
+     */
+    private const val KILL_SCRIPT =
+        "for p in /proc/[0-9]*; do [ \"\$(cat \"\$p/comm\" 2>/dev/null)\" = \"sshd\" ] && " +
+            "kill \"\${p#/proc/}\" 2>/dev/null; done"
 
     private const val LISTEN_SCRIPT =
         "awk '\$4==\"0A\" && \$2 ~ /:0016\$/ {print \"LISTEN\"}' /proc/net/tcp | head -n 1"

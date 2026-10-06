@@ -257,7 +257,7 @@
     <string name="ai_allow_write">允许写入</string>
     <string name="ai_allow_write_desc">关闭时，文件写入、APK 重打包、数据库写入会被拒绝；只读工具不受影响。默认关闭。</string>
     <string name="ai_ssh_remote">SSH 远程访问</string>
-    <string name="ai_ssh_remote_desc">在 Linux 环境里启动 sshd（22 端口），同一网络下可用电脑连接。需要先安装「SSH 远程访问」组件。App 被系统回收或设备重启后会停止。</string>
+    <string name="ai_ssh_remote_desc">在 Linux 环境里启动 sshd，监听 22 端口。App 被系统回收或设备重启后会停止。</string>
     <string name="ai_group_generic">通用兼容</string>
     <string name="ai_group_vendors">定制供应商</string>
     <string name="ai_custom_add">新增自定义供应商</string>

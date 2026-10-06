@@ -237,6 +237,25 @@ fun AiSettingsScreen(
     val sshScope = rememberCoroutineScope()
     // 开关只负责「跑没跑」；用哪个发行版跟着开发环境里的选择走
     val sshDistro = remember { com.mcp.toolbox.ui.linux.LinuxPrefs.distro(context) }
+    /**
+     * sshd 装了没。
+     *
+     * 没装就不显示这个开关 —— 装都没装就摆一个开关在那儿，用户打开只会拿到
+     * 「启动失败」，等于用报错代替了应有的引导（用户实测反馈）。
+     * 安装入口在「开发环境」页的组件列表里，那边才是该出现的地方。
+     *
+     * 读文件系统，放 IO 线程；用 probe 结果作为凭据，与能力判据一致。
+     */
+    var sshInstalled by remember { mutableStateOf(false) }
+    LaunchedEffect(sshRemote) {
+        sshInstalled = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.mcp.toolbox.ui.linux.LinuxChecker.isInstalled(
+                context,
+                sshDistro,
+                com.mcp.toolbox.ui.linux.LinuxComponent.SSH,
+            )
+        }
+    }
 
     remember(config) { AiConfigStore.load(context); config }
     remember { WriteGuard.load(context) }
@@ -327,12 +346,15 @@ fun AiSettingsScreen(
                 )
                 // SSH 远程访问：只回答「跑没跑」。装没装由开发环境页的组件检测负责，
                 // 这里不重复表达，避免两个地方都能改同一件事。
-                MiuixSuperSwitch(
-                    title = stringResource(R.string.ai_ssh_remote),
-                    subtitle = stringResource(R.string.ai_ssh_remote_desc),
-                    checked = sshRemote,
-                    onCheckedChange = { on -> toggleSshRemote(on) },
-                )
+                // 未安装整项不显示：装都没装就摆开关，打开只会拿到报错。
+                if (sshInstalled) {
+                    MiuixSuperSwitch(
+                        title = stringResource(R.string.ai_ssh_remote),
+                        subtitle = stringResource(R.string.ai_ssh_remote_desc),
+                        checked = sshRemote,
+                        onCheckedChange = { on -> toggleSshRemote(on) },
+                    )
+                }
             }
         }
 
