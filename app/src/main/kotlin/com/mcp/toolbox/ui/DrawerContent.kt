@@ -31,6 +31,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -362,11 +364,17 @@ private fun ChatHistoryRow(
     val spacing = MiuixTheme.dimens.spacing
     val press = rememberMiuixPressState()
     var showMenu by remember { mutableStateOf(false) }
+    /** 本行在窗口中的矩形，供溢出菜单定位（不传 anchor 会退化成用整个列表定位）。 */
+    var rowBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
 
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // 菜单要贴在这一行上。**必须显式给 anchor**：
+                // 菜单是 Column 里的兄弟节点，不传 anchor 时 Popup 会退回用父布局
+                // （= 整个列表）的矩形定位，于是长按中间某一行、菜单却出现在列表顶部。
+                .onGloballyPositioned { rowBounds = it.boundsInWindow() }
                 .padding(start = spacing.xxl, end = spacing.md, top = 1.dp, bottom = 1.dp)
                 .clip(RoundedCornerShape(MiuixTheme.radius.inner))
                 .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
@@ -387,6 +395,7 @@ private fun ChatHistoryRow(
         MiuixOverflowMenu(
             expanded = showMenu,
             onDismiss = { showMenu = false },
+            anchor = rowBounds,
             alignStart = true,
         ) {
                 MiuixMenuItem(

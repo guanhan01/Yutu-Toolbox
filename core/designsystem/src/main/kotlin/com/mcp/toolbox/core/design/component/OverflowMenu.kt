@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
@@ -80,10 +81,18 @@ import androidx.compose.ui.platform.LocalConfiguration
  * 根布局由 MainActivity 持有，菜单在深层模块，因此用共享状态通信。
  */
 object MenuScrim {
+    /**
+     * 要求压暗的菜单数量。
+     *
+     * **必须是 `mutableStateOf`**：自增发生在菜单内部（深层），而读它的压暗层
+     * 位于应用根布局 —— 普通变量不会触发那一处的重组，压暗层就永远不出现
+     * （用户实测反馈「没压暗」）。计数式是为了多个菜单不会互相盖掉状态。
+     */
     private val _count = androidx.compose.runtime.mutableStateOf(0)
 
-    /** 当前是否有菜单要求压暗（用计数，避免多个菜单互相盖掉对方的状态）。 */
+    /** 当前是否有菜单要求压暗。读到的是 State，根布局因此会随它重组。 */
     val visible: Boolean get() = _count.value > 0
+
 
     fun show() { _count.value += 1 }
     fun hide() { _count.value = (_count.value - 1).coerceAtLeast(0) }
@@ -134,11 +143,12 @@ fun MenuScrimOverlay(onDismiss: () -> Unit) {
         ),
         label = "menu-scrim-alpha",
     )
+
     if (alpha <= 0.001f) return
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.32f * alpha))
+            .background(Color.Black.copy(alpha = MenuScrimAlpha * alpha))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -146,6 +156,14 @@ fun MenuScrimOverlay(onDismiss: () -> Unit) {
             ),
     )
 }
+
+/**
+ * 压暗不透明度。
+ *
+ * 32% 在浅色主题下几乎看不出来（实测：背景 247 → 186，肉眼仍觉得"没压暗"），
+ * 所以提到 45%。做成常量便于再调。
+ */
+private const val MenuScrimAlpha = 0.45f
 
 /**
  * 菜单缩放动画规格。**展开与收起共用同一个** —— 这是「倒溢出」的关键，
@@ -412,21 +430,29 @@ private fun MiuixOverflowMenuOfficial(
             launch { alphaAnim.animateTo(1f, tween(200)) }
             fraction.animateTo(1f, MenuFractionSpec)
         } else {
-            // 先缩、缩完再撤：alpha 跟着一起收，卸载时机由 scale 决定
-            launch {
-                fraction.animateTo(0f, MenuFractionSpec)
-                alphaAnim.snapTo(0f)
-                mounted = false
-            }
+            // alpha 与 scale **并行**退场（官方 AlphaExit = tween(150)）。
+            //
+            // 早先写成「先缩、缩完再 snapTo(0)」，于是整个收缩过程中 alpha 都是 1 ——
+            // 而 0.82/362.5 的 spring 会过冲再回弹，用户就看到「完全不透明的小菜单
+            // 在左下角弹来弹去」（实测截图里的残影）。透明度必须跟着一起退。
+            launch { alphaAnim.animateTo(0f, tween(150)) }
+            fraction.animateTo(0f, MenuFractionSpec)
+            mounted = false
         }
     }
     if (!mounted) return
 
-    // 登记/撤销压暗层。用 DisposableEffect(shown)：菜单收起时自动撤销，
-    // 不需要在每一条关闭路径上手动配对（漏一条就会留下永久压暗的屏）。
+    // 登记/撤销压暗层。
+    //
+    // ⚠️ 条件用 `expanded`，**不能用 `shown`**。
+    // `shown` 里含一层防抖：`suppressed` 会把「350ms 内重新打开」判成同一次点击、
+    // 置 shown=false。若拿它当条件，快速「关掉再点开」时压暗层永远不注册 ——
+    // 而菜单本身走的是 `mounted`，不受这层防抖影响，于是菜单出来了、压暗没有
+    // （用户实测反馈「点得够快压暗就不出现」）。
+    // 防抖只该作用于「是否播放入场动画」，不该决定「有没有压暗」。
     if (scrim) {
-        DisposableEffect(shown) {
-            if (shown) {
+        DisposableEffect(expanded) {
+            if (expanded) {
                 MenuScrim.show()
                 MenuScrim.registerDismiss {
                     lastDismissAt[0] = System.currentTimeMillis()
@@ -434,7 +460,7 @@ private fun MiuixOverflowMenuOfficial(
                 }
             }
             onDispose {
-                if (shown) {
+                if (expanded) {
                     MenuScrim.hide()
                     MenuScrim.unregisterDismiss()
                 }
