@@ -182,6 +182,8 @@ fun HomeScreen(
      * 约等于整条输入栏，右对齐就落到屏幕最右侧，与那颗按钮的实际位置对不上。
      */
     var modelAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    /** 输入栏「+」按钮的窗口矩形，附件菜单要用它定位。 */
+    var attachAnchor by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var showOverflow by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
     var pathInput by remember { mutableStateOf("") }
@@ -667,6 +669,7 @@ fun HomeScreen(
                 // 把「模型」按钮的窗口矩形收上来：菜单要用它定位。
                 // 按钮在 InputBar 内部，菜单在外层，只能这样传。
                 onModelAnchorChange = { modelAnchor = it },
+                onAttachAnchorChange = { attachAnchor = it },
                 value = input,
                 onValueChange = { input = it },
                 sending = sending,
@@ -751,7 +754,10 @@ fun HomeScreen(
     MiuixOverflowMenu(
         expanded = showOverflow,
         onDismiss = { showOverflow = false },
-        // 加号在输入栏左侧、屏幕底部：贴底 + 左对齐
+        // 贴住加号那颗按钮的左边缘向右展开。
+        // 早先只给 stickToBottom + alignStart、不传 anchor，于是 Popup 退回用父布局
+        // 矩形定位，菜单跑到屏幕最左边（用户实测反馈「加号这个太左了」）。
+        anchor = attachAnchor,
         alignStart = true,
         stickToBottom = true,
         // 非焦点模式：不抢输入框焦点，输入法保持弹出
@@ -1348,6 +1354,8 @@ private fun InputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onAttach: () -> Unit,
+    /** 加号按钮的窗口矩形；附件菜单要贴着它展开。 */
+    onAttachAnchorChange: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     onPickModel: () -> Unit,
     onPickReasoning: () -> Unit,
     @androidx.annotation.DrawableRes providerIconRes: Int,
@@ -1487,6 +1495,7 @@ private fun InputBar(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
+                        .onGloballyPositioned { onAttachAnchorChange(it.boundsInWindow()) }
                         .clickable(onClick = onAttach),
                     contentAlignment = Alignment.Center,
                 ) {

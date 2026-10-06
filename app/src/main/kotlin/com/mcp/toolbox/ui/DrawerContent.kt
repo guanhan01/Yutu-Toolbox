@@ -374,8 +374,11 @@ private fun ChatHistoryRow(
                 // 菜单要贴在这一行上。**必须显式给 anchor**：
                 // 菜单是 Column 里的兄弟节点，不传 anchor 时 Popup 会退回用父布局
                 // （= 整个列表）的矩形定位，于是长按中间某一行、菜单却出现在列表顶部。
-                .onGloballyPositioned { rowBounds = it.boundsInWindow() }
                 .padding(start = spacing.xxl, end = spacing.md, top = 1.dp, bottom = 1.dp)
+                // ⚠️ onGloballyPositioned 必须放在 padding **之后**。
+                // 修饰符从左到右包裹，放在 padding 之前量到的是「含左内缩的整行」，
+                // 菜单因此比高亮条更靠左（用户实测反馈「侧边栏这个太左了」）。
+                .onGloballyPositioned { rowBounds = it.boundsInWindow() }
                 .clip(RoundedCornerShape(MiuixTheme.radius.inner))
                 .background(if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent)
                 .miuixClickable(press, true, onLongClick = { showMenu = true }, onClick = onClick)
