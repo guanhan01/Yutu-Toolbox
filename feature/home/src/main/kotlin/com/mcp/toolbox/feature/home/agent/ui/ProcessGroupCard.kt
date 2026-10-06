@@ -300,8 +300,14 @@ private val CONTENT_START = LINE_X + 12.dp
 
 private val CONNECTOR_STROKE = 1.5.dp
 
-/** 组头与第一项之间的空隙：第一行的竖线要向上补这一段，才与下括号尖端相连。 */
-private val GAP_ABOVE_FIRST = 6.dp
+/**
+ * 组头与第一项之间的空隙：第一行的竖线要向上补这一段，才与下括号尖端相连。
+ *
+ * **必须等于 [HEADER_CONTENT_GAP]** —— 它俩说的是同一段距离（组头底边到第一项顶边）。
+ * 早先这里写 6dp、间距用 8dp，差 2dp，竖线就永远差一小截接不上（用户实测反馈）。
+ * 现在从同一个值派生，改一处即可。
+ */
+private val GAP_ABOVE_FIRST = HEADER_CONTENT_GAP
 
 /** 组内各项之间的间距。 */
 private val CHILD_GAP = 6.dp

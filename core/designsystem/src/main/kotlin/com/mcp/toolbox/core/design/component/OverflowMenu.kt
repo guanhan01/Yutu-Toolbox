@@ -251,9 +251,15 @@ fun MiuixOverflowMenu(
      * 「返回键收回」不靠这一层：那是 [focusable] 的职责（focusable 的 Popup 才拦返回键）。
      */
     scrim: Boolean = true,
+    /**
+     * 是否处理软键盘：打开菜单先收键盘，关闭时（仅当原本弹着）再放回。
+     *
+     * 需要输入法保持弹出的场景传 false 并自行处理；默认 true。
+     */
+    imeAware: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, scrim, content)
+    MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, scrim, imeAware, content)
 }
 
 /**
@@ -410,6 +416,7 @@ private fun MiuixOverflowMenuOfficial(
     focusable: Boolean,
     offset: IntOffset,
     scrim: Boolean,
+    imeAware: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -432,6 +439,20 @@ private fun MiuixOverflowMenuOfficial(
     }
 
     var mounted by remember { mutableStateOf(expanded) }
+    /**
+     * 菜单打开前键盘是否弹着。
+     *
+     * 只在这时为 true，关闭菜单时才把键盘放回来；用户本来没在用键盘就不弹。
+     * （用户口径：「键盘弹起的前提条件是，必须是键盘一开始先弹起来了」。）
+     */
+    var imeWasVisible by remember { mutableStateOf(false) }
+    // 在组合期取好：LaunchedEffect 的 lambda 不是组合上下文，不能在里面调 LocalView.current
+    val imeView = LocalView.current
+    val imeController = remember(imeView) {
+        (imeView.context as? android.app.Activity)?.let { activity ->
+            androidx.core.view.WindowCompat.getInsetsController(activity.window, imeView)
+        }
+    }
     // 两个 Animatable 的初值固定为 0：若按 expanded 的当前值初始化，
     // 调用点写成 `if (expanded) { MiuixOverflowMenu(...) }` 时首次组合的 expanded
     // 已是 true，初值直接是 1，随后的「动画到 1」等于没动，入场动画被整段跳过。
@@ -470,6 +491,11 @@ private fun MiuixOverflowMenuOfficial(
             launch { alphaAnim.animateTo(1f, tween(200)) }
             fraction.animateTo(1f, MenuFractionSpec)
         } else {
+            // 收菜单：键盘原本弹着就放回来
+            if (imeAware && imeWasVisible) {
+                imeController?.show(androidx.core.view.WindowInsetsCompat.Type.ime())
+                imeWasVisible = false
+            }
             // alpha 与 scale **并行**退场（官方 AlphaExit = tween(150)）。
             //
             // 早先写成「先缩、缩完再 snapTo(0)」，于是整个收缩过程中 alpha 都是 1 ——
@@ -480,6 +506,22 @@ private fun MiuixOverflowMenuOfficial(
             mounted = false
         }
     }
+    // ── 键盘：开菜单先收、关菜单按需弹回 ──
+    //
+    // 用户口径：弹出菜单前先收键盘（否则菜单和键盘叠在一起），
+    // 关闭时**只有当键盘本来就在弹着**才放回来 —— 用户没在用键盘就别自作主张弹。
+    // 放在组件里统一处理，省得 20 个调用点各写一遍。
+    if (imeAware && expanded) {
+        // 可见性要从 WindowInsetsCompat 上读（controller 本身没有 isVisible）
+        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(imeView)
+        val visible = insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+        if (visible) {
+            // 记下「本来是弹着的」，收起菜单时据此决定要不要放回来
+            imeWasVisible = true
+            imeController?.hide(androidx.core.view.WindowInsetsCompat.Type.ime())
+        }
+    }
+
     if (!mounted) return
 
     // 登记/撤销压暗层。

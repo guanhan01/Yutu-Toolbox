@@ -766,8 +766,11 @@ fun HomeScreen(
             x = with(androidx.compose.ui.platform.LocalDensity.current) { (-10).dp.roundToPx() },
             y = 0,
         ),
-        // 非焦点模式：不抢输入框焦点，输入法保持弹出
-        focusable = false,
+        // focusable=true：只有焦点型 Popup 才拦得住返回手势/返回键，
+        // 也才算「点击外部」。早先传 false（想让输入法保持弹出），结果是
+        // 菜单开着时手势返回直接退出应用（用户实测反馈）。
+        // 输入法那件事现在由组件里的 imeAware 负责：开菜单先收键盘、关菜单再按需放回。
+        focusable = true,
     ) {
         MiuixMenuItem(
             text = stringResource(R.string.chat_pick_model),
