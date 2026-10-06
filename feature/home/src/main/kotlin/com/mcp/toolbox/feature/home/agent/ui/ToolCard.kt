@@ -488,12 +488,18 @@ private fun WaitCapsule(segment: ToolCallSegment) {
             targetValue = 360f,
             animationSpec = infiniteRepeatable(
                 animation = keyframes {
-                    durationMillis = FLIP_MS * 2 + FLIP_HOLD_MS
+                    // 周期 = 转半圈 + 停 + 转半圈 + 停。
+                    // 两处停顿都要有：沙漏每被翻过来一次，沙子就要落一次。
+                    // 早先只在 180° 处插了保持，于是「翻了 180 停一下，再翻 180 不停」——
+                    // 因为 360° 那处直接接回 0° 就进下一轮了（用户实测反馈）。
+                    durationMillis = FLIP_MS * 2 + FLIP_HOLD_MS * 2
                     0f at 0 using FastOutSlowInEasing
                     180f at FLIP_MS using FastOutSlowInEasing
-                    // 保持不动：沙子落下的那一下
+                    // 第一处停顿：沙子落下
                     180f at FLIP_MS + FLIP_HOLD_MS
                     360f at FLIP_MS * 2 + FLIP_HOLD_MS using FastOutSlowInEasing
+                    // 第二处停顿必须显式写出来，否则进不了这一帧就被截断
+                    360f at FLIP_MS * 2 + FLIP_HOLD_MS * 2
                 },
                 // Restart：360 与 0 在视觉上是同一个姿态，因此接起来是连续的
                 repeatMode = RepeatMode.Restart,
