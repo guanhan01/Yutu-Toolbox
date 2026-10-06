@@ -20,6 +20,26 @@ class AiHttpException(
 ) : IOException("HTTP $code：$detail")
 
 /**
+ * 流式响应的终止原因（各家字段名不同，这里归一）。
+ *
+ * 只在「正常结束但内容不完整」时才有意义，因此单独成类型，而不是塞进异常体系 ——
+ * 它不是失败：连接、协议、状态码全都正常，只是模型没写完。
+ */
+enum class FinishReason {
+    /** 达到长度上限（OpenAI `length`、Anthropic `max_tokens`、Gemini `MAX_TOKENS`）。 */
+    Length,
+
+    /** 被内容安全策略拦截（OpenAI `content_filter`、Anthropic `refusal`、Gemini `SAFETY`）。 */
+    Blocked,
+
+    /** 正常写完。 */
+    Normal,
+
+    /** 未识别或未提供。 */
+    Unknown,
+}
+
+/**
  * 把请求失败翻译成回答区该显示的那一类系统卡（Spec 第 8.3 节矩阵）。
  *
  * 刻意做成**纯函数**：不碰网络、不碰 Android API，因此可以直接单测。
@@ -56,6 +76,33 @@ object FaultMapper {
         is UnknownHostException -> SystemKind.NetworkLost
         is IOException -> SystemKind.NetworkLost
         else -> SystemKind.ServerError
+    }
+
+    /**
+     * 归一各家的终止原因标记（纯函数，可单测）。
+     *
+     * 四家字段名不同、取值也不同：
+     * - OpenAI 兼容：`choices[0].finish_reason` = `length` / `content_filter` / `stop`
+     * - Anthropic：`delta.stop_reason` = `max_tokens` / `refusal` / `end_turn`
+     * - Gemini：`candidates[0].finishReason` = `MAX_TOKENS` / `SAFETY` / `STOP`
+     *
+     * 大小写与写法都不统一，所以这里统一按小写做包含匹配 ——
+     * 例：`max_tokens` 与 `MAX_TOKENS` 都落到 [FinishReason.Length]。
+     *
+     * ⚠️ **自建网关的标记未知**，若它用了别的词，这里会落回 [FinishReason.Unknown]，
+     * 也就是「当作正常结束」—— 宁可不报，也不误报成截断/拦截（详见 AiFault 的说明）。
+     */
+    fun finishReasonOf(raw: String?): FinishReason {
+        val v = raw?.trim()?.lowercase().orEmpty()
+        if (v.isEmpty() || v == "null") return FinishReason.Unknown
+        return when {
+            v.contains("length") || v.contains("max_token") -> FinishReason.Length
+            v.contains("content_filter") || v.contains("refusal") ||
+                v.contains("safety") || v.contains("block") -> FinishReason.Blocked
+            v.contains("stop") || v.contains("end_turn") || v.contains("complete") ->
+                FinishReason.Normal
+            else -> FinishReason.Unknown
+        }
     }
 
     /**

@@ -143,6 +143,14 @@ object AiChatClient {
          */
         onStall: () -> Unit = {},
         onDelta: (String) -> Unit,
+        /**
+         * 归一后的终止原因（正常结束但内容不全时才有意义）。
+         *
+         * 通过回调上报而不是塞进 `Result` 的异常：截断与拦截**不是失败** ——
+         * 连接、协议、状态码都正常，只是模型没写完 / 被拦了。
+         * 用异常表达会让上层误以为要走「失败」路径（清过程、给重试）。
+         */
+        onFinishReason: (FinishReason) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) {
         // 按「协议」而不是「厂商」分派：自定义供应商由用户自己选协议，
         // 选 Anthropic 就该走 anthropicStream，与它挂在哪个枚举上无关。
@@ -207,7 +215,12 @@ object AiChatClient {
                         // 而最终答复留在正文区。见 `AgentTimeline` 的 Narration 分支。
                         //
                         // （曾试过「整轮先缓冲、收尾再派发」，那会牺牲逐字流式，已回滚。）
-                        readSse(conn.inputStream.bufferedReader()) { content, callDelta, reasoning, usage ->
+                        // 本段的终止原因：末条 chunk 才带，用来判定「截断 / 被拦截」
+                        var finishReason: String? = null
+                        readSse(
+                            conn.inputStream.bufferedReader(),
+                            onFinishReason = { finishReason = it },
+                        ) { content, callDelta, reasoning, usage ->
                         lastEventAt.set(System.currentTimeMillis())
                         if (content.isNotEmpty()) {
                             roundText.append(content)
@@ -1076,6 +1089,16 @@ object AiChatClient {
     /** 逐行读 SSE，产出文本增量与（可能分片的）tool_calls 增量。 */
     private fun readSse(
         reader: BufferedReader,
+        /**
+         * 终止原因回调（OpenAI 兼容的 `choices[0].finish_reason`）。
+         *
+         * 单列一个参数而不塞进 onChunk：它不是「一段内容」，只在末尾出现一次，
+         * 与逐 token 的增量不是同类东西。
+         *
+         * ⚠️ 参数顺序不能换：`onChunk` 必须在最后，调用点才能用尾随 lambda。
+         * 若把它挪到 onFinishReason 之前，尾随 lambda 会去绑最后一个参数，直接编译不过。
+         */
+        onFinishReason: (String) -> Unit = {},
         onChunk: (
             content: String,
             toolCall: JSONObject?,
@@ -1094,7 +1117,12 @@ object AiChatClient {
                     // 末条 chunk（choices 为空）才带 usage
                     root.optJSONObject("usage")?.let { u -> onChunk("", null, "", u) }
                     val choices = root.optJSONArray("choices") ?: return@runCatching
-                    val d = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@runCatching
+                    val choice0 = choices.optJSONObject(0) ?: return@runCatching
+                    // 终止原因挂在 choice 上、不在 delta 里；末条 chunk 往往只有它
+                    (choice0.opt("finish_reason") as? String)
+                        ?.takeIf { it.isNotBlank() && it != "null" }
+                        ?.let(onFinishReason)
+                    val d = choice0.optJSONObject("delta") ?: return@runCatching
                     d.optJSONArray("tool_calls")?.let { calls ->
                         (0 until calls.length()).forEach { i ->
                             calls.optJSONObject(i)?.let { onChunk("", it, "", null) }

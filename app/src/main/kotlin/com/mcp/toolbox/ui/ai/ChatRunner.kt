@@ -143,6 +143,16 @@ object ChatRunner {
                     onStall = {
                         AgentStreamBus.emit { it.onFailed(SystemKind.Stall, "", 0) }
                     },
+                    // 正常结束但内容不全：截断 → 尾部「继续生成」；被拦截 → 灰卡 + 建议改说法。
+                    // 两者都**不走失败路径**，所以在这里单独上报，而不是等 result 变 failure。
+                    onFinishReason = { reason ->
+                        val kind = when (reason) {
+                            FinishReason.Length -> SystemKind.Truncated
+                            FinishReason.Blocked -> SystemKind.Blocked
+                            else -> null
+                        }
+                        kind?.let { k -> AgentStreamBus.emit { it.onAnomaly(k) } }
+                    },
                     onUsage = { prompt, completion ->
                         val current = _running.value ?: return@completeStream
                         _running.value = current.copy(
