@@ -475,8 +475,8 @@ private fun WaitCapsule(segment: ToolCallSegment) {
     // 开了「减少动画」/ 低电量时不做无限动画 —— 那种设置下用户想去掉的正是这种一直转的东西。
     val flip = if (running && !motion.reduced) {
         val transition = rememberInfiniteTransition(label = "wait-flip")
-        // target 用 180 而不是 360：360 会让沙漏转到背面（镜像），看起来是「倒过来写」。
-        // 0 → 180（翻过去）→ 再回到 0（翻回来），配合 Reverse 才是「翻来翻去」。
+        // 0 → 180 是「上半翻到下半」= 沙漏倒过来；配合 Reverse 再转回去，就是翻来翻去。
+        // 不用 360：那样只是转一整圈回到原样，看不出「倒过来了」。
         val angle by transition.animateFloat(
             initialValue = 0f,
             targetValue = 180f,
@@ -503,9 +503,10 @@ private fun WaitCapsule(segment: ToolCallSegment) {
         MiuixIconRes(
             iconRes = AgentIcons.ic_hourglass,
             contentDescription = null,
-            // rotationX（上下翻）而不是 rotationY（左右翻）：
-            // 沙漏要「翻过来」才是它在真实世界里倒转的样子，绕竖轴转是转圈，不像。
-            modifier = Modifier.graphicsLayer { rotationX = flip },
+            // rotationZ（在平面内顺时针转）—— 用户口径是「顺时针翻」，
+            // 不是绕横轴的 3D 翻转（那个看起来是「往里倒」，用户明确否掉了）。
+            // Compose 的屏幕坐标 Y 轴朝下，因此正的 rotationZ 就是顺时针。
+            modifier = Modifier.graphicsLayer { rotationZ = flip },
             tint = if (running) colors.primary else colors.onSurfaceVariant,
             size = 18.dp,
         )
