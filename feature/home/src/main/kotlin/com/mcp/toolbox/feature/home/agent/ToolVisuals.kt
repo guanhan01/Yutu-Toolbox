@@ -17,7 +17,7 @@ object ToolVisuals {
 
     /** 工具的中文展示名。命中规则时返回具体名，否则回退成工具名本身。 */
     fun displayName(toolName: String): String {
-        TOOL_NAMES[toolName]?.let { return it }
+        NAME_INDEX[toolName]?.let { return it }
         val ns = toolName.substringBefore('.')
         val leaf = toolName.substringAfter('.', toolName)
         return NAMESPACE_LABEL[ns]?.let { "$it · $leaf" } ?: toolName
@@ -26,8 +26,8 @@ object ToolVisuals {
     /** 工具的图标。 */
     @DrawableRes
     fun icon(toolName: String): Int {
-        // 1) 精确命中
-        TOOL_ICONS[toolName]?.let { return it }
+        // 1) 精确命中（索引同时收录点形式与下划线形式，见 indexTools）
+        ICON_INDEX[toolName]?.let { return it }
         // 2) 命名空间命中
         NAMESPACE_ICON[toolName.substringBefore('.')]?.let { return it }
         // 3) 关键词命中（取第一个匹配的关键词规则）
@@ -38,7 +38,7 @@ object ToolVisuals {
 
     /** 工具的动词文案，用于 Running 状态的「正在搜索…」。 */
     fun runningLabel(toolName: String): String =
-        TOOL_VERBS[toolName]
+        VERB_INDEX[toolName]
             ?: NAMESPACE_VERB[toolName.substringBefore('.')]
             ?: "正在执行…"
 
@@ -77,16 +77,41 @@ object ToolVisuals {
      *
      * 纯函数，单测覆盖三种形态与边界。
      */
-    fun waitCapsuleText(elapsedSeconds: Long, totalSeconds: Int, running: Boolean): String {
+    fun waitCapsuleText(
+        elapsedSeconds: Long,
+        totalSeconds: Int,
+        running: Boolean,
+        countdown: Boolean = false,
+    ): String {
         val total = totalSeconds.coerceAtLeast(0)
         val elapsed = elapsedSeconds.coerceAtLeast(0L)
-        if (total <= 0) return "计时"
+        val name = if (countdown) "倒计时" else "计时"
+        if (total <= 0) return name
+        val left = (total.toLong() - elapsed).coerceAtLeast(0L)
         return when {
-            running -> "计时 ${elapsed}s / ${total}s"
-            elapsed >= total -> "计时完成（共 $total 秒）"
-            else -> "计时已中断（${elapsed}s / ${total}s）"
+            // 倒计时显示剩余量（x → 0），计时显示已走量（0 → x）
+            running && countdown -> "$name ${left}s"
+            running -> "$name ${elapsed}s / ${total}s"
+            elapsed >= total -> "${name}完成（共 $total 秒）"
+            countdown -> "${name}已中断（还剩 ${left}s）"
+            else -> "${name}已中断（${elapsed}s / ${total}s）"
         }
     }
+
+    /**
+     * 是不是等待类工具。
+     *
+     * **必须同时认两种写法**：时间线里存的是模型返回的函数名，而出站协议把点换成了
+     * 下划线（`AiToolBridge.toFunctionName`），所以实际拿到的是 `system_wait`。
+     * 早先只写 `system.wait`，于是判定从来不成立、等待胶囊从未出现过（用户实测反馈）。
+     */
+    fun isWaitTool(toolName: String): Boolean =
+        toolName == "system.wait" || toolName == "system_wait"
+
+    /** `system.wait` 是否倒计时模式。参数缺省按「计时」处理。 */
+    fun waitIsCountdown(argsJson: String?): Boolean = runCatching {
+        org.json.JSONObject(argsJson.orEmpty()).optString("mode") == "countdown"
+    }.getOrDefault(false)
 
     /** 兜底图标：未知工具也用一枚「插件」而不是空白。 */
     @DrawableRes
@@ -427,6 +452,32 @@ object ToolVisuals {
         "ui.screenshot" to "正在截图…",
         "ui.tree" to "正在读取界面…",
     )
+
+    /**
+     * 把三张表的 key 同时收成两种形式：原本的**点形式**，以及**下划线形式**。
+     *
+     * 为什么必须两套都在：时间线里存的 `ToolCallSegment.toolName` 是**模型返回的
+     * 函数名**，而出站协议会把工具名里的点换成下划线（`AiToolBridge.toFunctionName`）。
+     * 于是段里存的是 `system_wait`、`linux_exec`，而这几张表的 key 一直是点形式，
+     * **一次都命中不了** —— 表现为所有工具卡都显示 `linux_exec` 这种原始名、
+     * 图标全部退回通用「插件」（用户实测反馈）。
+     *
+     * 同时保留点形式：万一将来某条路径传进来的仍是点形式，不必再改一遍。
+     * 冲突时以先写入的点形式为准（`putIfAbsent`）。
+     */
+    private val ICON_INDEX: Map<String, Int> = indexTools(TOOL_ICONS)
+    private val NAME_INDEX: Map<String, String> = indexTools(TOOL_NAMES)
+    private val VERB_INDEX: Map<String, String> = indexTools(TOOL_VERBS)
+
+    private fun <V> indexTools(base: Map<String, V>): Map<String, V> {
+        val out = LinkedHashMap<String, V>(base.size * 2)
+        base.forEach { (name, value) ->
+            out.putIfAbsent(name, value)
+            out.putIfAbsent(name.replace('.', '_'), value)
+        }
+        return out
+    }
+
 
     private val NAMESPACE_VERB: Map<String, String> = mapOf(
         "web" to "正在联网…",

@@ -463,13 +463,19 @@ object BuiltInToolSetSys {
     private fun systemWait() = ToolDef(
         name = "system.wait",
         title = "等待",
-        description = "等待指定秒数再继续，界面上会显示倒计时。" +
+        description = "等待指定秒数再继续，卡片上会显示一个走动的计时。" +
             "适合「命令已发出、要过一会儿才有结果」的场景，例如等安装、编译或下载完成。" +
-            "最多 600 秒；更久的等待请改用后台任务。等待期间用户可以看到倒计时并随时停止。",
+            "mode 按用户的说法选：他说「计时」就用 timer，说「倒计时」就用 countdown。" +
+            "最多 600 秒；更久的等待请改用后台任务。等待期间用户可以随时停止。",
         schema = Schema.obj(
             listOf(
                 "seconds" to Schema.integer("要等待的秒数（1-600）", default = 30, min = 1, max = 600),
-                "reason" to Schema.string("为什么要等（显示在卡片上，便于用户理解）", default = ""),
+                "mode" to Schema.string(
+                    "计时方式：timer＝从 0 数到 seconds；countdown＝从 seconds 数到 0",
+                    default = "timer",
+                    enum = listOf("timer", "countdown"),
+                ),
+                "reason" to Schema.string("为什么要等（不显示在卡片上，仅记录用途）", default = ""),
             ),
             required = listOf("seconds"),
         ),
@@ -477,6 +483,7 @@ object BuiltInToolSetSys {
         handler = { _, args ->
             val seconds = args.optInt("seconds", 30).coerceIn(1, 600)
             val reason = args.optString("reason").trim()
+            val countdown = args.optString("mode") == "countdown"
             val startedAt = System.currentTimeMillis()
             // 用挂起 delay 而不是 Thread.sleep：这样「停止」能立刻打断它。
             // handler 是同步签名，用 runBlocking 桥接到可取消的协程。
@@ -488,7 +495,8 @@ object BuiltInToolSetSys {
             }
             ToolResult(
                 structured,
-                "已等待 $seconds 秒" + (if (reason.isNotEmpty()) "（$reason）" else "") + "，可以继续。",
+                (if (countdown) "倒计时 $seconds 秒结束" else "计时 $seconds 秒结束") +
+                    (if (reason.isNotEmpty()) "（$reason）" else "") + "，可以继续。",
             )
         },
     )

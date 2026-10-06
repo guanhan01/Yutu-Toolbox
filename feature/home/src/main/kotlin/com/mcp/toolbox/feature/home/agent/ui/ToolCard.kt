@@ -117,7 +117,7 @@ fun ToolCard(
     //
     // 用户要求「和思考一样简便，参数不需要」：等待期间只有一个信息值得看 ——
     // 进到哪了。参数（seconds/reason）与结果（"已等待 N 秒"）都是噪音。
-    if (segment.toolName == "system.wait") {
+    if (com.mcp.toolbox.feature.home.agent.ToolVisuals.isWaitTool(segment.toolName)) {
         WaitCapsule(segment)
         return
     }
@@ -449,6 +449,7 @@ private fun WaitCapsule(segment: ToolCallSegment) {
     val colors = MiuixTheme.colors
     val motion = rememberAgentMotion()
     val total = com.mcp.toolbox.feature.home.agent.ToolVisuals.waitTotalSeconds(segment.argsJson)
+    val countdown = com.mcp.toolbox.feature.home.agent.ToolVisuals.waitIsCountdown(segment.argsJson)
     val running = segment.isRunning
 
     var now by remember(segment.id) { mutableLongStateOf(System.currentTimeMillis()) }
@@ -467,7 +468,7 @@ private fun WaitCapsule(segment: ToolCallSegment) {
 
     val elapsedSeconds = if (total > 0) (now - segment.startedAt) / 1000L else 0L
     val label = com.mcp.toolbox.feature.home.agent.ToolVisuals
-        .waitCapsuleText(elapsedSeconds, total, running)
+        .waitCapsuleText(elapsedSeconds, total, running, countdown)
 
     // 漏斗翻来翻去：绕 Y 轴连续翻转。
     // 开了「减少动画」/ 低电量时不做无限动画 —— 那种设置下用户想去掉的正是这种一直转的东西。

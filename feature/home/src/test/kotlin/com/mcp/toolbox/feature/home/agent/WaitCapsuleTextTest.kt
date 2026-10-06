@@ -1,6 +1,8 @@
 package com.mcp.toolbox.feature.home.agent
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -45,5 +47,29 @@ class WaitCapsuleTextTest {
     @Test
     fun `负数已计时按零处理`() {
         assertEquals("计时 0s / 100s", ToolVisuals.waitCapsuleText(-5, 100, running = true))
+    }
+
+    @Test
+    fun `倒计时显示剩余量从大到小`() {
+        // 倒计时是 x → 0，显示剩余；计时是 0 → x，显示已走。两者不能混。
+        assertEquals("倒计时 30s", ToolVisuals.waitCapsuleText(0, 30, running = true, countdown = true))
+        assertEquals("倒计时 12s", ToolVisuals.waitCapsuleText(18, 30, running = true, countdown = true))
+        assertEquals("倒计时 0s", ToolVisuals.waitCapsuleText(30, 30, running = true, countdown = true))
+    }
+
+    @Test
+    fun `倒计时走完与中断的文案`() {
+        assertEquals("倒计时完成（共 30 秒）", ToolVisuals.waitCapsuleText(30, 30, running = false, countdown = true))
+        assertEquals("倒计时已中断（还剩 22s）", ToolVisuals.waitCapsuleText(8, 30, running = false, countdown = true))
+    }
+
+    @Test
+    fun `工具名的点与下划线两种写法都认`() {
+        // 时间线里存的是模型返回的函数名，出站时点会被换成下划线，
+        // 所以实际拿到的是 system_wait。早先只认点形式，胶囊从未出现过。
+        assertTrue(ToolVisuals.isWaitTool("system.wait"))
+        assertTrue(ToolVisuals.isWaitTool("system_wait"))
+        assertFalse(ToolVisuals.isWaitTool("linux_exec"))
+        assertFalse(ToolVisuals.isWaitTool("linux.exec"))
     }
 }
