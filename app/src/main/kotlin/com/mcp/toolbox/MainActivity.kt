@@ -114,6 +114,12 @@ class MainActivity : ComponentActivity() {
                             onConfigChange = { transform -> controller.update(transform) },
                             toastState = toastState,
                         )
+                        // 溢出菜单的压暗层：排在所有内容之后 = 盖在它们与菜单之上。
+                        // 放在这里（应用根布局）而不是菜单内部，是为了同一个窗口、
+                        // 层级确定，并且 edge-to-edge 下能盖住系统栏。
+                        com.mcp.toolbox.core.design.component.MenuScrimOverlay(
+                            onDismiss = { com.mcp.toolbox.core.design.component.MenuScrim.dismissAll() },
+                        )
                         ThemeRevealHost(revealState)
                     }
                 }

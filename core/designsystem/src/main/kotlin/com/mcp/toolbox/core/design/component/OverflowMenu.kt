@@ -67,6 +67,70 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalConfiguration
 
+/**
+ * 压暗层的共享状态。
+ *
+ * 为什么不在菜单里自己画：压暗必须盖住**包括系统栏在内**的整屏内容，而且在菜单
+ * 之上、应用内容之下。用独立窗口（Popup / Dialog）试过两轮都不行 ——
+ * Popup 受限于内容区盖不到系统栏；Dialog 窗口又出现「状态栏变黑条」「菜单被压暗层
+ * 盖住」（用户实测截图）。窗口之间的层叠顺序与 inset 行为都不可靠。
+ *
+ * 改成在**应用自己的根布局**里画一层：层级由声明顺序决定（确定），
+ * 且在同一个窗口内、edge-to-edge 下自然延伸到系统栏。
+ * 根布局由 MainActivity 持有，菜单在深层模块，因此用共享状态通信。
+ */
+object MenuScrim {
+    private val _count = androidx.compose.runtime.mutableStateOf(0)
+
+    /** 当前是否有菜单要求压暗（用计数，避免多个菜单互相盖掉对方的状态）。 */
+    val visible: Boolean get() = _count.value > 0
+
+    fun show() { _count.value += 1 }
+    fun hide() { _count.value = (_count.value - 1).coerceAtLeast(0) }
+
+    /**
+     * 点压暗处时，让当前打开的菜单关闭。
+     *
+     * 菜单本体是 Popup、不属于根布局，所以这一层没法直接调它的 onDismiss。
+     * 由菜单在显示期间注册一个回调，这里转发。
+     */
+    private var dismisser: (() -> Unit)? = null
+
+    fun registerDismiss(action: () -> Unit) { dismisser = action }
+    fun unregisterDismiss() { dismisser = null }
+
+    fun dismissAll() {
+        dismisser?.invoke()
+        // 兜底：即便回调缺失也要把压暗收掉，避免留下永久变暗的屏
+        _count.value = 0
+    }
+}
+
+/**
+ * 压暗层。**必须画在应用根布局里、且排在所有内容之后**（= 盖在内容与菜单之上）。
+ *
+ * 为什么由根布局负责：压暗要盖住包括系统栏在内的整屏内容，且在菜单之上。
+ * 放在菜单内部的 Popup / Dialog 层试过两轮都不对（见 [MenuScrim] 的说明）。
+ * 现在这一层与 AppShell 处在**同一个窗口**里，edge-to-edge 下自然延伸到系统栏，
+ * 层级由声明顺序决定，不存在跨窗口的层叠不确定。
+ *
+ * 点击即收回：它盖住了所有内容，所以点击自然落到它身上。
+ */
+@Composable
+fun MenuScrimOverlay(onDismiss: () -> Unit) {
+    if (!MenuScrim.visible) return
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.32f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
+    )
+}
+
 /** 菜单内容宽度与外框左右内边距。定位预判与渲染必须共用同一组值，否则方向会算错。 */
 private val MenuContentWidth = 200.dp
 private val MenuEdgePadding = 8.dp
@@ -174,45 +238,6 @@ private class OverflowMenuPositionProvider(
     }
 }
 
-/**
- * 把压暗层的 Dialog 窗口撑到系统栏之下。
- *
- * Compose 的 Dialog 默认把内容限制在系统栏以内（状态栏与底部手势条那两条盖不到），
- * 于是「压暗背景」看起来只在中间一块生效。这里清掉 inset 适配并允许越界布局。
- *
- * **不能用 FLAG_NOT_TOUCHABLE**：压暗层必须收到点击才能「点暗处收回」。
- * 与 Toast 的处理同源（那边是为了去 dim、且它本来就不需要接收触摸）。
- */
-private fun applyScrimWindowParams(view: View) {
-    var parent: android.view.ViewParent? = view.parent
-    while (parent != null) {
-        if (parent is androidx.compose.ui.window.DialogWindowProvider) {
-            val w = parent.window ?: return
-            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            w.setDimAmount(0f)
-            w.setLayout(
-                android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                android.view.WindowManager.LayoutParams.MATCH_PARENT,
-            )
-            w.setGravity(android.view.Gravity.TOP or android.view.Gravity.START)
-            // 不抢焦点（返回键留给菜单那层），但要能收点击，故不加 NOT_TOUCHABLE
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
-            // 关键两条：允许窗口画到系统栏之下
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
-            // Android 11+ 默认按系统栏内缩窗口；清掉 inset 类型才是真正铺满整屏。
-            // 直接调 w.setFitInsetsTypes(0) 在这个编译环境里解析不到（compileSdk 与
-            // 该 API 的可见性对不上），走 androidx 的 WindowCompat 等价且更稳。
-            runCatching {
-                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(w, false)
-            }
-            return
-        }
-        parent = (parent as? View)?.parent
-    }
-}
-
-/** 菜单项：前导图标 + 文案，danger = 红字，checked 显示复选状态。 */
 @Composable
 fun MiuixMenuItem(
     text: String,
@@ -362,51 +387,27 @@ private fun MiuixOverflowMenuOfficial(
     }
     if (!mounted) return
 
-    val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
-
+    // 登记/撤销压暗层。用 DisposableEffect(shown)：菜单收起时自动撤销，
+    // 不需要在每一条关闭路径上手动配对（漏一条就会留下永久压暗的屏）。
     if (scrim) {
-        // 压暗层：全屏、不吃焦点、点击即收回。
-        //
-        // 用 Dialog 而不是 Popup：Popup 是「面板」类窗口，受限于应用的**内容区**，
-        // 状态栏与底部手势条那两条系统区域盖不到（用户实测反馈「小白条、状态栏没压暗」）。
-        // Dialog 的窗口参数可以直接改，把窗口撑到系统栏之下 —— 见 applyScrimWindowParams。
-        // 项目里的 Toast 已用同一套手法处理窗口参数。
-        //
-        // 它在菜单 Popup 之前声明，因此窗口叠在菜单下面；菜单在上层，
-        // 点菜单项不会被它截走。
-        Dialog(
-            onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                // 返回键交给菜单那一层（它才是 focusable 的）
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false,
-            ),
-        ) {
-            val dialogView = LocalView.current
-            DisposableEffect(dialogView) {
-                val listener = object : View.OnAttachStateChangeListener {
-                    override fun onViewAttachedToWindow(v: View) = applyScrimWindowParams(v)
-                    override fun onViewDetachedFromWindow(v: View) {}
+        DisposableEffect(shown) {
+            if (shown) {
+                MenuScrim.show()
+                MenuScrim.registerDismiss {
+                    lastDismissAt[0] = System.currentTimeMillis()
+                    onDismiss()
                 }
-                dialogView.addOnAttachStateChangeListener(listener)
-                if (dialogView.isAttachedToWindow) applyScrimWindowParams(dialogView)
-                onDispose { dialogView.removeOnAttachStateChangeListener(listener) }
             }
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.32f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        lastDismissAt[0] = System.currentTimeMillis()
-                        onDismiss()
-                    },
-            )
+            onDispose {
+                if (shown) {
+                    MenuScrim.hide()
+                    MenuScrim.unregisterDismiss()
+                }
+            }
         }
     }
+
+    val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
 
     Popup(
         onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
