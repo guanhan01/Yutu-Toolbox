@@ -10,6 +10,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,9 +89,19 @@ fun MiuixOverflowMenu(
      * 否则弹出时焦点离开输入框、输入法会被收起。
      */
     focusable: Boolean = true,
+    /**
+     * 弹出时把背景压暗，并让「点压暗处」收回菜单。
+     *
+     * 压暗是**另一个全屏 Popup**，不是画在菜单那一层里：Popup 的窗口只和内容一样大，
+     * 在它内部 fillMaxSize 会形成一个自我循环的测量。多开一层全屏 Popup 最省事，
+     * 也不动下面那套已经调好的锚点定位逻辑。
+     *
+     * 「返回键收回」不靠这一层：那是 [focusable] 的职责（focusable 的 Popup 才拦返回键）。
+     */
+    scrim: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, content)
+    MiuixOverflowMenuOfficial(expanded, onDismiss, modifier, anchor, alignStart, stickToBottom, focusable, offset, scrim, content)
 }
 
 /**
@@ -102,6 +116,15 @@ private class OverflowMenuPositionProvider(
     private val gapPx: Int,
     private val expandToEnd: Boolean,
     private val stickToBottom: Boolean,
+    /**
+     * 是否优先向上展开。
+     *
+     * **必须由调用方算好、并同时决定位置与缩放原点**。早先位置用「下方放不放得下」
+     * 判断、而缩放原点另用「锚点是否低于屏幕 60%」判断，两套判据不一致时就会出现
+     * 「菜单位于锚点下方、却从底角长出来」——用户看到的就是「该从右上角弹出，
+     * 却从右下角弹出」（实测反馈）。
+     */
+    private val preferAbove: Boolean,
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -137,12 +160,29 @@ private class OverflowMenuPositionProvider(
                 stickToBottom -> (windowSize.height - popupContentSize.height - gapPx + offset.y)
                     .coerceAtLeast(0)
 
+                // 优先向上：锚点在下半屏时，向下展开会被输入栏挡住或顶到屏幕底
+                preferAbove && above != null && above >= 0 -> above
                 below + popupContentSize.height <= windowSize.height -> below
                 above != null -> above.coerceAtLeast(0)
                 else -> below
             }
         return IntOffset(rawX.coerceIn(0, maxX), top.coerceIn(0, maxY))
     }
+}
+
+/**
+ * 把 Popup 铺满整个窗口。
+ *
+ * 压暗层要盖住全部内容，而 Popup 默认按内容尺寸定位，所以显式返回 (0,0) ——
+ * 内容自身用 `fillMaxSize` 撑开。
+ */
+private object FullScreenPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset.Zero
 }
 
 /** 菜单项：前导图标 + 文案，danger = 红字，checked 显示复选状态。 */
@@ -233,6 +273,7 @@ private fun MiuixOverflowMenuOfficial(
     stickToBottom: Boolean,
     focusable: Boolean,
     offset: IntOffset,
+    scrim: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = MiuixTheme.colors
@@ -242,15 +283,16 @@ private fun MiuixOverflowMenuOfficial(
 
     val expandToEnd = alignStart ||
         (anchor != null && anchor.right.roundToInt() - boxWidthPx < 0)
-    val growUpward = stickToBottom || (anchor != null && run {
+    // 只算这一次，位置与缩放原点共用它
+    val preferAbove = stickToBottom || (anchor != null && run {
         val screenH = LocalConfiguration.current.screenHeightDp.dp
         val anchorBottomDp = with(LocalDensity.current) { anchor.bottom.toDp() }
         anchorBottomDp > screenH * 0.6f
     })
     val originX = if (expandToEnd) 0f else 1f
 
-    val positionProvider = remember(anchor, offset, gapPx, expandToEnd, stickToBottom) {
-        OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd, stickToBottom)
+    val positionProvider = remember(anchor, offset, gapPx, expandToEnd, stickToBottom, preferAbove) {
+        OverflowMenuPositionProvider(anchor, offset, gapPx, expandToEnd, stickToBottom, preferAbove)
     }
 
     var mounted by remember { mutableStateOf(expanded) }
@@ -295,6 +337,29 @@ private fun MiuixOverflowMenuOfficial(
 
     val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp * 0.4f
 
+    if (scrim) {
+        // 压暗层：全屏、不吃焦点、点击即收回。
+        // 它在菜单 Popup 之前声明，因此叠在菜单下面、盖住应用内容。
+        Popup(
+            onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
+            popupPositionProvider = remember { FullScreenPositionProvider },
+            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        lastDismissAt[0] = System.currentTimeMillis()
+                        onDismiss()
+                    },
+            )
+        }
+    }
+
     Popup(
         onDismissRequest = { lastDismissAt[0] = System.currentTimeMillis(); onDismiss() },
         popupPositionProvider = positionProvider,
@@ -310,12 +375,15 @@ private fun MiuixOverflowMenuOfficial(
                     scaleY = sc
                     alpha = alphaAnim.value.coerceIn(0f, 1f)
                     // 缩放原点落在锚点那一角：菜单像从图标处长出来
-                    transformOrigin = TransformOrigin(originX, if (growUpward) 1f else 0f)
+                    // 与位置用同一个 preferAbove，不再各算一套
+                    transformOrigin = TransformOrigin(originX, if (preferAbove) 1f else 0f)
                 }
                 .padding(8.dp)
                 .shadow(MiuixTheme.dimens.elevation.level3, RoundedCornerShape(MiuixTheme.radius.menu))
                 .clip(RoundedCornerShape(MiuixTheme.radius.menu))
-                .background(colors.surfaceContainerHigh)
+                // 用 surface（浅色主题下就是纯白）而不是 surfaceContainerHigh（灰）。
+                // 菜单是浮在内容之上的独立层，灰底会和底下的卡片糊在一起（用户实测反馈）。
+                .background(colors.surface)
                 .padding(vertical = 6.dp)
                 .width(MenuContentWidth)
                 .heightIn(max = maxMenuHeight)

@@ -963,7 +963,10 @@ fun UserBubble(
         expanded = menuOpen,
         onDismiss = { menuOpen = false },
         anchor = anchor,
-        focusable = false,
+        // 曾经传 false（怕抢输入框焦点），但那会让 Popup 既不拦返回键、
+        // 也不把它当作「点击外部」—— 于是「点压暗处收回」「手势回退收回」
+        // 两条都不生效（用户实测反馈）。这里要的正是那两条，故改回 true。
+        focusable = true,
     ) {
         com.mcp.toolbox.core.design.component.MiuixMenuItem(
             text = "复制",

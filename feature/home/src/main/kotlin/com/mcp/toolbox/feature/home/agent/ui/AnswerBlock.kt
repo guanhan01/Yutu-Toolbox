@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,7 +181,10 @@ private fun AnswerActions(
                 expanded = moreOpen,
                 onDismiss = { moreOpen = false },
                 anchor = anchor,
-                focusable = false,
+                // 曾经传 false（怕抢输入框焦点），但那会让 Popup 既不拦返回键、
+                // 也不把它当作「点击外部」—— 于是「点压暗处收回」「手势回退收回」
+                // 两条都不生效（用户实测反馈）。这里要的正是那两条，故改回 true。
+                focusable = true,
             ) {
                 com.mcp.toolbox.core.design.component.MiuixMenuItem(
                     text = "分享为图片",
@@ -229,7 +233,16 @@ private fun AnswerTextAction(label: String, iconRes: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .height(32.dp)
-            .sqSurface(colors.surfaceContainerHigh, SquircleRadii.bubbleTail)
+            // 白底 + 阴影，做成「悬浮」而不是「贴在内容上的灰块」。
+            // surface 在浅色主题下就是纯白，与菜单底色同源。
+            // shadow 要的是 Shape，而 SquircleRadii.* 是 Dp 数值（给 sqSurface 用的），
+            // 两者不是一回事，不能直接传。这里用等价圆角构造一个 Shape。
+            .shadow(
+                elevation = MiuixTheme.dimens.elevation.level1,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(SquircleRadii.bubbleTail),
+                clip = false,
+            )
+            .sqSurface(colors.surface, SquircleRadii.bubbleTail)
             .miuixClickable(press, true, onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
