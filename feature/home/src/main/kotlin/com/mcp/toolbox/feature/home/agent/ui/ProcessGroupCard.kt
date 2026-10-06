@@ -214,15 +214,12 @@ private fun TreeRow(
 
             // 竖线：末项止于转弯处（形成 └），其余画满整行。
             //
-            // 第一行要把竖线向上补到**箭头尖端**（不是组头底边）。
+            // 第一行向上补画，接到**组头底边**。
             //
-            // 用 maxOf 兜底：若将来有人调大 CHILD_GAP 等间距，也不会把这根线缩回到
-            // 尖端以下 —— 少接一截看起来就是「没接上」（用户实测反馈过两次）。
-            val vStart = if (isFirst) {
-                -with(density) { maxOf(GAP_ABOVE_FIRST, LINE_REACH_ABOVE_CONTENT).toPx() }
-            } else {
-                0f
-            }
+            // 曾试过一路补到箭头尖端，但那要精确算出图标内的尖端坐标，
+            // 稍差一点就看得出没对齐；而库里的图标随时可能换。
+            // 接到组头底边是稳定且够用的形态（用户最终选定）。
+            val vStart = if (isFirst) -with(density) { GAP_ABOVE_FIRST.toPx() } else 0f
             val vEnd = if (isLast) ey else size.height
             if (vEnd > 0f) {
                 drawLine(
@@ -316,21 +313,6 @@ private val CONNECTOR_STROKE = 1.5.dp
  * 现在从同一个值派生，改一处即可。
  */
 private val GAP_ABOVE_FIRST = HEADER_CONTENT_GAP
-
-/**
- * 第一行竖线要向上伸到「箭头尖端」所需的距离（相对第一行顶边的负偏移）。
- *
- * 箭头是 [AgentIcons.ic_chevron_down]，其尖端在 24 网格的 y=16；缩到
- * [GROUP_HEADER_CHEVRON] 大小、并在 36dp 高的组头里居中对齐后，
- * 尖端距组头顶边 = (36 − 16)/2 + 16/24 × 16 ≈ 20.67dp。
- * 第一行顶边距组头顶边 = 组头高 + 间距，因此需要向上伸
- *   36 + HEADER_CONTENT_GAP − 20.67。
- *
- * 写成算式而不是写死一个数：组头高、图标尺寸、间距任一变了都还成立。
- */
-private val LINE_REACH_ABOVE_CONTENT =
-    GROUP_HEADER_HEIGHT + HEADER_CONTENT_GAP - (GROUP_HEADER_HEIGHT - GROUP_HEADER_CHEVRON) / 2f -
-        GROUP_HEADER_CHEVRON * (16f / 24f)
 
 /** 组内各项之间的间距。 */
 private val CHILD_GAP = 6.dp
