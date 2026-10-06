@@ -72,4 +72,35 @@ class WaitCapsuleTextTest {
         assertFalse(ToolVisuals.isWaitTool("linux_exec"))
         assertFalse(ToolVisuals.isWaitTool("linux.exec"))
     }
+
+    @Test
+    fun `沙漏两处停顿都在，且两段翻转对称`() {
+        // 用户实测踩过两个坑，都由这个纯函数钉住：
+        // ① 只在 180 停过、360 没停（每整圈只停一次）
+        // ② 两段翻转快慢不一致
+        val eps = 1e-4f
+        fun angleAt(p: Float) = ToolVisuals.waitFlipAngle(p)
+
+        // 周期两端都是 0° 姿态（0 与 360 视觉一致，才能安全 Restart 循环）
+        assertEquals(0f, angleAt(0f), eps)
+        assertEquals(360f, angleAt(1f), eps)
+
+        // 第一处停顿：角度停在 180 不动
+        assertEquals(180f, angleAt(0.30f), eps)
+        assertEquals(180f, angleAt(0.45f), eps)
+        // 第二处停顿：角度停在 360 不动
+        assertEquals(360f, angleAt(0.80f), eps)
+        assertEquals(360f, angleAt(0.95f), eps)
+
+        // 两段翻转对称：各自走到一半时，转过的角度应当一样
+        val firstHalf = angleAt(0.13f)          // 第一段的中点
+        val secondHalf = angleAt(0.63f) - 180f  // 第二段的中点，减掉已转的 180
+        assertEquals("两段翻转速度应一致", firstHalf, secondHalf, 0.5f)
+    }
+
+    @Test
+    fun `进度越界不崩且夹在周期内`() {
+        assertEquals(0f, ToolVisuals.waitFlipAngle(-1f), 1e-4f)
+        assertEquals(360f, ToolVisuals.waitFlipAngle(2f), 1e-4f)
+    }
 }

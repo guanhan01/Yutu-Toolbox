@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableLongStateOf
@@ -476,37 +475,20 @@ private fun WaitCapsule(segment: ToolCallSegment) {
     // 开了「减少动画」/ 低电量时不做无限动画 —— 那种设置下用户想去掉的正是这种一直转的东西。
     val flip = if (running && !motion.reduced) {
         val transition = rememberInfiniteTransition(label = "wait-flip")
-        // 单向顺时针转，且**每转半圈停一下** —— 这才是沙漏的真实动作：
-        // 翻过去 → 沙子落下（停）→ 再翻半圈 → ……
-        //
-        // 早先用 tween + RepeatMode.Reverse，得到的是「转过去又转回来」，
-        // 方向来回摆；用户要的是「顺时针一直转」。所以改成 keyframes 单向推进，
-        // 用两段 0→180、180→360 并在中间插一段保持。
-        // 不用两段 tween 拼接是因为那会各自从 0 起算角度，接不上。
-        val angle by transition.animateFloat(
+        // 用**线性**进度驱动，角度交给纯函数算 —— 这样两段翻转必然是同一套
+        // 时长与缓动，不会出现「一段快一段慢」（用户实测反馈过）。
+        // 早先用 keyframes 直接在动画里挂 easing，那东西挂在哪个区间语义隐晦，
+        // 连改三版都没对齐；换成显式分段函数后对称性是构造出来的。
+        val progress by transition.animateFloat(
             initialValue = 0f,
-            targetValue = 360f,
+            targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = keyframes {
-                    // 周期 = 转半圈 + 停 + 转半圈 + 停。
-                    // 两处停顿都要有：沙漏每被翻过来一次，沙子就要落一次。
-                    // 早先只在 180° 处插了保持，于是「翻了 180 停一下，再翻 180 不停」——
-                    // 因为 360° 那处直接接回 0° 就进下一轮了（用户实测反馈）。
-                    durationMillis = FLIP_MS * 2 + FLIP_HOLD_MS * 2
-                    0f at 0 using FastOutSlowInEasing
-                    180f at FLIP_MS using FastOutSlowInEasing
-                    // 第一处停顿：沙子落下
-                    180f at FLIP_MS + FLIP_HOLD_MS
-                    360f at FLIP_MS * 2 + FLIP_HOLD_MS using FastOutSlowInEasing
-                    // 第二处停顿必须显式写出来，否则进不了这一帧就被截断
-                    360f at FLIP_MS * 2 + FLIP_HOLD_MS * 2
-                },
-                // Restart：360 与 0 在视觉上是同一个姿态，因此接起来是连续的
+                animation = tween(durationMillis = FLIP_CYCLE_MS, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
-            label = "wait-flip-angle",
+            label = "wait-flip-progress",
         )
-        angle
+        com.mcp.toolbox.feature.home.agent.ToolVisuals.waitFlipAngle(progress)
     } else {
         0f
     }
@@ -539,11 +521,12 @@ private fun WaitCapsule(segment: ToolCallSegment) {
 }
 
 private val WAIT_CAPSULE_HEIGHT = 40.dp
-/** 沙漏翻转半圈（0→180）的时长。 */
-private const val FLIP_MS = 650
-
-/** 转完半圈后的停顿：沙漏里沙子落下的那一下。 */
-private const val FLIP_HOLD_MS = 600
+/**
+ * 沙漏一个完整周期（转半圈 → 停 → 转半圈 → 停）的时长。
+ *
+ * 各段占比见 `ToolVisuals.waitFlipAngle`：转 26% + 停 24% + 转 26% + 停 24%。
+ */
+private const val FLIP_CYCLE_MS = 2500
 private const val TICK_MS = 500L
 
 /**

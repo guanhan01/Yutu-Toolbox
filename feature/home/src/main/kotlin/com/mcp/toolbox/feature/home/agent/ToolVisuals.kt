@@ -108,6 +108,46 @@ object ToolVisuals {
     fun isWaitTool(toolName: String): Boolean =
         toolName == "system.wait" || toolName == "system_wait"
 
+    /**
+     * 沙漏旋转角，作为**进度**的纯函数。
+     *
+     * 为什么要用纯函数而不是 `keyframes`：keyframes 的 easing 挂在哪个区间、
+     * `RepeatMode` 怎么接，语义隐晦，我照着写了三版都不是想要的效果
+     * （来回摆 / 只停一次 / 两段快慢不一致）。改成显式的分段函数后，
+     * 两段翻转由**同一个** [ease] 和**同一段**时长驱动，对称性是构造出来的，
+     * 并且可以直接单测 —— 不必靠肉眼看动画。
+     *
+     * 周期构成：转半圈 → 停（沙子落下）→ 转半圈 → 停 → 循环。
+     * 返回值到 360 时与 0 视觉一致，所以外部按 Restart 循环不会跳变。
+     *
+     * @param progress 0..1 的周期进度（调用方用 LinearEasing 推进）
+     */
+    fun waitFlipAngle(progress: Float): Float {
+        val p = progress.coerceIn(0f, 1f)
+        val flip = FLIP_FRACTION
+        val hold = HOLD_FRACTION
+        return when {
+            p < flip -> 180f * ease(p / flip)
+            // 第一处停顿：沙子落下
+            p < flip + hold -> 180f
+            p < flip + hold + flip -> 180f + 180f * ease((p - flip - hold) / flip)
+            // 第二处停顿：同理，不写出来就会被周期截断
+            else -> 360f
+        }
+    }
+
+    /** 平滑起止（smoothstep）。两段翻转共用它，保证观感一致。 */
+    private fun ease(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        return x * x * (3f - 2f * x)
+    }
+
+    /** 一个「转半圈」占整个周期的比例。 */
+    private const val FLIP_FRACTION = 0.26f
+
+    /** 一处停顿占整个周期的比例。 */
+    private const val HOLD_FRACTION = 0.24f
+
     /** `system.wait` 是否倒计时模式。参数缺省按「计时」处理。 */
     fun waitIsCountdown(argsJson: String?): Boolean = runCatching {
         org.json.JSONObject(argsJson.orEmpty()).optString("mode") == "countdown"
