@@ -42,6 +42,21 @@ object ToolVisuals {
             ?: NAMESPACE_VERB[toolName.substringBefore('.')]
             ?: "正在执行…"
 
+    /**
+     * 把「还要等多久」格式化成 `12s` / `1:05`。
+     *
+     * 纯函数，单测覆盖边界（负数、零、超过一分钟、超过一分钟的整秒）。
+     * 负数按 0 处理：调用方可能因为时序拿到刚过期的 deadline，不该显示成 `-1s`。
+     */
+    fun formatEta(remainingMs: Long): String {
+        val total = (remainingMs / 1000L).coerceAtLeast(0L)
+        return if (total < 60L) {
+            "${total}s"
+        } else {
+            "%d:%02d".format(total / 60L, total % 60L)
+        }
+    }
+
     /** 兜底图标：未知工具也用一枚「插件」而不是空白。 */
     @DrawableRes
     val fallback: Int = AgentIcons.ic_plugin
@@ -178,6 +193,7 @@ object ToolVisuals {
         // 系统
         "device.info" to AgentIcons.ic_phone_device,
         "system.memory" to AgentIcons.ic_memory,
+        "system.wait" to AgentIcons.ic_clock,
         "system.cpu" to AgentIcons.ic_cpu,
         "system.sensors" to AgentIcons.ic_speed,
         "system.kill" to AgentIcons.ic_agent_stop,
@@ -270,6 +286,7 @@ object ToolVisuals {
         "http.request" to "HTTP 请求",
         "net.info" to "网络信息",
         "shell.exec" to "执行命令",
+        "system.wait" to "等待中",
         "linux.shell" to "Linux 终端",
         "linux.exec" to "Linux 执行",
         "linux.shell_status" to "终端状态",
@@ -315,6 +332,7 @@ object ToolVisuals {
         "capture.list" to "抓包列表",
         "device.info" to "设备信息",
         "system.memory" to "内存信息",
+        "system.wait" to "等待",
         "settings.get" to "读取设置",
         "settings.put" to "修改设置",
         "ui.tree" to "界面树",

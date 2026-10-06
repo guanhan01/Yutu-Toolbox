@@ -34,6 +34,7 @@ object BuiltInToolSetSys {
         uiText(context),
         uiKey(context),
         uiScreenshot(context),
+        systemWait(),
         systemMemory(context),
         systemSensors(context),
         systemKill(context),
@@ -441,6 +442,54 @@ object BuiltInToolSetSys {
                 put("hint", "用 file.read（encoding=base64）可把图片内容读出来")
             }
             ToolResult(structured, structured.toString(2))
+        },
+    )
+
+    /**
+     * 等待指定秒数。
+     *
+     * 存在的理由：模型经常要「跑一个很慢的命令，然后看结果」——安装包、编译、
+     * 下载。它此前只有两条路：让 shell 自己 `sleep`（占满一次工具调用的超时，
+     * 而且界面只能显示「正在执行」，看不出还剩多久），或者干脆空转。
+     * 这个工具把等待变成一件**看得见**的事：卡片上直接倒计时。
+     *
+     * 上限 10 分钟不是随意定的：
+     * - 整轮收尾时前端会把仍在 Running 的工具判成超时（见 `AgentTimeline` 的
+     *   Finished 分支），等太久反而会被判超时，给出错误结论
+     * - 更久的等待应交给 shell 后台任务（`nohup ... &`）再回来看，而不是干等
+     *
+     * 用户可以随时点「停止」中断——等待期间虽然不产生网络事件，但协程可取消。
+     */
+    private fun systemWait() = ToolDef(
+        name = "system.wait",
+        title = "等待",
+        description = "等待指定秒数再继续，界面上会显示倒计时。" +
+            "适合「命令已发出、要过一会儿才有结果」的场景，例如等安装、编译或下载完成。" +
+            "最多 600 秒；更久的等待请改用后台任务。等待期间用户可以看到倒计时并随时停止。",
+        schema = Schema.obj(
+            listOf(
+                "seconds" to Schema.integer("要等待的秒数（1-600）", default = 30, min = 1, max = 600),
+                "reason" to Schema.string("为什么要等（显示在卡片上，便于用户理解）", default = ""),
+            ),
+            required = listOf("seconds"),
+        ),
+        readOnly = true,
+        handler = { _, args ->
+            val seconds = args.optInt("seconds", 30).coerceIn(1, 600)
+            val reason = args.optString("reason").trim()
+            val startedAt = System.currentTimeMillis()
+            // 用挂起 delay 而不是 Thread.sleep：这样「停止」能立刻打断它。
+            // handler 是同步签名，用 runBlocking 桥接到可取消的协程。
+            kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(seconds * 1000L) }
+            val structured = JSONObject().apply {
+                put("waitedSeconds", seconds)
+                put("elapsedMs", System.currentTimeMillis() - startedAt)
+                if (reason.isNotEmpty()) put("reason", reason)
+            }
+            ToolResult(
+                structured,
+                "已等待 $seconds 秒" + (if (reason.isNotEmpty()) "（$reason）" else "") + "，可以继续。",
+            )
         },
     )
 

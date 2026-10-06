@@ -34,6 +34,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +111,11 @@ fun ToolCard(
     val colors = MiuixTheme.colors
     val motion = rememberAgentMotion()
 
+    // 等待中的工具卡：把「还要等多久」算出来，卡片标题右侧显示倒计时。
+    // 剩余量由 startedAt + 参数里的 seconds 推出，因此切页/旋转回来仍算得对，
+    // 不需要给段新增字段（与 429 倒计时同一套思路）。
+    val waitEta = rememberToolWaitEta(segment)
+
     // 状态切换时整卡底色做 240ms 过渡（running = 3% primary 底，done = 透明）
     val container by androidx.compose.animation.animateColorAsState(
         targetValue = if (segment.isRunning) colors.primary.copy(alpha = 0.03f) else Color.Transparent,
@@ -149,6 +157,7 @@ fun ToolCard(
             ToolDetail(
                 segment = segment,
                 canRetry = canRetry,
+                waitEta = waitEta,
                 onApprove = onApprove,
                 onDeny = onDeny,
                 onRetry = onRetry,
@@ -421,6 +430,36 @@ private fun String.hasMeaningfulArgs(): Boolean {
 }
 
 /**
+ * 等待中工具的剩余时间文案；不是等待类工具、或已经跑完时返回 null。
+ *
+ * 为什么从 `startedAt + seconds` 推算、而不是在内存里存一个剩余量：
+ * 与 429 倒计时同一个理由 —— 卡片会随列表滚动反复进出组合，
+ * 若在组合里重新起算，一滚就跳回满值；用绝对时间点则切页、旋转回来都对。
+ */
+@Composable
+private fun rememberToolWaitEta(segment: ToolCallSegment): String? {
+    if (segment.toolName != "system.wait" || !segment.isRunning) return null
+    val seconds = runCatching {
+        org.json.JSONObject(segment.argsJson.orEmpty()).optInt("seconds", 0)
+    }.getOrDefault(0)
+    if (seconds <= 0) return null
+
+    val deadline = remember(segment.id, segment.startedAt, seconds) {
+        segment.startedAt + seconds * 1000L
+    }
+    var now by remember(segment.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(deadline) {
+        while (true) {
+            now = System.currentTimeMillis()
+            if (now >= deadline) break
+            delay(1_000L)
+        }
+        now = deadline
+    }
+    return com.mcp.toolbox.feature.home.agent.ToolVisuals.formatEta(deadline - now)
+}
+
+/**
  * 从工具参数里取出要执行的命令。
  *
  * 命令类工具（`shell.exec` / `linux.exec` / `linux.shell`）的参数形状统一是
@@ -481,6 +520,8 @@ private fun ShellCommandBar(command: String) {
 private fun ToolDetail(
     segment: ToolCallSegment,
     canRetry: Boolean,
+    /** 等待中工具的剩余时间文案；非等待类工具为 null。 */
+    waitEta: String? = null,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
     onRetry: () -> Unit,
@@ -517,6 +558,27 @@ private fun ToolDetail(
         //
         // 按用户要求「展开后不必展示所有内容」：只放一段预览，
         // 完整输出仍然走「查看原始输出」的独立面板。
+        // 等待中：显示倒计时。放在最上面，因为等待期间这是用户唯一需要知道的进展。
+        waitEta?.let { eta ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MiuixIconRes(
+                    iconRes = AgentIcons.ic_clock,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    size = 14.dp,
+                )
+                MiuixText(
+                    text = "还需等待 $eta",
+                    style = MiuixTheme.typography.labelMedium,
+                    color = colors.primary,
+                )
+            }
+        }
+
         // 命令栏：这一类工具真正执行的就是一条命令，把它单独放出来，
         // 而不是埋在下面「参数」那块 JSON 里（截图里的 {"command": "echo ..."}）。
         //
