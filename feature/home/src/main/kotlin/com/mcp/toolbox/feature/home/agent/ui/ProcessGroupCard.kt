@@ -147,24 +147,28 @@ fun ProcessGroupCard(
             }
         }
 
-        // 组头与组内容之间留出间距。
-        // 之前两者直接相邻，组头的下边框和第一张工具卡的上边框贴在一起，
-        // 看起来像共用一条线（用户实测反馈「边框重合」）。
-        // 连接线仍会向上补画 GAP_ABOVE_FIRST，所以视觉上依旧连成一体。
-        Spacer(Modifier.height(HEADER_CONTENT_GAP))
-
+        // 组头与组内容之间要有间距，否则组头的下边框和第一张工具卡的上边框会贴成
+        // 一条线（用户实测反馈「边框重合」）。
+        //
+        // ⚠️ 这段间距**必须放在内容容器内部**（见下面 Column 顶部的 Spacer），
+        // 不能在两者之间再插一个外层 Spacer —— 那样这 8dp 就不在任何 Canvas 的
+        // 绘制范围里，第一行向上补画的竖线走到容器顶边就断了，永远连不到组头
+        // （用户实测反馈：展开后线是断的）。
+        //
         // ── 组内：树形连接线 + 各块 ──
         AnimatedVisibility(
             visible = expanded,
-            // clip = false：第一行的竖线要向组头方向**画出容器之外**（补到箭头尖端），
-            // 而 expandVertically 默认在动画期间做裁剪，会把这段补画的部分切掉 ——
-            // 用户看到的「刚展开时没接上、过一会儿才接上」正是这个（实测反馈）。
+            // clip = false：展开动画默认会把子内容裁到当前可见高度，而连接线要在
+            // 首帧就接上组头，不能等动画结束才出现。
             enter = expandVertically(motion.cardEnter(), expandFrom = Alignment.Top, clip = false) +
                 fadeIn(animationSpec = motion.fade(180)),
             exit = shrinkVertically(motion.cardEnter(), shrinkTowards = Alignment.Top, clip = false) +
                 fadeOut(animationSpec = motion.fade(140)),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                // 间距在容器内部：第一行的 Canvas 因此从容器顶边起画，
+                // 向上补画 GAP_ABOVE_FIRST 正好够到组头底边。
+                Spacer(Modifier.height(HEADER_CONTENT_GAP))
                 children.forEachIndexed { index, child ->
                     TreeRow(
                         isLast = index == children.lastIndex,
@@ -214,12 +218,14 @@ private fun TreeRow(
 
             // 竖线：末项止于转弯处（形成 └），其余画满整行。
             //
-            // 第一行向上补画，接到**组头底边**。
+            // 第一行向上补画，跨过容器顶部的 Spacer，接到**组头底边**。
+            //
+            // 向外多补 1dp，让线头压进组头边框里、不留缝（描边本身有 1.5dp 宽）。
             //
             // 曾试过一路补到箭头尖端，但那要精确算出图标内的尖端坐标，
-            // 稍差一点就看得出没对齐；而库里的图标随时可能换。
+            // 稍差一点就看得出没对齐，而且图标随时可能换。
             // 接到组头底边是稳定且够用的形态（用户最终选定）。
-            val vStart = if (isFirst) -with(density) { GAP_ABOVE_FIRST.toPx() } else 0f
+            val vStart = if (isFirst) -with(density) { (GAP_ABOVE_FIRST + 1.dp).toPx() } else 0f
             val vEnd = if (isLast) ey else size.height
             if (vEnd > 0f) {
                 drawLine(
