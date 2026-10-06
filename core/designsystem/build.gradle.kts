@@ -35,4 +35,5 @@ dependencies {
     implementation(libs.material.color.utilities)
     implementation(libs.kotlinx.coroutines.android)
     api(libs.miuix.ui)
+    testImplementation(libs.junit)
 }

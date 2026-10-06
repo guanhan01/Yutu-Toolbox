@@ -13,11 +13,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -516,72 +516,115 @@ private fun MarkdownTableView(
     val columnCount = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     if (columnCount == 0) return
 
-    // 按各列最长内容的**实际渲染宽度**分配列宽，不设上限：
-    // 列宽不够时单元格会折行，一列数据被拆成好几行反而更难纵向对照。
-    // 整表放不下就交给外层 horizontalScroll，横向滚动看全比压缩列宽可靠。
-    val widths = (0 until columnCount).map { col ->
-        val longest = buildList {
-            table.header.getOrNull(col)?.let { add(cellWidthDp(it)) }
-            table.rows.forEach { row -> row.getOrNull(col)?.let { add(cellWidthDp(it)) } }
-        }.maxOrNull() ?: 0f
-        // +16 是单元格左右各 8dp 内边距
-        maxOf(TABLE_MIN_COLUMN.value, longest + 16f).dp
+    val border = colors.outline.copy(alpha = 0.22f)
+    val shape = RoundedCornerShape(MiuixTheme.radius.sm)
+    val weights = remember(table.header, table.rows) {
+        computeColumnWeights(table.header, table.rows, columnCount)
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(MiuixTheme.radius.sm))
-            .border(1.dp, colors.outline.copy(alpha = 0.3f), RoundedCornerShape(MiuixTheme.radius.sm))
-            .horizontalScroll(rememberScrollState()),
+            .clip(shape)
+            .border(1.dp, border, shape),
     ) {
-        Row(Modifier.background(colors.surfaceContainerHigh)) {
-            table.header.forEachIndexed { index, cell ->
-                MiuixText(
-                    text = inlineMarkdown(
-                        cell,
-                        colors.surfaceContainerHigh,
-                        colors.primary,
-                        linkListener = linkListener,
-                    ),
-                    modifier = Modifier
-                        .width(widths[index])
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+        // 表头：整行铺满卡片宽度。
+        //
+        // 早先列宽按「各列最长内容的估算宽度」硬定，且不设上限，于是两列表格
+        // 也会撑出屏幕；而表头的色条只覆盖到「列宽之和」，右侧留一条白边
+        // （用户截图里那圈空白）。现在列宽按**权重**分配、总和恒等于可用宽度，
+        // 色条自然铺满。
+        Row(Modifier.fillMaxWidth().background(colors.surfaceContainerHigh)) {
+            TableCells(
+                count = columnCount,
+                weights = weights,
+                horizontalPadding = 10.dp,
+                verticalPadding = 7.dp,
+            ) { index ->
+                CellText(
+                    text = table.header.getOrNull(index).orEmpty(),
                     style = style.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onSurface,
+                    background = colors.surfaceContainerHigh,
+                    linkListener = linkListener,
                 )
             }
         }
+
         table.rows.forEachIndexed { rowIndex, row ->
+            // 行分隔线。间距由相邻单元格的内边距提供，这里不额外占高。
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        if (rowIndex % 2 == 0) Color.Transparent
-                        else colors.surfaceContainerLow,
-                    )
                     .height(1.dp)
-                    .background(colors.outline.copy(alpha = 0.2f)),
+                    .background(border),
             )
-            Row {
-                (0 until columnCount).forEach { col ->
-                    MiuixText(
-                        text = inlineMarkdown(
-                            row.getOrNull(col).orEmpty(),
-                            colors.surfaceContainerHigh,
-                            colors.primary,
-                            linkListener = linkListener,
-                        ),
-                        modifier = Modifier
-                            .width(widths[col])
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+            Row(Modifier.fillMaxWidth()) {
+                TableCells(
+                    count = columnCount,
+                    weights = weights,
+                    horizontalPadding = 10.dp,
+                    verticalPadding = 7.dp,
+                ) { col ->
+                    CellText(
+                        text = row.getOrNull(col).orEmpty(),
                         style = style,
                         color = colors.onSurface,
+                        background = colors.surfaceContainerHigh,
+                        linkListener = linkListener,
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * 一行里的各个单元格，按 [weights] 分配宽度。
+ *
+ * 用 `weight` 而不是 `width(dp)`：权重之和归一，一行必然铺满父宽度 ——
+ * 这是「表头色条不留白边」的关键。`fillMaxWidth()` 已由调用方加在 Row 上。
+ */
+@Composable
+private fun RowScope.TableCells(
+    count: Int,
+    weights: List<Float>,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
+    verticalPadding: androidx.compose.ui.unit.Dp,
+    content: @Composable (Int) -> Unit,
+) {
+    for (index in 0 until count) {
+        Row(
+            modifier = Modifier
+                .weight(weights.getOrElse(index) { 1f })
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        ) {
+            content(index)
+        }
+    }
+}
+
+/**
+ * 单元格内容。
+ *
+ * 刻意**不设 `maxLines`**：列宽是按权重分的，窄列里的长文本要能折行看全
+ * （早先硬定列宽 + 横向滚动，长内容被截断，用户截图里那行 Python/Node/OpenJDK
+ * 就是断在右边）。内容过长仍由外层卡片的整体布局兜住，不会无限高。
+ */
+@Composable
+private fun CellText(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    /** 内联代码的底色要与所在行一致，否则代码片会透出另一种灰。 */
+    background: Color,
+    linkListener: LinkInteractionListener?,
+) {
+    MiuixText(
+        text = inlineMarkdown(text, background, MiuixTheme.colors.primary, linkListener = linkListener),
+        style = style,
+        color = color,
+    )
 }
 
 /**
@@ -605,8 +648,79 @@ fun MarkdownText(
     }
 }
 
-/** 表格最小列宽（dp）：再窄就该整表横向滚动了。 */
-private val TABLE_MIN_COLUMN = 68.dp
+/**
+ * 按内容长度给各列分配**相对权重**（纯函数，可单测）。
+ *
+ * 与早先「按估算宽度硬定列宽」的差别：这里只产出比例，不产生绝对宽度，
+ * 因此列宽总和恒等于可用宽度 —— 既不撑出屏幕，表头色条也不会右侧留白。
+ *
+ * 两步：
+ * 1. 以每列**最长内容的估算宽度**为初始比例（等权会把「项 | 值」这种两列
+ *    表格压成五五开，读起来很怪）
+ * 2. 把低于下限的列抬到下限，多出来的份额在其余列之间按内容比例再分
+ *
+ * **不能「先夹紧再整体归一」**：归一会把刚抬到下限的列又压回去
+ * （实测：短列拿到 0.138 而不是 0.16）。
+ *
+ * 刻意**不设上限**：与下限可能互相矛盾 —— 列数多时，(n-1) 列的下限之和
+ * 加上一列的上限会超过 1，约束无法同时满足。下限本身已防住「一列独吞」。
+ */
+internal fun computeColumnWeights(
+    header: List<String>,
+    rows: List<List<String>>,
+    columnCount: Int,
+): List<Float> {
+    if (columnCount <= 0) return emptyList()
+    if (columnCount == 1) return listOf(1f)
+
+    // 内容比例：+1 避免整列为空时权重为 0，导致该列宽度为 0、内容不可见
+    val prop = (0 until columnCount).map { col ->
+        val longest = buildList {
+            header.getOrNull(col)?.let { add(cellWidthDp(it)) }
+            rows.forEach { row -> row.getOrNull(col)?.let { add(cellWidthDp(it)) } }
+        }.maxOrNull() ?: 0f
+        (longest + 1f).toDouble()
+    }
+    val totalProp = prop.sum().takeIf { it > 0.0 } ?: return List(columnCount) { 1f / columnCount }
+
+    // 列数多到「所有列都拿下限」都超过 1 时，约束本身不可满足，退化为均分。
+    // 取 0.16 与 1/n 的较小者，保证任何列数下都可行。
+    val minShare = minOf(MIN_COLUMN_SHARE, 1f / columnCount)
+
+    val share = MutableList(columnCount) { 0f }
+    val locked = BooleanArray(columnCount)
+    var remaining = 1f
+
+    // 每轮至少锁定一列，最多 n 轮收敛
+    for (round in 0 until columnCount) {
+        val free = (0 until columnCount).filter { !locked[it] }
+        if (free.isEmpty()) break
+        val freeProp = free.sumOf { prop[it] }
+        var raised = false
+        free.forEach { i ->
+            val v = if (freeProp <= 0.0) remaining / free.size
+            else (prop[i] / freeProp * remaining).toFloat()
+            if (v < minShare) {
+                share[i] = minShare
+                locked[i] = true
+                raised = true
+            } else {
+                share[i] = v
+            }
+        }
+        if (!raised) break
+        val used = (0 until columnCount).filter { locked[it] }.sumOf { share[it].toDouble() }.toFloat()
+        remaining = (1f - used).coerceAtLeast(0f)
+    }
+
+    // 极端情况下（remaining 归零后又锁列）可能出现总和略偏；兜一次归一，
+    // 此时各列都已不低于 minShare 的量级，归一不会把某列压没。
+    val sum = share.sum()
+    return if (sum <= 0f) List(columnCount) { 1f / columnCount } else share.map { it / sum }
+}
+
+/** 每列的最小宽度占比。低于它，窄列每行只放得下一两个字。 */
+private const val MIN_COLUMN_SHARE = 0.16f
 
 /**
  * 估算一段文字的渲染宽度（dp）。
