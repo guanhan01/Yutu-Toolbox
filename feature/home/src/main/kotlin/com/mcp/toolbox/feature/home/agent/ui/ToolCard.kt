@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableLongStateOf
@@ -475,14 +476,27 @@ private fun WaitCapsule(segment: ToolCallSegment) {
     // 开了「减少动画」/ 低电量时不做无限动画 —— 那种设置下用户想去掉的正是这种一直转的东西。
     val flip = if (running && !motion.reduced) {
         val transition = rememberInfiniteTransition(label = "wait-flip")
-        // 0 → 180 是「上半翻到下半」= 沙漏倒过来；配合 Reverse 再转回去，就是翻来翻去。
-        // 不用 360：那样只是转一整圈回到原样，看不出「倒过来了」。
+        // 单向顺时针转，且**每转半圈停一下** —— 这才是沙漏的真实动作：
+        // 翻过去 → 沙子落下（停）→ 再翻半圈 → ……
+        //
+        // 早先用 tween + RepeatMode.Reverse，得到的是「转过去又转回来」，
+        // 方向来回摆；用户要的是「顺时针一直转」。所以改成 keyframes 单向推进，
+        // 用两段 0→180、180→360 并在中间插一段保持。
+        // 不用两段 tween 拼接是因为那会各自从 0 起算角度，接不上。
         val angle by transition.animateFloat(
             initialValue = 0f,
-            targetValue = 180f,
+            targetValue = 360f,
             animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = FLIP_MS, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
+                animation = keyframes {
+                    durationMillis = FLIP_MS * 2 + FLIP_HOLD_MS
+                    0f at 0 using FastOutSlowInEasing
+                    180f at FLIP_MS using FastOutSlowInEasing
+                    // 保持不动：沙子落下的那一下
+                    180f at FLIP_MS + FLIP_HOLD_MS
+                    360f at FLIP_MS * 2 + FLIP_HOLD_MS using FastOutSlowInEasing
+                },
+                // Restart：360 与 0 在视觉上是同一个姿态，因此接起来是连续的
+                repeatMode = RepeatMode.Restart,
             ),
             label = "wait-flip-angle",
         )
@@ -519,8 +533,11 @@ private fun WaitCapsule(segment: ToolCallSegment) {
 }
 
 private val WAIT_CAPSULE_HEIGHT = 40.dp
-/** 沙漏翻转半圈（0→180 或 180→0）的时长。 */
+/** 沙漏翻转半圈（0→180）的时长。 */
 private const val FLIP_MS = 650
+
+/** 转完半圈后的停顿：沙漏里沙子落下的那一下。 */
+private const val FLIP_HOLD_MS = 600
 private const val TICK_MS = 500L
 
 /**
