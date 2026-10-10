@@ -79,4 +79,58 @@ object TerminalBanner {
             append("  请前往「AI 配置」界面完成环境安装。").append("\r\n")
             append("\r\n")
         }
+
+    /**
+     * 「Android 环境」终端启动时由 shell 打印的 banner 脚本。
+     *
+     * ## 与 Linux 侧的关系
+     *
+     * **art 与配色完全照搬**：同一个 [ART]、同一个 `Yutu Agt 终端` 标题行，
+     * 只把「系统名」那一行换成宿主自己的信息。这样两个窗口的观感一致，
+     * 且 art 只有一处定义，不会出现两套 banner 长得不一样。
+     *
+     * ## 为什么要落成脚本而不是由应用直接 write
+     *
+     * 与 Linux 侧同一个理由：由 shell 打印出来的是**终端的真实输出**，
+     * 能滚进回滚缓冲、能长按选中复制；画在 Compose 层上做不到这两点。
+     *
+     * ## 转义（与 Linux 侧同样的规矩，别改）
+     *
+     * [ART] 里写的就是屏幕上要看到的字符，且不含需要 shell 二次转义的字符；
+     * 每行用 `echo '...'` 单引号包裹，shell 不再解析里面的反斜杠。
+     * 唯一的例外是下面那行带颜色的 `printf`：它用 `\\033` 出 ESC，
+     * 这是 Linux 侧已经验证过的写法，照搬即可。
+     *
+     * 设备信息在**运行时**用 `getprop` 读，保证显示的是真实机型与系统版本，
+     * 不是写死的常量（不臆造内容：任一属性取不到就退化，不编一个补上）。
+     *
+     * @param modeLabel 本次窗口拿到的权限，如 `root` / `Shizuku` / `应用自身`。
+     *   附在系统名后面，用户一眼能看出这个窗口有多大权限。null 表示不显示。
+     */
+    fun androidBannerScript(modeLabel: String? = null): String = buildString {
+        append("#!/system/bin/sh\n")
+        append("printf '\\n'\n")
+        // 每行单独一条 echo：art 里若含反斜杠，单引号包裹可免去二次解析。
+        ART.forEach { line ->
+            append("echo '").append(line).append("'\n")
+        }
+        append("printf '\\n'\n")
+        append("printf '  \\033[1;32mYutu\\033[0m \\033[2mAgt 终端\\033[0m\\n'\n")
+        // 真实设备信息：release / API / 品牌 + 型号，全部来自 getprop。
+        // 任一取不到就退化成只显示 Android，不臆造内容。
+        append("rel=${'$'}(getprop ro.build.version.release 2>/dev/null)\n")
+        append("sdk=${'$'}(getprop ro.build.version.sdk 2>/dev/null)\n")
+        append("brand=${'$'}(getprop ro.product.brand 2>/dev/null)\n")
+        append("model=${'$'}(getprop ro.product.model 2>/dev/null)\n")
+        append("name=\"Android ${'$'}rel\"\n")
+        append("[ -n \"${'$'}sdk\" ] && name=\"${'$'}name (API ${'$'}sdk)\"\n")
+        append("[ -n \"${'$'}model\" ] && name=\"${'$'}name · ${'$'}brand ${'$'}model\"\n")
+        append("printf '  \\033[2m%s\\033[0m\\n' \"${'$'}name\"\n")
+        // 权限模式单独一行，与系统名同色，位置固定在 banner 尾部上方。
+        if (modeLabel != null) {
+            append("printf '  \\033[2m权限：%s\\033[0m\\n' '")
+                .append(modeLabel.replace("'", "'\\''")).append("'\n")
+        }
+        append("printf '\\n'\n")
+    }
 }

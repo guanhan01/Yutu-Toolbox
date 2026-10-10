@@ -2,6 +2,7 @@ package com.mcp.toolbox.ui.linux.term
 
 import android.content.Context
 import android.util.Log
+import com.mcp.toolbox.core.common.PrivilegeBackend
 import com.mcp.toolbox.ui.linux.LinuxDistro
 import com.mcp.toolbox.ui.linux.LinuxEnvStore
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -59,11 +62,18 @@ class TerminalSession(
      * 本会话跑在宿主还是 Linux 环境里。
      *
      * 两种模式的差别只在「怎么把交互 shell 拉起来」这一步：
-     * - LOCAL：`script -qfc "/system/bin/sh"`，**不需要 su、不需要 rootfs**
+     * - LOCAL：工程自带的 `ptyhelper`（见 [PtyHelper]）分配 pty 后接 `/system/bin/sh`。
+     *   **不需要 su、不需要 rootfs**；有 root / Shizuku 时会自动用它们跑，
+     *   拿到的权限更高，没有也能正常工作。
      * - LINUX：`su -c unshare -m sh launch.sh` → chroot → bash
      * 之后的 pty 读写、历史缓冲、尺寸同步全部共用同一套代码。
      */
     private val env: TermSessionStore.Env = TermSessionStore.Env.LINUX,
+    /**
+     * 本窗口**指定**的后端；null 表示自动挑选（root 优先，其次 Shizuku，最后应用自身）。
+     * 只对 [TermSessionStore.Env.LOCAL] 有意义，Linux 窗口忽略它。
+     */
+    private val requestedBackend: PrivilegeBackend? = null,
 ) {
 
     companion object {
@@ -138,6 +148,35 @@ class TerminalSession(
 
     private var cols = DEFAULT_COLS
     private var rows = DEFAULT_ROWS
+
+    /** 上一次**真正应用**到 pty 上的尺寸。用于跳过无变化的 stty。 */
+    private var appliedCols = -1
+    private var appliedRows = -1
+
+    /** 待下发的最新尺寸（见 [resize] 的串行化说明）。 */
+    @Volatile private var pendingCols = -1
+    @Volatile private var pendingRows = -1
+
+    /** 保证同一时刻只有一次 stty 在下发。 */
+    private val resizeMutex = Mutex()
+
+    /**
+     * Android 窗口（[TermSessionStore.Env.LOCAL]）就绪后的启动配置。
+     *
+     * resize 与 kill 都要用到它：改尺寸得知道 pty 从端路径 **且要经同一个后端**
+     * 去执行 `stty`（应用身份改不了 root 建的 pts），收尾时也要知道临时文件在哪。
+     */
+    @Volatile
+    private var localLauncher: PtyHelper.Launcher? = null
+
+    /**
+     * helper 经 stderr 上报的 pty 从端路径（`EPTY=/dev/pts/N`）。
+     *
+     * 不走共享文件：三个身份能写的目录互不相同（应用写不了 /data/local/tmp，
+     * root/shell 进不去应用私有目录），文件交换必然在某一种身份下失败。
+     */
+    @Volatile
+    private var reportedPty: String? = null
 
     /** 本会话的短名，用于生成互不冲突的临时文件名。 */
     private val tag = "s" + counter.incrementAndGet()
@@ -218,7 +257,7 @@ class TerminalSession(
                 releaseScope()
             }
 
-            val pts = awaitPty(READY_TIMEOUT_MS)
+            val pts = awaitPty(ptyFile, READY_TIMEOUT_MS)
             if (pts == null) {
                 val why = stderrTail.toString().trim().lineSequence()
                     .lastOrNull { it.isNotBlank() }
@@ -275,28 +314,32 @@ class TerminalSession(
         ptyFile.delete()
         stderrTail.setLength(0)
 
+        val launcher = PtyHelper.prepare(context, requestedBackend).getOrElse { t ->
+            launchGuard.set(false)
+            return@startLocal Result.failure(t)
+        }
+        localLauncher = launcher
+
+        reportedPty = null
+
         return runCatching {
-            // 不用 `-i`：没有 tty 时它只会抱怨 "no job control"，
-            // 且是否打印提示符取决于具体 shell 实现。
-            // 显式设置 PS1，保证用户看到明确的等待输入状态。
-            val p = ProcessBuilder("/system/bin/sh")
-                .redirectErrorStream(false)
-                .start()
-            runCatching {
-                p.outputStream.write("PS1='\\$ '\n".toByteArray())
-                p.outputStream.flush()
-            }
+            // banner 与 shell 走同一个 pty：由 shell 打印出来，才是终端的真实输出
+            // （可滚动、可选中复制），与 Linux 窗口的 banner 来源一致。
+            // 内容直接作为参数传入，不落文件（三方身份没有共同可写的目录）。
+            val banner = TerminalBanner.androidBannerScript(modeLabel(launcher.backend))
+
+            val p = PtyHelper.startShell(launcher, rows, cols, banner = banner)
+                ?: error("无法启动终端组件（${launcher.backend.name}）")
 
             process = p
             stdin = p.outputStream
             running = true
-            // 没有 pty，也就没有从端设备可改尺寸；留 null 让界面跳过 stty
-            ptyPath = null
 
             val sc = CoroutineScope(SupervisorJob() + Dispatchers.IO)
             scope = sc
             pumps = listOf(
                 sc.launch { pump(p.inputStream) },
+                // helper 的 stderr 不进终端画面（与 Linux 模式同样的取舍），留尾巴报错用。
                 sc.launch { pumpStderr(p.errorStream) },
             )
             sc.launch {
@@ -306,11 +349,16 @@ class TerminalSession(
                 _exited.tryEmit(code)
                 releaseScope()
             }
-            // Android 环境**没有 pty**：系统没给应用 `script` 之类的工具，
-            // 自建 pty 需要 NDK（见 DEVLOG 的待办 B）。
-            // 没有 tty 的 sh 不会打印提示符，屏幕会是一片空白 —— 那看起来像坏了。
-            // 这里主动写一行说明，把「能用但没提示符」讲清楚。
-            pumpLocalNotice()
+
+            // 从 helper 的 stderr 标记行拿 pty 从端路径，之后 resize 靠它。
+            // 拿不到不算致命（尺寸改不动而已），但要留痕便于排查。
+            val pts = awaitReportedPty(READY_TIMEOUT_MS)
+            if (pts == null) {
+                Log.w(TAG, "local pty path not reported; resize will be skipped")
+            } else {
+                ptyPath = pts
+            }
+
             Result.success(Unit)
         }.getOrElse { t ->
             Log.w(TAG, "startLocal failed", t)
@@ -320,48 +368,42 @@ class TerminalSession(
         }
     }
 
-    private fun awaitPty(timeoutMs: Long): String? {
+    /** 等 helper 通过 stderr 上报 pty 从端路径。 */
+    private fun awaitReportedPty(timeoutMs: Long): String? {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            val text = runCatching { ptyFile.readText().trim() }.getOrNull()
+            reportedPty?.let { return it }
+            if (process?.isAlive != true) break
+            Thread.sleep(40)
+        }
+        return reportedPty
+    }
+
+    /** 后端在 banner 上的显示名。用户看的是「拿到了多大权限」，不是枚举名。 */
+    private fun modeLabel(backend: PrivilegeBackend): String = when (backend) {
+        PrivilegeBackend.ROOT -> "root"
+        PrivilegeBackend.SHIZUKU -> "Shizuku"
+        PrivilegeBackend.LOCAL -> "应用自身"
+        PrivilegeBackend.NONE -> "无"
+    }
+
+    /**
+     * 等 helper / bootstrap 把 pty 从端路径写出来。
+     *
+     * 两种模式落点不同：Linux 模式写在应用 cacheDir（bootstrap 脚本里的 `tty >`），
+     * Android 模式写在 [PtyHelper.Launcher.ptsFile]（helper 的 `--pts`）。
+     * 所以由调用方把文件路径传进来，不写死。
+     */
+    private fun awaitPty(file: File, timeoutMs: Long): String? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val text = runCatching { file.readText().trim() }.getOrNull()
             if (!text.isNullOrBlank() && text.startsWith("/")) return text
             // 注意：isAlive 是方法不是属性，`process?.isAlive != true` 才是「已退出」
             if (process?.isAlive != true) break
             Thread.sleep(40)
         }
         return null
-    }
-
-    /**
-     * 往终端里写一段「Android 环境」的状态说明。
-     *
-     * 直接 append 到 history（再唤醒界面），与真实输出走同一条路 ——
-     * 这样它也能被选中复制、滚出回滚缓冲。
-     *
-     * ## 文案必须如实说「不能用」
-     *
-     * 我早先写的是「输入命令回车即可执行，输出会正常显示」——
-     * 那是**没验证过的推断**。实测下来本环境连输入都送不进去，
-     * 等于整块是死的。留着那句就是虚假承诺：用户会反复试、
-     * 以为是自己的操作问题。
-     *
-     * 现在的原则：**做不到就明说做不到**，并给出当下可用的替代
-     * （Linux 环境）。等 pty 那条做完（见 DEVLOG 待办 B）再改回可用文案。
-     */
-    private fun pumpLocalNotice() {
-        val text = buildString {
-            append("\r\n")
-            append("  Yutu Agt 终端 · Android 环境\r\n")
-            append("\r\n")
-            append("  本环境当前不可用。\r\n")
-            append("  这里缺少伪终端（pty），命令无法输入，也无法执行。\r\n")
-            append("\r\n")
-            append("  请改用「Linux 环境」终端：\r\n")
-            append("  点顶栏 + 号新建窗口时选择 Linux 环境即可。\r\n")
-            append("\r\n")
-        }
-        history.append(text.toByteArray(Charsets.UTF_8))
-        _wake.tryEmit(Unit)
     }
 
     private suspend fun pump(stream: InputStream) {
@@ -383,13 +425,19 @@ class TerminalSession(
     private suspend fun pumpStderr(stream: InputStream) {
         try {
             val reader = stream.bufferedReader()
-            val line = reader.readLine() ?: return
-            synchronized(stderrTail) {
-                stderrTail.append(line).append('\n')
-                if (stderrTail.length > 2000) stderrTail.delete(0, stderrTail.length - 2000)
+            while (true) {
+                val line = reader.readLine() ?: break
+                // pty 从端上报（只来自 Android 模式的 helper）；不算错误，不进 stderrTail。
+                val pts = PtyHelper.ptsFromStderr(line)
+                if (pts != null) {
+                    reportedPty = pts
+                    continue
+                }
+                synchronized(stderrTail) {
+                    stderrTail.append(line).append('\n')
+                    if (stderrTail.length > 2000) stderrTail.delete(0, stderrTail.length - 2000)
+                }
             }
-            // 继续把剩余的读掉，否则管道写满会把 su 卡住
-            while (reader.readLine() != null) Unit
         } catch (t: Throwable) {
             Log.d(TAG, "stderr pump ended: ${t.message}")
         }
@@ -403,6 +451,7 @@ class TerminalSession(
             out.flush()
         }.onFailure { Log.d(TAG, "write failed: ${it.message}") }
     }
+
 
     fun write(text: String) = write(text.toByteArray(Charsets.UTF_8))
 
@@ -419,6 +468,23 @@ class TerminalSession(
      *
      * 走宿主 `stty -F <pts>` 直接改从端，比往 shell 输入里塞 `stty` 命令干净：
      * 后者会把命令内容留在屏幕上，还会打乱用户正在输入的那一行。
+     *
+     * ## 为什么**不能**用时间去抖
+     *
+     * 曾经在这里加过 120ms 去抖，是错的。原因在 shell 那边：
+     * 收到 SIGWINCH 时 mksh 会**原地重画**提示符 —— 先补一串空格抹掉旧的，
+     * 再用退格退回行首，而串长按**当时的终端宽度**算。只要 pty 的列数和 xterm
+     * 的列数错开一格，这串空格就会超宽折行、退格回不到行首，提示符于是掉到
+     * 下一行并带偏移（用户报的「放大字体就自动换行、然后新建一行」「提示符
+     * 逐个右移」）。去抖期间 pty 恰好停在旧宽度，正是在制造这种错配。
+     *
+     * ## 现在：串行化 + 只认最新值
+     *
+     * 尺寸立刻发出去，但不让请求堆成十几个进程：
+     * - [resizeMutex] 保证同一时刻只在下发一次 `stty`；
+     * - 若期间又来了新尺寸，只记下来，等当前这次结束后**用最新值**再下发一次。
+     *
+     * 效果：稳态下尺寸与 xterm 同步（消除错配），快速缩放时也不会每帧起一个进程。
      */
     suspend fun resize(newCols: Int, newRows: Int) {
         val c = newCols.coerceIn(10, 500)
@@ -426,14 +492,41 @@ class TerminalSession(
         if (c == cols && r == rows) return
         cols = c
         rows = r
-        val pts = ptyPath ?: return
-        withContext(Dispatchers.IO) {
-            runCatching {
-                ProcessBuilder("/system/bin/sh", "-c", "stty -F $pts rows $r cols $c")
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor(2, TimeUnit.SECONDS)
-            }.onFailure { Log.d(TAG, "resize failed: ${it.message}") }
+
+        // 只保留最新一档：等锁期间多次调用会被后面那次覆盖。
+        pendingCols = c
+        pendingRows = r
+
+        resizeMutex.withLock {
+            // 拿到锁后取走当前最新值；期间若又更新过，也一并按最新值下（见下面 while）。
+            while (true) {
+                val targetC = pendingCols
+                val targetR = pendingRows
+                if (targetC == appliedCols && targetR == appliedRows) return@withLock
+
+                val pts = ptyPath ?: return@withLock
+                withContext(Dispatchers.IO) {
+                    val launcher = localLauncher
+                    if (env == TermSessionStore.Env.LOCAL && launcher != null) {
+                        // Android 窗口必须经**同一个后端**改：pts 是那个后端建的，
+                        // 应用身份 `stty -F` 会被拒。
+                        runCatching { PtyHelper.resize(launcher.backend, pts, targetC, targetR) }
+                            .onFailure { Log.d(TAG, "resize failed: ${it.message}") }
+                    } else {
+                        runCatching {
+                            ProcessBuilder("/system/bin/sh", "-c", "stty -F $pts rows $targetR cols $targetC")
+                                .redirectErrorStream(true)
+                                .start()
+                                .waitFor(2, TimeUnit.SECONDS)
+                        }.onFailure { Log.d(TAG, "resize failed: ${it.message}") }
+                    }
+                }
+                appliedCols = targetC
+                appliedRows = targetR
+
+                // 下发期间尺寸又变了 -> 再走一轮，直到追平最新值。
+                if (pendingCols == appliedCols && pendingRows == appliedRows) return@withLock
+            }
         }
     }
 
@@ -447,6 +540,12 @@ class TerminalSession(
         releaseScope()
         // 会话已结束，解锁以便在同一份会话上重新启动（restart 走的就是这条路）
         launchGuard.set(false)
+        // Android 窗口不再有临时文件（banner 走参数、pts 走 stderr），
+        // 只需清掉指向 helper 的引用；helper 本身保留（65 KB，重装没必要）。
+        localLauncher = null
+        reportedPty = null
+        appliedCols = -1
+        appliedRows = -1
         // 每个会话一套临时文件，窗口开开关关会一直堆积，这里顺手清掉。
         // banner 在 rootfs 内，路径由本会话生成，一并删除（下次启动会重写）。
         runCatching { ptyFile.delete() }

@@ -268,7 +268,7 @@
     <string name="ai_delete">删除</string>
     <string name="linux_term_pick_env">新开终端</string>
     <string name="linux_term_env_local">Android 环境</string>
-    <string name="linux_term_env_local_desc">当前不可用（缺少伪终端）</string>
+    <string name="linux_term_env_local_desc">Android 自带 shell；有 root 或 Shizuku 时自动使用</string>
     <string name="linux_term_env_linux">Linux 环境</string>
     <string name="linux_term_env_linux_desc">已安装的发行版，需要 Root</string>
     <string name="linux_term_to_ai">接入 AI</string>

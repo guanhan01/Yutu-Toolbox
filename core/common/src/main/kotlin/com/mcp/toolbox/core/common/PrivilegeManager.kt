@@ -217,6 +217,54 @@ object PrivilegeManager {
         ShellResult(-1, "", "", false, PrivilegeBackend.SHIZUKU, "Shizuku 执行失败：${it.message}")
     }
 
+    /**
+     * 启动一个**长期存活**的进程，返回仍可读写标准流的 [Process]。
+     *
+     * 与 [exec] 的区别：那个是「发一条命令、收完整输出」的一次性调用，
+     * 会在超时后强杀。终端窗口需要的是**一直活着的 shell**，字节要双向、
+     * 持续地流，所以不能走 [exec]。
+     *
+     * 三个后端的启动方式：
+     * - [PrivilegeBackend.ROOT]：`su -c '<已转义的整条命令>'`
+     * - [PrivilegeBackend.SHIZUKU]：`Shizuku.newProcess(cmdArray, env, dir)`（shell 身份）
+     * - [PrivilegeBackend.LOCAL]：直接 `ProcessBuilder`，uid 是应用自己
+     *
+     * 参数用数组传入、内部统一转义，调用方不需要关心嵌套引号。
+     * 不可用时返回 null，不抛异常。
+     */
+    fun spawn(
+        command: List<String>,
+        backend: PrivilegeBackend,
+        workingDir: String? = null,
+    ): Process? = runCatching {
+        when (backend) {
+            PrivilegeBackend.ROOT -> {
+                val line = buildString {
+                    if (workingDir != null) append("cd ").append(quote(workingDir)).append(" 2>/dev/null; ")
+                    append("exec ").append(command.joinToString(" ") { quote(it) })
+                }
+                ProcessBuilder("su", "-c", line).start()
+            }
+
+            PrivilegeBackend.SHIZUKU -> {
+                val method = Shizuku::class.java.declaredMethods
+                    .firstOrNull { it.name == "newProcess" && it.parameterTypes.size == 3 }
+                    ?: error("当前 Shizuku 版本未暴露 newProcess")
+                method.isAccessible = true
+                method.invoke(null, command.toTypedArray(), null, workingDir) as Process
+            }
+
+            PrivilegeBackend.LOCAL -> ProcessBuilder(command)
+                .apply { if (workingDir != null) directory(File(workingDir)) }
+                .start()
+
+            PrivilegeBackend.NONE -> null
+        }
+    }.getOrNull()
+
+    /** 单引号包裹，内部单引号按 POSIX 惯用写法逃逸（`'` -> `'\''`）。 */
+    private fun quote(text: String): String = "'" + text.replace("'", "'\\''") + "'"
+
     private fun collect(process: Process, timeoutMs: Long, backend: PrivilegeBackend): ShellResult {
         val out = StringBuilder()
         val err = StringBuilder()

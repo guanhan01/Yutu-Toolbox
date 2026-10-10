@@ -268,7 +268,7 @@
     <string name="ai_delete">Delete</string>
     <string name="linux_term_pick_env">New terminal</string>
     <string name="linux_term_env_local">Android shell</string>
-    <string name="linux_term_env_local_desc">Currently unavailable (no pty)</string>
+    <string name="linux_term_env_local_desc">Android\'s own shell; uses root or Shizuku when available</string>
     <string name="linux_term_env_linux">Linux environment</string>
     <string name="linux_term_env_linux_desc">Installed distro, requires root</string>
     <string name="linux_term_to_ai">Send to AI</string>

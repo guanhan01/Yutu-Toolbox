@@ -144,31 +144,130 @@
 
   // ---- 尺寸 ----
   var lastCols = 0, lastRows = 0;
-  function doFit(force) {
-    if (!termEl || termEl.clientWidth < 20 || termEl.clientHeight < 20) return;
-    try { fit.fit(); } catch (e) { return; }
-    if (!force && term.cols === lastCols && term.rows === lastRows) return;
+
+  /* ==================================================================
+     尺寸同步（这是整块逻辑的核心，踩过很多坑，改之前先读完）
+     ==================================================================
+
+     规则只有一条：**pty 的列数必须尽可能和 xterm 的列数保持一致**。
+
+     为什么是「必须」：收到 SIGWINCH 时，mksh 会**原地重画**提示符 ——
+     先补一串空格抹掉旧提示符，再用退格把光标退回行首。串长是按**当时的
+     终端宽度**算的。只要 pty 的宽度和 xterm 的宽度错开一格，
+     这串空格就会超宽折行，退格再也回不到行首，提示符于是掉到下一行、
+     还带一个偏移；每错一次叠一层，就是用户报的
+     「放大字体就自动换行、然后新建一行」「提示符逐个往右移」。
+
+     Linux 窗口的 bash + readline 同样靠「补空格 + 退格」重画，但它一直
+     没这个问题，因为那条链路上 pty 尺寸是同步设的。本窗口要自己保证这件事。
+
+     由此推出三个做法：
+
+     1) **上报不做时间去抖**（曾经加过 300ms 去抖，是错的）。
+        去抖期间 pty 停在旧宽度、xterm 已经是新宽度，恰恰制造了上面那种错配。
+        尺寸一变就立刻通知。
+
+     2) **捏合缩放期间也不抑制上报**（也曾经抑制过，同样错）。
+        抑制等于让 pty 在整个手势期间都落后；抬手补一次只能修最后一帧，
+        中间那些帧留下的错位已经画在屏幕上了。
+
+     3) 重排（fit）本身要做 rAF 合并 + 像素级容差。
+        ResizeObserver 监听 #term，而 fit() 会改 xterm 的 canvas，canvas 又反过来
+        影响 #term 的高度，两者会互相激发；实测一次会话里 fit() 被调了 750 次，
+        容器高度在 302~305px 之间来回抖。合并 + 容差把这类噪声挡掉，
+        只让**真正的**布局变化（旋转、分屏、字号、键盘）走到上报那一步。
+
+     启动阶段另有一道闸门：布局要收敛 0/60/250/600ms 好几次，这期间的中间尺寸
+     没有意义，全部不上报，到 ready 那一刻用 flushReport() 落实一次最终尺寸。
+     ================================================================== */
+
+  var reportEnabled = false;
+
+  /* 立刻上报当前行列数。只有真的变了才发。 */
+  function reportSize() {
+    if (term.cols === lastCols && term.rows === lastRows) return;
     lastCols = term.cols;
     lastRows = term.rows;
     if (window.Android && window.Android.onResize) {
       window.Android.onResize(term.cols, term.rows);
     }
   }
-  if (window.ResizeObserver) {
-    new ResizeObserver(function () { doFit(false); scheduleOverlay(); }).observe(termEl);
+
+  /* 尺寸可能变了 -> 请适当地上报（启动阶段除外）。见下面 pinchActive 的说明。 */
+  function scheduleReport() {
+    if (!reportEnabled) return;
+    /* 双指缩放期间**不上报**。这一条与「立刻上报」并不矛盾，原因在于
+       mksh 的重画方式（实测其原始输出得到）：
+       收到 SIGWINCH 时它先按**当前宽度**补一串空格抹掉旧提示符，再用退格退回行首。
+       宽度**变了**的那一次，补的空格数与退格数对不上（用了旧宽度补、只按提示符
+       长度退），光标本就回不到行首，于是多留一行、还带偏移；宽度没变时它是
+       平衡的、原地重画无痕。
+
+       所以「宽度变化的次数」就等于「屏幕上多出来的提示符行数」。
+       捏合时字体逐帧变、列数也逐帧变，若逐帧上报就是逐帧叠一行；
+       手势期间不上报（pty 宽度停在原值，mksh 也就一直空闲不重画），
+       抬手时由 touchend 补一次 —— 整个手势只留**一次**宽度变化。
+       按钮 A- / A+ 每点一次本来就只有一次变化，不受这里影响。 */
+    if (pinchActive) return;
+    reportSize();
   }
-  window.addEventListener('resize', function () { doFit(false); scheduleOverlay(); });
-  // 初始 fit 要等布局稳定：只调一次 rAF 时会算成极小行列、渲染成空白
-  requestAnimationFrame(function () {
-    doFit(true);
-    setTimeout(function () { doFit(true); }, 60);
-    setTimeout(function () { doFit(true); }, 250);
-    setTimeout(function () {
-      doFit(true);
-      // 必须回调 onReady：Kotlin 侧把它当「可以开始写输出」的闸门，少了会白屏
-      if (window.Android && window.Android.onReady) window.Android.onReady();
-    }, 600);
-  });
+
+  /* 开闸并立刻落实一次。ready 时调用。 */
+  function flushReport() {
+    reportEnabled = true;
+    reportSize();
+  }
+
+  var FIT_TOLERANCE_PX = 8;
+  var lastFitW = 0, lastFitH = 0;
+  var fitRafId = 0;
+
+  function doFit() {
+    if (fitRafId) return;
+    fitRafId = requestAnimationFrame(function () {
+      fitRafId = 0;
+      fitNow();
+    });
+  }
+
+  /* 强制重排：清掉容器尺寸记忆，让容差判据一定放行。
+     字号变化 / 旋转 / 分屏这类「容器可能没变但网格必须重算」的场合用它。 */
+  function forceFit() {
+    lastFitW = 0;
+    lastFitH = 0;
+    if (fitRafId) { cancelAnimationFrame(fitRafId); fitRafId = 0; }
+    fitNow();
+  }
+
+  function fitNow() {
+    if (!termEl) return;
+    var w = termEl.clientWidth, h = termEl.clientHeight;
+    if (w < 20 || h < 20) return;
+    if (Math.abs(w - lastFitW) < FIT_TOLERANCE_PX &&
+        Math.abs(h - lastFitH) < FIT_TOLERANCE_PX) return;
+    lastFitW = w;
+    lastFitH = h;
+    try { fit.fit(); } catch (e) { return; }
+    scheduleReport();
+  }
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { doFit(); scheduleOverlay(); }).observe(termEl);
+  }
+  window.addEventListener('resize', function () { doFit(); scheduleOverlay(); });
+  // 初始 fit 要等布局稳定：只调一次 rAF 时会算成极小行列、渲染成空白。
+  // 这里直接调 fitNow（不走 rAF 合并），每一步都要真正执行。
+  function initialFit() { lastFitW = 0; lastFitH = 0; fitNow(); }
+  setTimeout(initialFit, 0);
+  setTimeout(initialFit, 60);
+  setTimeout(initialFit, 250);
+  setTimeout(function () {
+    initialFit();
+    // 必须回调 onReady：Kotlin 侧把它当「可以开始写输出」的闸门，少了会白屏。
+    // flushReport 会在这里开闸并落实最终尺寸。
+    flushReport();
+    if (window.Android && window.Android.onReady) window.Android.onReady();
+  }, 600);
 
   // ==================================================================
   // 坐标层：屏幕坐标 <-> 单元格。这是唯一的换算入口。
@@ -883,7 +982,7 @@
     var px = clampFont(pendingFont);
     if (px === term.options.fontSize) return;
     term.options.fontSize = px;
-    doFit(true);
+    forceFit();
     if (window.Android && window.Android.onFontSize) window.Android.onFontSize(px);
     if (hA && hB) scheduleOverlay();
   }
@@ -1120,6 +1219,8 @@
       pinchActive = false;
       if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
       applyPendingFont();
+      // 手势结束：把最终尺寸一次性落实（期间被抑制的上报在这里补上）
+      flushReport();
     }
     if (dragging) { dragging = null; scheduleOverlay(); hideLoupe(); }
   }, { passive: false });
@@ -1155,7 +1256,9 @@
     var v = clampFont(px);
     term.options.fontSize = v;
     pendingFont = v;
-    doFit(true);
+    // 字号变了就必须重排：容器尺寸可能一点没变（高度由布局定死），
+    // 那种情况下靠容器抖动判据会**跳过**重排，cols/rows 停留在旧值 -> 换行错位。
+    forceFit();
     if (hA && hB) scheduleOverlay();
     if (dragging) showLoupe(dragging, handleCell(dragging));
   };

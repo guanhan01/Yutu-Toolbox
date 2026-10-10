@@ -385,7 +385,12 @@ fun LinuxTerminalPanel(
                         addJavascriptInterface(
                             Bridge(
                                 session = session,
-                                resizeAction = { c, r -> scope.launch { session.resize(c, r) } },
+                                resizeAction = { c, r ->
+                                    // 必须**先**武装再改尺寸：改尺寸会触发 SIGWINCH，
+                                    // shell 的重画痕迹紧接着就到，顺序反了就漏掉。
+                                    pump.armRepaintDrop()
+                                    scope.launch { session.resize(c, r) }
+                                },
                                 titleAction = { title -> tab.title.value = title },
                                 // 手势回写的实际字号：记下来并清掉 zoomStep 的贡献，
                                 // 否则 A- / A+ 会在「捏合前的基础字号」上继续加减，
@@ -625,13 +630,30 @@ private class OutputPump(private val session: TerminalSession) {
     var seq = mutableIntStateOf(0)
         private set
 
+    /**
+     * 丢弃 shell 重画痕迹的闸门，见 [RepaintDropGate]。
+     */
+    private val dropGate = RepaintDropGate()
+
+    /**
+     * 窗口尺寸即将变化，通知本缓冲把紧随其后的重画痕迹丢掉。
+     *
+     * 必须**先**调它再改尺寸：改尺寸会触发 SIGWINCH，shell 的重画痕迹
+     * 紧接着就到，顺序反了就漏掉。
+     */
+    fun armRepaintDrop() {
+        dropGate.arm()
+    }
+
     /** 把游标之后的新输出取回来。 */
     fun pull() {
         val (next, bytes) = session.readSince(cursor)
         cursor = next
         if (bytes.isEmpty()) return
+        val text = latin1(bytes)
+        val keep = synchronized(this) { dropGate.filter(text) } ?: return
         synchronized(this) {
-            buffer.append(latin1(bytes))
+            buffer.append(keep)
             if (buffer.length > limit) buffer.delete(0, buffer.length - limit)
         }
         seq.intValue += 1
@@ -650,7 +672,55 @@ private class OutputPump(private val session: TerminalSession) {
         synchronized(this) {
             buffer = StringBuilder()
             cursor = -1L
+            dropGate.disarm()
         }
+    }
+}
+
+/**
+ * 丢弃 shell「重画痕迹」的闸门。
+ *
+ * ## 它解决什么
+ *
+ * Android 自带的 `/system/bin/sh` 是 mksh。收到 SIGWINCH 时它会**重画提示符**：
+ * 先补一串空格抹掉旧的，再用退格（`\b`）把光标退回行首。宽度**变了**的那一次，
+ * 补的空格数按旧宽度算、退格数按提示符长度算，两者对不上 —— 光标回不到行首，
+ * 于是多留一行还带偏移。每次宽度变化留一份，累积就是一屏重复提示符。
+ *
+ * 这些字节是**纯视觉噪声**：终端最终画面并不需要它们（重画成功时是原地覆盖，
+ * 看不出差别）。所以在进入缓冲前就丢掉，既不改 shell、也不用碰 xterm。
+ *
+ * ## 判据
+ *
+ * 重画痕迹必然含退格；正常输出里退格极少见。规则：
+ * - [filter] 在武装状态下遇到含退格的块 → 返回 null（丢弃），且**保持武装**
+ * - 遇到不含退格的块 → 解除武装并原样返回（窗口自然收敛，不需要计时器）
+ * - 未武装时 → 原样返回
+ *
+ * 已知取舍：若某条命令恰好在尺寸变化那一瞬输出带退格的内容（如进度条），
+ * 那一小块会被丢掉。缩放多发生在终端空闲时，实际影响很小。
+ *
+ * 抽成独立类是为了能直接写单测 —— 这段规则靠肉眼在真机上验不出来。
+ */
+internal class RepaintDropGate {
+
+    @Volatile
+    private var armed = false
+
+    fun arm() {
+        armed = true
+    }
+
+    fun disarm() {
+        armed = false
+    }
+
+    /** 返回该保留的内容；返回 null 表示这一块应当整体丢弃。 */
+    fun filter(text: String): String? {
+        if (!armed) return text
+        if (text.indexOf('\b') >= 0) return null
+        armed = false
+        return text
     }
 }
 
