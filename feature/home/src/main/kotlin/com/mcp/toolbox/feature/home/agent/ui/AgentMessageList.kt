@@ -89,6 +89,11 @@ fun AgentMessageList(
     state: AgentChatState,
     messages: List<ChatMessage>,
     bottomPadding: androidx.compose.ui.unit.Dp,
+    /**
+     * 顶部内边距。悬浮顶栏叠在列表之上时，列表必须自己让出这段高度，
+     * 否则第一轮内容被顶栏压住。默认 0 = 顶栏不悬浮（旧行为）。
+     */
+    topPadding: androidx.compose.ui.unit.Dp = 0.dp,
     onRegenerate: () -> Unit,
     onDeleteAnswer: (String) -> Unit,
     /**
@@ -272,14 +277,17 @@ fun AgentMessageList(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (itemCount == 0) {
-            ChatEmptyState()
+            ChatEmptyState(Modifier.fillMaxSize())
             return@Box
         }
 
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = bottomPadding + 16.dp),
+            contentPadding = PaddingValues(
+                top = topPadding,
+                bottom = bottomPadding + 16.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // 按「轮」渲染：一轮 = 一条用户提问 + 紧随其后的 AI 回答。
@@ -898,14 +906,21 @@ fun UserBubble(
     val press = com.mcp.toolbox.core.design.component.rememberMiuixPressState()
     val multiline = text.lineSequence().count() > 5
     /**
-     * 右侧呼吸位。
+     * 气泡右侧的间距（可为负 = 向右外移）。
      *
-     * 早先留 56dp（照搬「不放头像、留白呼吸」的稿子），在手机宽度下把气泡
-     * 整体推得太靠左，读起来像贴在屏幕左半边（用户实测反馈）。
-     * 现在只留一小段，让气泡真正靠在右侧、只与屏幕边缘保持安全距离；
-     * 多行时连这一小段也省掉，因为此时气泡本身就是「宽卡片」形态。
+     * 这一段的历史：
+     * - 最早留 56dp（照搬「不放头像、留白呼吸」的稿子），手机宽度下把气泡推得太靠左；
+     * - 后来收到 12dp，但仍偏左 —— 因为它是**加在气泡右边**的 Spacer，
+     *   气泡右边缘实际距屏幕 = 页面内边距 16dp + 这段 12dp = 28dp，
+     *   而左侧因 300dp 上限还空着约 70dp（用户反馈「问题气泡往右一点，太左了」）。
+     *
+     * 所以现在直接取**负值**：气泡右边缘落在 16 + (−8) = 8dp，整体右移 20dp，
+     * 左侧空白同步缩小。用负 Spacer 而不是给气泡加 offset，是因为 offset 会连
+     * `onGloballyPositioned` 记下的长按菜单锚点一起挪，菜单会跟着偏。
+     *
+     * 多行时仍归零：此时气泡本身已是「宽卡片」，再外移会贴着屏幕边。
      */
-    val reservedRight = if (multiline) 0.dp else 12.dp
+    val reservedRight = if (multiline) 0.dp else (-8).dp
     val tail = if (multiline) SquircleRadii.bubble else SquircleRadii.bubbleTail
 
     Row(
@@ -1138,7 +1153,10 @@ fun JumpToBottomPill(
     Row(
         modifier = modifier
             .height(36.dp)
-            .sqSurface(colors.surfaceContainerHighest, SquircleRadii.card)
+            // 半透明底：胶囊浮在消息之上，透出一点背后内容才有层次。
+            // 0.78 是权衡：再透文字会干扰图标与标签的可读性，再实就退化成实心块。
+            // （不做真模糊：这台设备的 MIUI 在背景模糊上会 SIGSEGV，见 TopAppBar 注释。）
+            .sqSurface(colors.surfaceContainerHighest.copy(alpha = 0.78f), SquircleRadii.card)
             .sqBorder(1.dp, colors.outlineVariant, SquircleRadii.card)
             .miuixClickable(press, true, onClick = onClick)
             .padding(horizontal = 12.dp),

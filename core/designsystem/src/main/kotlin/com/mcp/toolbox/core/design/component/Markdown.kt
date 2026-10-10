@@ -12,9 +12,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -25,12 +27,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mcp.toolbox.core.design.theme.MiuixTheme
@@ -522,61 +530,139 @@ private fun MarkdownTableView(
         computeColumnWeights(table.header, table.rows, columnCount)
     }
 
-    Column(
+    /**
+     * 每列的最小可读宽。
+     *
+     * 这一段历史值得留个记录，因为**两个极端都试过、都出过观感问题**：
+     * - 最早：按内容估算硬定列宽 + 横向滚动 → 两列表格也会撑出屏幕，
+     *   表头色条只铺到列宽之和，右边留一条白边；
+     * - 后来：纯权重归一（列宽总和恒等于屏宽）→ 白边没了，但**长内容再也撑不开**，
+     *   只能挤在屏幕里折行，`minSdk / targetsdk`、`APK 路径` 被压成每行两三个字。
+     *
+     * 现在两者兼顾：`列宽 = max(权重份额, 最小可读宽)`。
+     * 屏幕够宽时每列份额都 ≥ 最小宽 → 总和正好铺满，色条不留白；
+     * 内容多/列多时总和超出视口 → 交给横向滚动，滑着看全而不是把字挤扁。
+     */
+    val minColumnWidth = if (compact) 72.dp else 88.dp
+
+    // 量视口宽：用 onSizeChanged，不用 BoxWithConstraints。
+    // 后者会把手约束的 maxWidth（视口宽）钉死传给子树，而 horizontalScroll
+    // 需要父级给「无限宽」才能撑开内容 —— 混在一起就会裁掉超出部分。
+    var viewportPx by remember(table.header, compact) { mutableFloatStateOf(0f) }
+
+    val minPx = with(LocalDensity.current) { minColumnWidth.toPx() }
+    val widthsPx = remember(weights, columnCount, viewportPx, minPx) {
+        columnWidths(weights, columnCount, viewportPx, minPx)
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, border, shape),
+            .onSizeChanged { viewportPx = it.width.toFloat() }
+            // 这里**不放** clip(shape)/border：它们会落在「固定尺寸的外层盒子」上，
+            // 于是滚动时外框不动、只有里面的内容在跑（用户反馈「外边框也得跟着移动，
+            // 整个表格一起动」）。裁剪由 horizontalScroll 自己负责，描边交给内容层。
+            .horizontalScroll(rememberScrollState()),
     ) {
-        // 表头：整行铺满卡片宽度。
+        // clip + border 放在**内容**这一层：外框的宽度等于整张表（widthsPx 之和），
+        // 横向滚动时与单元格一起平移，整张表是一个整体。
+        Column(
+            modifier = Modifier
+                .clip(shape)
+                .border(1.dp, border, shape),
+        ) {
+        // 各行**都不设宽度**：
+        // 行宽 = 该行单元格宽度之和 = widthsPx.sum()，由子项自然决定。
         //
-        // 早先列宽按「各列最长内容的估算宽度」硬定，且不设上限，于是两列表格
-        // 也会撑出屏幕；而表头的色条只覆盖到「列宽之和」，右侧留一条白边
-        // （用户截图里那圈空白）。现在列宽按**权重**分配、总和恒等于可用宽度，
-        // 色条自然铺满。
-        Row(Modifier.fillMaxWidth().background(colors.surfaceContainerHigh)) {
-            TableCells(
-                count = columnCount,
-                weights = weights,
-                horizontalPadding = 10.dp,
-                verticalPadding = 7.dp,
-            ) { index ->
-                CellText(
-                    text = table.header.getOrNull(index).orEmpty(),
-                    style = style.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.onSurface,
-                    background = colors.surfaceContainerHigh,
-                    linkListener = linkListener,
-                )
-            }
-        }
-
-        table.rows.forEachIndexed { rowIndex, row ->
-            // 行分隔线。间距由相邻单元格的内边距提供，这里不额外占高。
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(border),
-            )
-            Row(Modifier.fillMaxWidth()) {
-                TableCells(
-                    count = columnCount,
-                    weights = weights,
-                    horizontalPadding = 10.dp,
-                    verticalPadding = 7.dp,
-                ) { col ->
+        // 这一步是整件事的关键。之前给 Row 设 requiredWidth(totalWidth)，
+        // Row 就会在「自己算出的宽度」之外再裁剪子项，表头灰底于是按 Row 的边界
+        // 截断，而数据行的文字因为 measure 更宽溢出到边界外 —— 表现就是
+        // 左滑后表格中间裂开、一半内容留在原位。
+        // 不设宽度就没有这个第二基准，表头与数据行必然等宽、一起平移。
+        Column {
+            // 表头
+            Row(Modifier.background(colors.surfaceContainerHigh)) {
+                widthCells(widthsPx) { index ->
                     CellText(
-                        text = row.getOrNull(col).orEmpty(),
-                        style = style,
+                        text = table.header.getOrNull(index).orEmpty(),
+                        style = style.copy(fontWeight = FontWeight.SemiBold),
                         color = colors.onSurface,
                         background = colors.surfaceContainerHigh,
                         linkListener = linkListener,
                     )
                 }
             }
+
+            table.rows.forEach { row ->
+                // 行分隔线：宽度同样由内容决定，这里用一个与表格等宽的 Box。
+                Box(
+                    Modifier
+                        .width(with(LocalDensity.current) { widthsPx.sum().toDp() })
+                        .height(1.dp)
+                        .background(border),
+                )
+                Row {
+                    widthCells(widthsPx) { col ->
+                        CellText(
+                            text = row.getOrNull(col).orEmpty(),
+                            style = style,
+                            color = colors.onSurface,
+                            background = colors.surfaceContainerHigh,
+                            linkListener = linkListener,
+                        )
+                    }
+                }
+            }
+        }
         }
     }
+}
+
+/**
+ * 按 [widthsPx] 逐列摆放单元格。
+ *
+ * 宽度用**显式像素**而不是 `weight`：`weight` 会把总宽锁死在父宽，
+ * 那就回到了「长内容只能挤在屏幕里」的老问题。
+ */
+@Composable
+private fun RowScope.widthCells(
+    widthsPx: List<Float>,
+    content: @Composable (Int) -> Unit,
+) {
+    val density = LocalDensity.current
+    widthsPx.forEachIndexed { index, px ->
+        Box(
+            modifier = Modifier
+                .width(with(density) { px.toDp() })
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+        ) {
+            content(index)
+        }
+    }
+}
+
+/**
+ * 各列像素宽（纯函数，可单测）。
+ *
+ * `max(按权重分到的份额, 最小可读宽)`：份额确保「够宽时铺满、不留白边」，
+ * 最小宽确保「不够宽时宁可撑开去滚动，也不把字挤扁」。
+ *
+ * 入参必须来自**已确定的视口宽**；若传进无限大（横向滚动容器给的约束），
+ * 结果会溢出成非法值 —— 调用方务必在滚动容器**之外**取约束。
+ */
+internal fun columnWidths(
+    weights: List<Float>,
+    columnCount: Int,
+    viewportPx: Float,
+    minColumnWidthPx: Float,
+): List<Float> {
+    if (columnCount <= 0) return emptyList()
+    // 兜底：视口宽不可信（无限 / 非有限）时退回「只按最小可读宽」，
+    // 宁可撑开去滚动，也不能算出非法约束把界面打崩。
+    val viewport = if (viewportPx.isFinite() && viewportPx > 0f) viewportPx else 0f
+    val safe = (0 until columnCount).map { weights.getOrElse(it) { 1f }.coerceAtLeast(0.01f) }
+    val total = safe.sum()
+    return safe.map { w -> maxOf(viewport * w / total, minColumnWidthPx) }
 }
 
 /**

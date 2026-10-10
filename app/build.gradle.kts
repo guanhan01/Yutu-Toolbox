@@ -13,8 +13,8 @@ android {
         // 避免 flavor 覆盖后出现「正式版变新应用」的坑。
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.5.0"
 
         // 应用名：stable 走 @string/app_name（跟随语言），beta 写死带 Beta 后缀
         manifestPlaceholders["appLabel"] = "@string/app_name"
@@ -38,8 +38,8 @@ android {
             applicationId = "com.Yutu.Agent.beta"
             manifestPlaceholders["appLabel"] = "Yutu Agt Beta"
             // Beta 版本号独立推进，与正式版互不影响
-            versionCode = 6
-            versionName = "0.1.5"
+            versionCode = 7
+            versionName = "0.5.0"
             versionNameSuffix = "-beta"
             // 内测包不联网检查更新
             buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")

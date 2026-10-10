@@ -1,5 +1,6 @@
 package com.mcp.toolbox.feature.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -43,11 +44,15 @@ import androidx.compose.ui.Alignment
 import com.mcp.toolbox.feature.home.agent.FeedbackComposer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
@@ -521,34 +526,6 @@ fun HomeScreen(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        MiuixTopAppBar(
-            // 标题只用于无障碍描述，不再绘制：对话页的标题与消息内容重复，
-            // 摆在中间既占地方又容易被长标题截断成「检查所有工…」。
-            title = session?.displayTitle ?: stringResource(R.string.chat_title),
-            showTitle = false,
-            navigationIconRes = AgentIcons.ic_menu,
-            onNavigationClick = onOpenDrawer,
-            actions = {
-                // 终端：放在「新建对话」左侧，两个按钮各自 40dp，触控区不会互相挤占
-                MiuixIconButton(
-                    iconRes = AgentIcons.ic_terminal,
-                    contentDescription = stringResource(R.string.chat_terminal),
-                    onClick = onOpenTerminal,
-                    buttonSize = 40.dp,
-                    iconSize = 20.dp,
-                )
-                // 新建对话
-                MiuixIconButton(
-                    iconRes = AgentIcons.ic_chat,
-                    contentDescription = stringResource(R.string.chat_new),
-                    onClick = {
-                        if (!sending) scope.launch { ChatStore.newSession(context, newChatTitle) }
-                    },
-                    buttonSize = 40.dp,
-                    iconSize = 20.dp,
-                )
-            },
-        )
 
         // 输入栏要「浮」在内容之上，而不是与内容平级。
         //
@@ -558,6 +535,8 @@ fun HomeScreen(
         // 输入栏贴在 Box 底部。与此同时给列表留出「输入栏高度」的底部内边距，
         // 保证最后一条消息滚到底时不会被输入栏永久遮住。
         var inputBarHeightPx by remember { mutableIntStateOf(0) }
+        // 顶栏改为悬浮后，列表不再自动避开它，需要自己留出这段高度。
+        var topBarHeightPx by remember { mutableIntStateOf(0) }
 
         Box(Modifier.weight(1f)) {
             // ── AI 回答区 ──
@@ -567,6 +546,15 @@ fun HomeScreen(
                 state = agent,
                 messages = session?.messages.orEmpty(),
                 bottomPadding = with(LocalDensity.current) { inputBarHeightPx.toDp() } + spacing.md,
+                // 悬浮顶栏压在列表之上，列表要自己让出它**整条渐变带**的高度。
+                //
+                // 为什么不能用「顶栏高度」就够了：顶栏的渐变底比它本身高 60dp
+                // （见下面 .height(topBarHeightPx + 60.dp)），而渐变层画在列表**之后**、
+                // 也就是盖在列表上面。只避开顶栏本体会让首条内容落在渐变带里——
+                // 既被半透明遮住、又紧贴顶栏，看起来就是「初始气泡太高」（用户反馈）。
+                //
+                // 这里把 60dp 的渐变带一起让出来，再加 spacing.md 留呼吸感。
+                topPadding = with(LocalDensity.current) { topBarHeightPx.toDp() } + 60.dp + spacing.md,
                 // 重新生成 / 继续生成 / 重试：都用当前会话已有的历史再跑一轮。
                 // 截断由 ChatStore 负责（见其 truncateFrom / truncateAfter），
                 // 这里不复制一套历史改写逻辑。
@@ -747,6 +735,80 @@ fun HomeScreen(
                     }
                 },
             )
+
+        // 顶栏外面包一层 Box，专门画**纵向渐变底**。
+        //
+        // 为什么不是一个半透明色：那样上边缘实、下边缘戛然消失，是一条硬边，
+        // 看起来像盖了块遮罩（用户反馈「只是遮着」）。渐变让内容在顶栏附近淡出，
+        // 观感接近毛玻璃；这台设备的 MIUI 背景模糊有崩溃缺陷（见 TopAppBar 注释），
+        // 所以用渐变做等价表达。
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                // 高度 = 顶栏 + 60dp。多出来的这一段**专门留作淡出区**。
+                //
+                // 为什么不能只给顶栏那么高：顶栏本身约 64dp，若在自身高度内做渐变，
+                // 「实色 → 透明」只剩十几 px，肉眼看就是一条硬边（用户反馈
+                // 「渐变效果不明显」）。给足 60dp 后，内容在顶栏下方有一段
+                // 明显的过渡带，才有内容从底下淡出的观感。
+                .height(with(LocalDensity.current) { topBarHeightPx.toDp() } + 60.dp)
+                .drawBehind {
+                    // 渐变坐标按**当前高度**归一化，因此自动适配顶栏高度变化
+                    // （不同机型状态栏高度不同，写死像素会错位）。
+                    val barFraction = if (size.height > 0f) {
+                        (topBarHeightPx.toFloat() / size.height).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+                    drawRect(
+                        Brush.verticalGradient(
+                            0f to colors.background,
+                            barFraction to colors.background,
+                            1f to Color.Transparent,
+                        ),
+                    )
+                },
+        ) {
+            MiuixTopAppBar(
+                // 标题只用于无障碍描述，不再绘制：对话页的标题与消息内容重复，
+                // 摆在中间既占地方又容易被长标题截断成「检查所有工…」。
+                title = session?.displayTitle ?: stringResource(R.string.chat_title),
+                showTitle = false,
+                navigationIconRes = AgentIcons.ic_menu,
+                onNavigationClick = onOpenDrawer,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                // 量出高度给列表当顶部内边距：悬浮后列表不会自动避开它。
+                .onGloballyPositioned { topBarHeightPx = it.size.height },
+            // 悬浮形态：顶栏不画底色（底色由外层 Box 的纵向渐变负责），
+            // 并把导航/动作图标各自收进圆角胶囊。
+            floating = true,
+            actionsInCapsule = true,
+                actions = {
+                    // 终端：放在「新建对话」左侧，两个按钮各自 40dp，触控区不会互相挤占
+                    MiuixIconButton(
+                        iconRes = AgentIcons.ic_terminal,
+                        contentDescription = stringResource(R.string.chat_terminal),
+                        onClick = onOpenTerminal,
+                        buttonSize = 40.dp,
+                        iconSize = 20.dp,
+                    )
+                    // 新建对话
+                    MiuixIconButton(
+                        iconRes = AgentIcons.ic_chat,
+                        contentDescription = stringResource(R.string.chat_new),
+                        onClick = {
+                            if (!sending) scope.launch { ChatStore.newSession(context, newChatTitle) }
+                        },
+                        buttonSize = 40.dp,
+                        iconSize = 20.dp,
+                    )
+                },
+            )
+        }
+
         }
     }
 
@@ -1419,8 +1481,14 @@ private fun InputBar(
                 .background(colors.surfaceContainerLow)
                 .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 8.dp),
         ) {
-            // 上下文细线：并入底板顶部，不再单独占一行浮在框外
-            usage()
+            // 上下文环：贴输入框右上角，不再占满一整行。
+            // 用 End 对齐把它推到右边，与下面的输入区形成「右上角」的位置关系。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                usage()
+            }
             attachmentRow()
 
             // 编辑态横条：提示正在编辑，可取消
@@ -1615,30 +1683,41 @@ private fun UsageIndicator(
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 轨道常显：它就是「上下文上限」那条线，窗口未知时也不该整条消失；
-        // 只是没有真实窗口就不填充（用猜测的分母画长度会误导）
-        Box(
-            modifier = Modifier
-                .width(56.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(colors.surfaceContainerHigh),
-        ) {
-            if (ratio != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(ratio)
-                        .background(barColor, RoundedCornerShape(2.dp)),
+        // 圆环：比细条更紧凑，放在右上角不占横向空间。
+        //
+        // 轨道常显（就是「上下文上限」那一圈），窗口未知时不填充 ——
+        // 用猜测的分母画弧长会误导，和原先细条的处理保持一致。
+        //
+        // 从 -90° 起画、顺时针推进，视觉上从 12 点方向开始，符合进度环的直觉。
+        Canvas(modifier = Modifier.size(RING_SIZE)) {
+            val stroke = RING_STROKE.toPx()
+            // 描边以路径为中心向两侧各占一半，因此要内缩半个描边宽，
+            // 否则圆环最外缘会被画布边界裁掉一圈。
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            val topLeft = Offset(inset, inset)
+
+            drawArc(
+                color = colors.surfaceContainerHigh,
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = stroke),
+            )
+            if (ratio != null && ratio > 0f) {
+                drawArc(
+                    color = barColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * ratio,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
                 )
             }
         }
-        Spacer(Modifier.width(4.dp))
-        MiuixText(
-            text = formatTokens(used),
-            style = MiuixTheme.typography.labelSmall,
-            color = if (danger) barColor else colors.onSurfaceVariant,
-        )
     }
 
     MiuixOverflowMenu(
@@ -1685,3 +1764,9 @@ private fun UsageIndicator(
         }
     }
 }
+
+/** 上下文圆环的直径。18dp：与输入栏里的图标视觉重量相当，不抢注意力。 */
+private val RING_SIZE = 18.dp
+
+/** 圆环线宽。2.5dp 在 18dp 直径下既看得清，又不会糊成一坨。 */
+private val RING_STROKE = 2.5.dp

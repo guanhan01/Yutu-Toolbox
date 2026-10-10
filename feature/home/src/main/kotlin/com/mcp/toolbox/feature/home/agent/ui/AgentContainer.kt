@@ -2,6 +2,7 @@ package com.mcp.toolbox.feature.home.agent.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,7 +23,9 @@ import com.mcp.toolbox.core.design.theme.MiuixTheme
 fun ChatEmptyState(modifier: Modifier = Modifier) {
     val colors = MiuixTheme.colors
     Box(
-        modifier = modifier.fillMaxWidth().padding(vertical = 48.dp),
+        // fillMaxSize + Center：让提示在**整块可用高度**里居中。
+        // 原来只有 fillMaxWidth，内容贴顶往下 48dp 就停住，看起来「太高」。
+        modifier = modifier.fillMaxSize().padding(vertical = 48.dp),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.layout.Column(
