@@ -189,7 +189,7 @@ object AiChatClient {
                     config = config,
                     messages = messages,
                     stream = true,
-                    tools = if (enableTools) AiToolBridge.toolsPayload(context) else null,
+                    tools = if (enableTools) AiToolBridge.toolsPayload(context, AiToolScope.decide(context, history)) else null,
                 )
 
                 val roundText = StringBuilder()

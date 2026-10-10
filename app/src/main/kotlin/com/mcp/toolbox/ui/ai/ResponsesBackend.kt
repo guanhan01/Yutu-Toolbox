@@ -83,7 +83,7 @@ internal object ResponsesBackend {
             root.put(
                 "tools",
                 JSONArray().also { arr ->
-                    AiToolBridge.toolSpecs(context).forEach { spec ->
+                    AiToolBridge.toolSpecs(context, AiToolScope.decide(context, history)).forEach { spec ->
                         arr.put(
                             JSONObject()
                                 .put("type", "function")

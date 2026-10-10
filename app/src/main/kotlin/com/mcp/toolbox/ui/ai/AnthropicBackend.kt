@@ -78,7 +78,7 @@ internal object AnthropicBackend {
                 "tools",
                 JSONArray().also { arr ->
                     // 与 OpenAI / Gemini 共用同一份工具清单，含已接入的外部 MCP 工具
-                    AiToolBridge.toolSpecs(context).forEach { spec ->
+                    AiToolBridge.toolSpecs(context, AiToolScope.decide(context, history)).forEach { spec ->
                         arr.put(
                             JSONObject()
                                 .put("name", spec.name)
